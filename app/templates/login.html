@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Ingreso al Sistema - CCTV Seguridad{% endblock %}
+
+{% block public_content %}
+<div class="min-h-screen flex items-center justify-center bg-slate-950 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
+     x-data="{
+         selectedSite: '{{ selected_site if selected_site else 'san-agustin' }}',
+         selectedRole: 'admin',
+         username: 'admin',
+         password: '{{ 'admin123' if demo_mode else '' }}',
+         showPassword: false,
+         loading: false,
+         updateCredentials() {
+             if (this.selectedRole === 'admin') {
+                 this.username = 'admin';
+                 if ('{{ demo_mode }}' === 'True') this.password = 'admin123';
+             } else if (this.selectedRole === 'supervisor') {
+                 if (this.selectedSite === 'san-agustin') {
+                     this.username = 'supervisor_sanagustin';
+                 } else {
+                     this.username = 'supervisor_guaviare';
+                 }
+                 if ('{{ demo_mode }}' === 'True') this.password = 'supervisor123';
+             } else if (this.selectedRole === 'mantenimiento') {
+                 this.username = 'mantenimiento_cctv';
+                 if ('{{ demo_mode }}' === 'True') this.password = 'mantenimiento123';
+             }
+         }
+     }"
+     x-init="updateCredentials()">
+
+    <!-- Decorative background glow -->
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-40 -right-40 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="max-w-md w-full bg-slate-900/90 border border-slate-800 backdrop-blur-xl p-8 sm:p-10 rounded-3xl shadow-2xl relative z-10">
+        
+        <!-- Header & Logo -->
+        <div class="text-center mb-6">
+            <div class="mx-auto w-14 h-14 bg-blue-600/20 border border-blue-500/30 rounded-2xl flex items-center justify-center text-blue-400 shadow-inner mb-3.5">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-black text-white tracking-tight">SISTEMA CCTV</h2>
+            <p class="text-xs text-slate-400 mt-1">Control Operativo y Mantenimiento</p>
+
+            {% if demo_mode %}
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold mt-2.5">
+                <span>🧪 Modo Demostración Activo</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Error Message Alert -->
+        {% if error %}
+        <div class="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-start gap-2.5 mb-5">
+            <svg class="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        <!-- Unified Single Screen Login Form -->
+        <form class="space-y-4" action="/login" method="POST" @submit="loading = true">
+            
+            <!-- CAMPO 1: Selector de Sede / Municipio -->
+            <div>
+                <label for="site_id" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    1. Sede Territorial / Municipio
+                </label>
+                <div class="relative">
+                    <select id="site_id" name="site_id" x-model="selectedSite" @change="updateCredentials()"
+                            class="block w-full px-3.5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none pr-10">
+                        <option value="san-agustin">🏛️ San Agustín (Huila)</option>
+                        <option value="san-jose-guaviare">🏢 San José del Guaviare (Guaviare)</option>
+                        <option value="el-retorno">🌳 El Retorno (Guaviare)</option>
+                        <option value="calamar">🚤 Calamar (Guaviare)</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CAMPO 2: Selector de Rol por Sitio -->
+            <div>
+                <label for="role_type" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    2. Perfil de Acceso
+                </label>
+                <div class="relative">
+                    <select id="role_type" name="role_type" x-model="selectedRole" @change="updateCredentials()"
+                            class="block w-full px-3.5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none pr-10">
+                        <option value="admin">👑 Administrador del Sistema</option>
+                        <option value="supervisor">🛡️ Supervisor(a) del Contrato</option>
+                        <option value="mantenimiento">👷 Empresa de Mantenimiento (Preventivo / Correctivo)</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CAMPO 3: Credenciales de Autenticación -->
+            <div>
+                <label for="username" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    3. Usuario
+                </label>
+                <input id="username" name="username" type="text" required x-model="username"
+                       placeholder="Ingresa tu usuario institucional"
+                       class="block w-full px-3.5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+            </div>
+
+            <div>
+                <label for="password" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Contraseña
+                </label>
+                <div class="relative">
+                    <input id="password" name="password" :type="showPassword ? 'text' : 'password'" required x-model="password"
+                           placeholder="••••••••"
+                           class="block w-full px-3.5 py-3 pr-11 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+                    <button type="button" @click="showPassword = !showPassword"
+                            class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition">
+                        <svg x-show="!showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <svg x-show="showPassword" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Botón Principal: Ingresar al Sistema -->
+            <div class="pt-3">
+                <button type="submit" :disabled="loading"
+                        class="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/30 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50">
+                    <svg x-show="loading" x-cloak class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span x-text="loading ? 'Validando...' : 'Ingresar al Sistema'">Ingresar al Sistema</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Footer Notice -->
+        <div class="text-center pt-5 border-t border-slate-800/80 mt-6 flex items-center justify-between text-[11px] text-slate-500">
+            <a href="/" class="hover:text-slate-300 transition">&larr; Portal Principal</a>
+            <span>Seguridad CCTV &copy; 2026</span>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

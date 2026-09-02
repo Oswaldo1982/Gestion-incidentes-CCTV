@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Selección de Sede Territorial - Sistema CCTV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+                    }
+                }
+            }
+        }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body class="h-full text-slate-100 flex flex-col justify-between bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
+
+    <!-- Ambient Glow -->
+    <div class="absolute top-0 left-1/3 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- Header Navigation -->
+    <header class="relative z-10 max-w-7xl mx-auto w-full px-6 py-6 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <a href="/" class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-lg shadow-blue-600/20 hover:scale-105 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                </svg>
+            </a>
+            <div>
+                <span class="font-extrabold text-base text-white tracking-tight">SISTEMA CCTV</span>
+                <span class="block text-[11px] text-slate-400 font-medium">Paso 1: Selección de Sede Territorial</span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <a href="/" class="text-xs text-slate-400 hover:text-slate-200 transition font-medium px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60">
+                &larr; Volver al Inicio
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Site Selection Grid -->
+    <main class="relative z-10 max-w-6xl mx-auto w-full px-6 py-6 flex-1 flex flex-col justify-center">
+        
+        <div class="text-center max-w-2xl mx-auto mb-8">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-semibold text-blue-300 mb-3">
+                <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span> Cobertura Municipal Activa
+            </div>
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                Selecciona la Sede Territorial
+            </h1>
+            <p class="text-xs sm:text-sm text-slate-300 mt-2">
+                Elige el municipio correspondiente para acceder a los perfiles de gestión y soporte técnico del circuito.
+            </p>
+        </div>
+
+        <!-- 4 Municipal Site Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            
+            <!-- 1. San Agustín (Huila) -->
+            <a href="/site/san-agustin/login"
+               class="group bg-slate-900/85 hover:bg-slate-800/90 border border-slate-800 hover:border-blue-500/80 rounded-3xl p-6 shadow-xl hover:shadow-blue-500/10 transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-24 h-24 bg-blue-600/10 rounded-full blur-xl group-hover:bg-blue-600/20 transition"></div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-2xl shadow-inner">
+                            🏛️
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            Huila
+                        </span>
+                    </div>
+
+                    <h2 class="text-lg font-bold text-white group-hover:text-blue-300 transition">
+                        San Agustín
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Parque Arqueológico, Terminal de Transportes y Hospital Arsenio Repizo.
+                    </p>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-300 flex items-center justify-between">
+                        <span class="text-slate-400">Cámaras:</span>
+                        <strong class="text-white">18 Cámaras</strong>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-semibold text-blue-400 group-hover:text-blue-300">
+                    <span>Ingresar a Sede</span>
+                    <svg class="w-4 h-4 transform group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </div>
+            </a>
+
+            <!-- 2. San José del Guaviare (Guaviare) -->
+            <a href="/site/san-jose-guaviare/login"
+               class="group bg-slate-900/85 hover:bg-slate-800/90 border border-slate-800 hover:border-emerald-500/80 rounded-3xl p-6 shadow-xl hover:shadow-emerald-500/10 transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-24 h-24 bg-emerald-600/10 rounded-full blur-xl group-hover:bg-emerald-600/20 transition"></div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-2xl shadow-inner">
+                            🏢
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Guaviare
+                        </span>
+                    </div>
+
+                    <h2 class="text-lg font-bold text-white group-hover:text-emerald-300 transition">
+                        San José del Guaviare
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Parque Santander, Muelle Fluvial, Malecón y Sala de Comando Central.
+                    </p>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-300 flex items-center justify-between">
+                        <span class="text-slate-400">Cámaras:</span>
+                        <strong class="text-white">24 Cámaras</strong>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-400 group-hover:text-emerald-300">
+                    <span>Ingresar a Sede</span>
+                    <svg class="w-4 h-4 transform group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </div>
+            </a>
+
+            <!-- 3. El Retorno (Guaviare) -->
+            <a href="/site/el-retorno/login"
+               class="group bg-slate-900/85 hover:bg-slate-800/90 border border-slate-800 hover:border-amber-500/80 rounded-3xl p-6 shadow-xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-24 h-24 bg-amber-600/10 rounded-full blur-xl group-hover:bg-amber-600/20 transition"></div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-600/20 border border-amber-500/30 text-amber-400 flex items-center justify-center text-2xl shadow-inner">
+                            🌳
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Guaviare
+                        </span>
+                    </div>
+
+                    <h2 class="text-lg font-bold text-white group-hover:text-amber-300 transition">
+                        El Retorno
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Control Entrada Nacional, Alcaldía Municipal y Polideportivo Central.
+                    </p>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-300 flex items-center justify-between">
+                        <span class="text-slate-400">Cámaras:</span>
+                        <strong class="text-white">12 Cámaras</strong>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-semibold text-amber-400 group-hover:text-amber-300">
+                    <span>Ingresar a Sede</span>
+                    <svg class="w-4 h-4 transform group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </div>
+            </a>
+
+            <!-- 4. Calamar (Guaviare) -->
+            <a href="/site/calamar/login"
+               class="group bg-slate-900/85 hover:bg-slate-800/90 border border-slate-800 hover:border-purple-500/80 rounded-3xl p-6 shadow-xl hover:shadow-purple-500/10 transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute -right-8 -top-8 w-24 h-24 bg-purple-600/10 rounded-full blur-xl group-hover:bg-purple-600/20 transition"></div>
+                
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-400 flex items-center justify-center text-2xl shadow-inner">
+                            🚤
+                        </div>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            Guaviare
+                        </span>
+                    </div>
+
+                    <h2 class="text-lg font-bold text-white group-hover:text-purple-300 transition">
+                        Calamar
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Muelle Fluvial Río Unilla, Casco Urbano y Puesto de Salud.
+                    </p>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-300 flex items-center justify-between">
+                        <span class="text-slate-400">Cámaras:</span>
+                        <strong class="text-white">8 Cámaras</strong>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-semibold text-purple-400 group-hover:text-purple-300">
+                    <span>Ingresar a Sede</span>
+                    <svg class="w-4 h-4 transform group-hover:translate-x-1 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                </div>
+            </a>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 max-w-7xl mx-auto w-full px-6 py-6 text-center text-xs text-slate-500 border-t border-slate-900">
+        <p>Sistema Central de Gestión y Mantenimiento CCTV &copy; 2026</p>
+    </footer>
+
+</body>
+</html>

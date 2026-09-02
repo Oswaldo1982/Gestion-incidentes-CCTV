@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Usuarios - CCTV{% endblock %}
+{% block page_title %}Gestión de Usuarios{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="{
+    openModal: false,
+    searchQuery: '',
+    roleFilter: 'all',
+    statusFilter: 'all',
+    showPassword: false
+}">
+
+    <!-- Alert Messages (Success / Error) -->
+    {% if msg %}
+    <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span>{{ msg }}</span>
+        </div>
+        <button type="button" @click="$el.parentElement.remove()" class="text-emerald-500 hover:text-emerald-700">✖</button>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span>{{ error }}</span>
+        </div>
+        <button type="button" @click="$el.parentElement.remove()" class="text-rose-500 hover:text-rose-700">✖</button>
+    </div>
+    {% endif %}
+
+    <!-- Top Action Bar & Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold text-slate-900">Control y Gestión de Cuentas de Usuario</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    {{ users|length }} Cuentas
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Administra los accesos al sistema, credenciales de seguridad y asignación de roles (Supervisor u Operario).</p>
+        </div>
+        
+        <button @click="openModal = true"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+            </svg>
+            Crear Nueva Cuenta
+        </button>
+    </div>
+
+    <!-- KPI Metrics -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <!-- Card 1: Total Usuarios -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Total Usuarios</p>
+            <p class="text-2xl font-black text-slate-900 mt-1">{{ users|length }}</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Registrados en la plataforma</p>
+        </div>
+
+        <!-- Card 2: Supervisores -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Supervisores</p>
+            <p class="text-2xl font-black text-blue-600 mt-1">
+                {{ users | selectattr('role', 'equalto', 'Supervisor') | list | length }}
+            </p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Gestión operativa & sedes</p>
+        </div>
+
+        <!-- Card 3: Operarios / Responsables -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Operarios</p>
+            <p class="text-2xl font-black text-emerald-600 mt-1">
+                {{ users | selectattr('role', 'in', ['Operario', 'Responsable']) | list | length }}
+            </p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Reportes y mantenimiento</p>
+        </div>
+
+        <!-- Card 4: Administradores -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Administradores</p>
+            <p class="text-2xl font-black text-purple-600 mt-1">
+                {{ users | selectattr('role', 'equalto', 'Admin') | list | length }}
+            </p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Control global del sistema</p>
+        </div>
+    </div>
+
+    <!-- Filters & Search Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        
+        <!-- Search Input -->
+        <div class="relative flex-1">
+            <input type="text" x-model="searchQuery" placeholder="Buscar por nombre de usuario o correo electrónico..."
+                   class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </div>
+
+        <!-- Filter Selects -->
+        <div class="flex flex-wrap items-center gap-2">
+            <select x-model="roleFilter" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Roles</option>
+                <option value="Admin">Administrador</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Operario">Operario</option>
+            </select>
+
+            <select x-model="statusFilter" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Estados</option>
+                <option value="true">Activos</option>
+                <option value="false">Inactivos</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="px-6 py-3.5">Usuario / Credencial</th>
+                        <th class="px-6 py-3.5">Correo Electrónico</th>
+                        <th class="px-6 py-3.5">Rol de Acceso</th>
+                        <th class="px-6 py-3.5">Estado</th>
+                        <th class="px-6 py-3.5">Fecha de Registro</th>
+                        <th class="px-6 py-3.5 text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 text-slate-700">
+                    {% for u in users %}
+                    <tr class="hover:bg-slate-50/80 transition"
+                        x-show="(roleFilter === 'all' || '{{ u.role }}' === roleFilter || (roleFilter === 'Operario' && '{{ u.role }}' === 'Responsable')) &&
+                                (statusFilter === 'all' || '{{ 'true' if u.is_active else 'false' }}' === statusFilter) &&
+                                ('{{ u.username|lower }}'.includes(searchQuery.toLowerCase()) || '{{ u.email|lower }}'.includes(searchQuery.toLowerCase()))">
+                        
+                        <!-- Usuario y Avatar -->
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase border border-slate-600">
+                                    {{ u.username[:2] }}
+                                </div>
+                                <div>
+                                    <p class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                                        {{ u.username }}
+                                        {% if u.id == current_user.id %}
+                                        <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Tú</span>
+                                        {% endif %}
+                                    </p>
+                                    <span class="text-[10px] text-slate-400 font-mono">ID #{{ u.id }}</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Correo Electrónico -->
+                        <td class="px-6 py-4">
+                            <span class="text-slate-800 font-medium">{{ u.email }}</span>
+                        </td>
+
+                        <!-- Rol -->
+                        <td class="px-6 py-4">
+                            {% if u.role == 'Admin' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                                👑 Administrador
+                            </span>
+                            {% elif u.role == 'Supervisor' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                🛡️ Supervisor
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                👷 Operario
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Estado -->
+                        <td class="px-6 py-4">
+                            {% if u.is_active %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Inactivo
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Fecha de Registro -->
+                        <td class="px-6 py-4 text-slate-500">
+                            {{ u.created_at.strftime('%d/%m/%Y %H:%M') }}
+                        </td>
+
+                        <!-- Acciones -->
+                        <td class="px-6 py-4 text-right">
+                            {% if u.id != current_user.id %}
+                            <form action="/users/{{ u.id }}/toggle-active" method="POST" class="inline-block">
+                                <button type="submit"
+                                        class="px-2.5 py-1 rounded-lg text-xs font-medium border transition {% if u.is_active %}border-rose-200 text-rose-600 hover:bg-rose-50{% else %}border-emerald-200 text-emerald-600 hover:bg-emerald-50{% endif %}">
+                                    {{ 'Desactivar' if u.is_active else 'Activar' }}
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-slate-400 text-xs italic">Cuenta actual</span>
+                            {% endif %}
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL: Crear Nueva Cuenta de Usuario -->
+    <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <!-- Backdrop -->
+            <div x-show="openModal" @click="openModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Panel -->
+            <div x-show="openModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:p-6">
+                
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-900">Crear Nueva Cuenta de Usuario</h3>
+                    </div>
+                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form action="/users" method="POST" class="mt-4 space-y-4">
+                    
+                    <!-- Nombre de Usuario -->
+                    <div>
+                        <label for="u_username" class="block text-xs font-semibold text-slate-700 mb-1">Nombre de Usuario *</label>
+                        <input type="text" name="username" id="u_username" required minlength="3" maxlength="50"
+                               placeholder="Ej. supervisor_sanagustin, operario_cctv..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Correo Electrónico -->
+                    <div>
+                        <label for="u_email" class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico *</label>
+                        <input type="email" name="email" id="u_email" required maxlength="100"
+                               placeholder="usuario@seguridad-sanagustin.gov.co"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Contraseña -->
+                    <div>
+                        <label for="u_password" class="block text-xs font-semibold text-slate-700 mb-1">Contraseña de Acceso *</label>
+                        <div class="relative">
+                            <input :type="showPassword ? 'text' : 'password'" name="password" id="u_password" required minlength="6"
+                                   placeholder="Mínimo 6 caracteres"
+                                   class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <button type="button" @click="showPassword = !showPassword"
+                                    class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none">
+                                <svg x-show="!showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                                <svg x-show="showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selección de Rol -->
+                    <div>
+                        <label for="u_role" class="block text-xs font-semibold text-slate-700 mb-1">Selección de Rol *</label>
+                        <select name="role" id="u_role" required
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+                            <option value="Supervisor" selected>🛡️ Supervisor (Control territorial y programación)</option>
+                            <option value="Operario">👷 Operario (Reporte de incidentes y ejecución)</option>
+                            <option value="Admin">👑 Administrador (Acceso total al sistema)</option>
+                        </select>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                        <button type="button" @click="openModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
+                            Crear Cuenta
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

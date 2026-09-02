@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Incidentes - CCTV{% endblock %}
+{% block page_title %}Incidentes y Novedades CCTV{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="{
+    openModal: false,
+    imagePreviewModal: null,
+    searchQuery: '',
+    selectedStatus: 'all',
+    selectedPriority: 'all',
+    selectedSede: 'all'
+}">
+
+    <!-- Top Action Bar & Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold text-slate-900">Reportes de Incidentes y Novedades</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    {{ incidents|length }} Registrados
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Control operativo de novedades en cámaras, enlaces y sedes de San Agustín, Huila.</p>
+        </div>
+        <button @click="openModal = true"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nuevo Reporte de Incidente
+        </button>
+    </div>
+
+    <!-- KPI Quick Metrics -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Abiertos</p>
+            <p class="text-2xl font-black text-amber-600 mt-1">
+                {{ incidents | selectattr('status', 'equalto', 'Abierto') | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">En Proceso</p>
+            <p class="text-2xl font-black text-blue-600 mt-1">
+                {{ incidents | selectattr('status', 'equalto', 'En Proceso') | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Resueltos / Cerrados</p>
+            <p class="text-2xl font-black text-emerald-600 mt-1">
+                {{ incidents | selectattr('status', 'in', ['Resuelto', 'Cerrado']) | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Prioridad Crítica</p>
+            <p class="text-2xl font-black text-rose-600 mt-1">
+                {{ incidents | selectattr('priority', 'equalto', 'Crítica') | list | length }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters & Search Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        
+        <!-- Search Input -->
+        <div class="relative flex-1">
+            <input type="text" x-model="searchQuery" placeholder="Buscar por título, descripción o sede..."
+                   class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </div>
+
+        <!-- Filter Selects -->
+        <div class="flex flex-wrap items-center gap-2">
+            <select x-model="selectedStatus" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Estados</option>
+                <option value="Abierto">Abierto</option>
+                <option value="En Proceso">En Proceso</option>
+                <option value="Resuelto">Resuelto</option>
+                <option value="Cerrado">Cerrado</option>
+            </select>
+
+            <select x-model="selectedPriority" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todas las Prioridades</option>
+                <option value="Baja">Baja</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+                <option value="Crítica">Crítica</option>
+            </select>
+
+            <select x-model="selectedSede" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todas las Sedes</option>
+                {% for s in sedes %}
+                <option value="{{ s.name }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Incidents Table / Cards Grid -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="px-5 py-3.5">ID / Incidente</th>
+                        <th class="px-5 py-3.5">Sede (San Agustín)</th>
+                        <th class="px-5 py-3.5">Prioridad</th>
+                        <th class="px-5 py-3.5">Estado</th>
+                        <th class="px-5 py-3.5">Evidencia</th>
+                        <th class="px-5 py-3.5">Reportado Por</th>
+                        <th class="px-5 py-3.5 text-right">Cambiar Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 text-slate-700">
+                    {% for inc in incidents %}
+                    <tr class="hover:bg-slate-50/80 transition"
+                        x-show="(selectedStatus === 'all' || '{{ inc.status }}' === selectedStatus) &&
+                                (selectedPriority === 'all' || '{{ inc.priority }}' === selectedPriority) &&
+                                (selectedSede === 'all' || '{{ inc.sede or '' }}' === selectedSede) &&
+                                ('{{ inc.title|lower }}'.includes(searchQuery.toLowerCase()) || '{{ inc.description|lower }}'.includes(searchQuery.toLowerCase()) || '{{ inc.sede|lower if inc.sede else '' }}'.includes(searchQuery.toLowerCase()))">
+                        
+                        <!-- ID / Título / Descripción -->
+                        <td class="px-5 py-4 max-w-xs">
+                            <div class="flex items-start gap-2">
+                                <span class="font-bold text-slate-900 shrink-0">#{{ inc.id }}</span>
+                                <div>
+                                    <p class="font-semibold text-slate-900 text-sm">{{ inc.title }}</p>
+                                    <p class="text-slate-500 text-xs mt-0.5 line-clamp-2">{{ inc.description }}</p>
+                                    <span class="text-[10px] text-slate-400 mt-1 block">{{ inc.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Sede & Equipo -->
+                        <td class="px-5 py-4">
+                            <p class="font-medium text-slate-800">{{ inc.sede if inc.sede else 'General (San Agustín)' }}</p>
+                            {% if inc.device %}
+                            <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                📹 {{ inc.device.name }} ({{ inc.device.device_type }})
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Prioridad -->
+                        <td class="px-5 py-4">
+                            {% if inc.priority == 'Crítica' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                🚨 Crítica
+                            </span>
+                            {% elif inc.priority == 'Alta' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-orange-100 text-orange-800 border border-orange-200">
+                                Alta
+                            </span>
+                            {% elif inc.priority == 'Media' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                Media
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                Baja
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Estado -->
+                        <td class="px-5 py-4">
+                            {% if inc.status == 'Abierto' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Abierto
+                            </span>
+                            {% elif inc.status == 'En Proceso' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> En Proceso
+                            </span>
+                            {% elif inc.status == 'Resuelto' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Resuelto
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Cerrado
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Evidencia Fotográfica -->
+                        <td class="px-5 py-4">
+                            {% if inc.image_path %}
+                            <button @click="imagePreviewModal = '{{ inc.image_path }}'"
+                                    class="group relative inline-block rounded-lg overflow-hidden border border-slate-300 shadow-sm hover:scale-105 transition">
+                                <img src="{{ inc.image_path }}" alt="Evidencia" class="w-12 h-12 object-cover">
+                                <span class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/>
+                                    </svg>
+                                </span>
+                            </button>
+                            {% else %}
+                            <span class="text-[11px] text-slate-400 italic">Sin foto</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Creador -->
+                        <td class="px-5 py-4">
+                            <span class="font-medium text-slate-800">{{ inc.creator.username if inc.creator else 'Sistema' }}</span>
+                        </td>
+
+                        <!-- Acciones / Cambio de Estado -->
+                        <td class="px-5 py-4 text-right">
+                            <form action="/incidents/{{ inc.id }}/status" method="POST" class="inline-flex items-center gap-1">
+                                <select name="status" onchange="this.form.submit()"
+                                        class="text-xs py-1 px-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                    <option value="Abierto" {% if inc.status == 'Abierto' %}selected{% endif %}>Abierto</option>
+                                    <option value="En Proceso" {% if inc.status == 'En Proceso' %}selected{% endif %}>En Proceso</option>
+                                    <option value="Resuelto" {% if inc.status == 'Resuelto' %}selected{% endif %}>Resuelto</option>
+                                    {% if current_user.role in ['Admin', 'Supervisor'] or inc.status == 'Cerrado' %}
+                                    <option value="Cerrado" {% if inc.status == 'Cerrado' %}selected{% endif %}>Cerrado</option>
+                                    {% endif %}
+                                </select>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                    {% if not incidents %}
+                    <tr>
+                        <td colspan="7" class="text-center py-10 text-slate-500 italic text-sm">
+                            No se han registrado reportes de incidentes.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL: Crear Nuevo Reporte de Incidente -->
+    <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <!-- Backdrop -->
+            <div x-show="openModal" @click="openModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Panel -->
+            <div x-show="openModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-900">Registrar Reporte de Incidente</h3>
+                    </div>
+                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form action="/incidents" method="POST" enctype="multipart/form-data" class="mt-4 space-y-4">
+                    
+                    <!-- Título -->
+                    <div>
+                        <label for="title" class="block text-xs font-semibold text-slate-700 mb-1">Título del Incidente / Falla *</label>
+                        <input type="text" name="title" id="title" required minlength="3" maxlength="100"
+                               placeholder="Ej. Pérdida de señal cámara 04 - Entrada Principal"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Sede y Prioridad Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="sede" class="block text-xs font-semibold text-slate-700 mb-1">Sede (San Agustín, Huila) *</label>
+                            <select name="sede" id="sede" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                {% for s in sedes %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="priority" class="block text-xs font-semibold text-slate-700 mb-1">Nivel de Prioridad *</label>
+                            <select name="priority" id="priority" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Baja">Baja</option>
+                                <option value="Media" selected>Media</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Crítica">Crítica</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Equipo Asociado (Inventario) -->
+                    <div>
+                        <label for="device_id" class="block text-xs font-semibold text-slate-700 mb-1">Equipo Asociado del Inventario (Opcional)</label>
+                        <select name="device_id" id="device_id"
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">Sin equipo específico / General</option>
+                            {% for d in devices %}
+                            <option value="{{ d.id }}">[{{ d.device_type }}] {{ d.name }} - {{ d.sede }} ({{ d.status }})</option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Asocia el incidente a una cámara PTZ, domo, bala, NVR o switch específico.</p>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div>
+                        <label for="description" class="block text-xs font-semibold text-slate-700 mb-1">Descripción Detallada *</label>
+                        <textarea name="description" id="description" rows="3" required minlength="5"
+                                  placeholder="Describe las observaciones técnicas, cámara afectada, hora estimada de falla..."
+                                  class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+                    </div>
+
+                    <!-- Evidencia Fotográfica (Subida Local) -->
+                    <div>
+                        <label for="photo" class="block text-xs font-semibold text-slate-700 mb-1">Evidencia Fotográfica (Opcional)</label>
+                        <input type="file" name="photo" id="photo" accept="image/*"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                        <p class="text-[11px] text-slate-400 mt-1">Formatos JPG, PNG, WEBP. Guardado de forma 100% local en el servidor.</p>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                        <button type="button" @click="openModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
+                            Guardar y Reportar Incidente
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Lightbox Vista Previa de Imagen -->
+    <div x-show="imagePreviewModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" @click.self="imagePreviewModal = null">
+        <div class="relative max-w-3xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2">
+            <button @click="imagePreviewModal = null" class="absolute top-4 right-4 bg-slate-800/80 text-white p-2 rounded-full hover:bg-slate-700 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <img :src="imagePreviewModal" alt="Evidencia Fotográfica" class="max-w-full max-h-[80vh] object-contain rounded-xl mx-auto">
+        </div>
+    </div>
+
+</div>
+{% endblock %}

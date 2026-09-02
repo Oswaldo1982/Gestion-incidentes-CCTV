@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}Inventario de Equipos - CCTV{% endblock %}
+{% block page_title %}Inventario de Equipos CCTV{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="{
+    openModal: false,
+    searchQuery: '',
+    selectedSede: 'all',
+    selectedType: 'all',
+    selectedStatus: 'all'
+}">
+
+    <!-- Top Action Bar & Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold text-slate-900">Inventario y Gestión de Equipos CCTV</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    {{ devices|length }} Registrados
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Control de cámaras (PTZ, Domo, Bala), grabadores NVR, UPS y switches asociados a San Agustín, Huila y Sede 2.</p>
+        </div>
+        <button @click="openModal = true"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Registrar Nuevo Equipo
+        </button>
+    </div>
+
+    <!-- KPI Quick Metrics -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <!-- Card 1: Total Cámaras -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Cámaras (PTZ/Domo/Bala)</p>
+            <p class="text-2xl font-black text-blue-600 mt-1">
+                {{ devices | selectattr('device_type', 'in', ['Cámara PTZ', 'Cámara Domo', 'Cámara Bala']) | list | length }}
+            </p>
+        </div>
+
+        <!-- Card 2: NVRs y Servidores -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Grabadores / NVR</p>
+            <p class="text-2xl font-black text-indigo-600 mt-1">
+                {{ devices | selectattr('device_type', 'equalto', 'NVR') | list | length }}
+            </p>
+        </div>
+
+        <!-- Card 3: Switches y UPS -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Switches PoE & UPS</p>
+            <p class="text-2xl font-black text-teal-600 mt-1">
+                {{ devices | selectattr('device_type', 'in', ['Switch PoE / Switch', 'Switch', 'UPS']) | list | length }}
+            </p>
+        </div>
+
+        <!-- Card 4: Operatividad -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Operativos / En Falla</p>
+            <p class="text-2xl font-black text-emerald-600 mt-1">
+                {{ devices | selectattr('status', 'equalto', 'Operativo') | list | length }} <span class="text-xs text-slate-400 font-normal">/ {{ devices | selectattr('status', 'in', ['En Falla', 'Alerta Menor']) | list | length }} alerta</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters & Search Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        
+        <!-- Search Input -->
+        <div class="relative flex-1">
+            <input type="text" x-model="searchQuery" placeholder="Buscar equipo por nombre, serial, IP, marca o modelo..."
+                   class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </div>
+
+        <!-- Filter Selects -->
+        <div class="flex flex-wrap items-center gap-2">
+            <select x-model="selectedSede" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todas las Sedes</option>
+                {% for s in sedes %}
+                <option value="{{ s.name }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+
+            <select x-model="selectedType" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Tipos</option>
+                <option value="Cámara PTZ">Cámara PTZ</option>
+                <option value="Cámara Domo">Cámara Domo</option>
+                <option value="Cámara Bala">Cámara Bala</option>
+                <option value="NVR">NVR / Grabador</option>
+                <option value="Switch PoE / Switch">Switch PoE / Switch</option>
+                <option value="UPS">UPS / Respaldo</option>
+                <option value="Otro">Otro</option>
+            </select>
+
+            <select x-model="selectedStatus" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Estados</option>
+                <option value="Operativo">Operativo</option>
+                <option value="Alerta Menor">Alerta Menor</option>
+                <option value="En Falla">En Falla</option>
+                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Inactivo">Inactivo</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Devices Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="px-5 py-3.5">ID / Equipo</th>
+                        <th class="px-5 py-3.5">Tipo de Equipo</th>
+                        <th class="px-5 py-3.5">Sede & Ubicación</th>
+                        <th class="px-5 py-3.5">Marca / Modelo</th>
+                        <th class="px-5 py-3.5">Dirección IP / Serial</th>
+                        <th class="px-5 py-3.5">Estado</th>
+                        <th class="px-5 py-3.5 text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 text-slate-700">
+                    {% for dev in devices %}
+                    <tr class="hover:bg-slate-50/80 transition"
+                        x-show="(selectedSede === 'all' || '{{ dev.sede }}' === selectedSede) &&
+                                (selectedType === 'all' || '{{ dev.device_type }}' === selectedType) &&
+                                (selectedStatus === 'all' || '{{ dev.status }}' === selectedStatus) &&
+                                ('{{ dev.name|lower }}'.includes(searchQuery.toLowerCase()) || '{{ dev.brand|lower if dev.brand else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.model|lower if dev.model else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.serial_number|lower if dev.serial_number else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.ip_address|lower if dev.ip_address else '' }}'.includes(searchQuery.toLowerCase()))">
+                        
+                        <!-- Nombre e ID -->
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+                                    {% if 'Cámara' in dev.device_type %}
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                                    </svg>
+                                    {% elif 'NVR' in dev.device_type %}
+                                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                                    </svg>
+                                    {% elif 'UPS' in dev.device_type %}
+                                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    {% else %}
+                                    <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <p class="font-bold text-slate-900 text-sm">{{ dev.name }}</p>
+                                    <span class="text-[10px] text-slate-400 font-mono">ID #{{ dev.id }}</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Tipo -->
+                        <td class="px-5 py-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                                {{ dev.device_type }}
+                            </span>
+                        </td>
+
+                        <!-- Sede & Ubicación -->
+                        <td class="px-5 py-4">
+                            <p class="font-semibold text-slate-800">{{ dev.sede }}</p>
+                            <p class="text-slate-500 text-[11px]">{{ dev.location_detail if dev.location_detail else 'Ubicación general' }}</p>
+                        </td>
+
+                        <!-- Marca / Modelo -->
+                        <td class="px-5 py-4">
+                            <p class="font-medium text-slate-800">{{ dev.brand if dev.brand else 'N/D' }}</p>
+                            <p class="text-slate-500 text-[11px]">{{ dev.model if dev.model else 'Sin modelo' }}</p>
+                        </td>
+
+                        <!-- IP / Serial -->
+                        <td class="px-5 py-4">
+                            {% if dev.ip_address %}
+                            <span class="font-mono text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                {{ dev.ip_address }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-400 text-[11px]">Sin IP</span>
+                            {% endif %}
+                            <p class="text-[10px] font-mono text-slate-500 mt-1">{{ dev.serial_number if dev.serial_number else 'S/N no reg.' }}</p>
+                        </td>
+
+                        <!-- Estado -->
+                        <td class="px-5 py-4">
+                            {% if dev.status == 'Operativo' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Operativo
+                            </span>
+                            {% elif dev.status == 'Alerta Menor' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Alerta Menor
+                            </span>
+                            {% elif dev.status == 'En Falla' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> En Falla
+                            </span>
+                            {% elif dev.status == 'Mantenimiento' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Mantenimiento
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Inactivo
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Acciones -->
+                        <td class="px-5 py-4 text-right">
+                            <form action="/devices/{{ dev.id }}/status" method="POST" class="inline-flex items-center gap-1">
+                                <select name="status" onchange="this.form.submit()"
+                                        class="text-xs py-1 px-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                    <option value="Operativo" {% if dev.status == 'Operativo' %}selected{% endif %}>Operativo</option>
+                                    <option value="Alerta Menor" {% if dev.status == 'Alerta Menor' %}selected{% endif %}>Alerta Menor</option>
+                                    <option value="En Falla" {% if dev.status == 'En Falla' %}selected{% endif %}>En Falla</option>
+                                    <option value="Mantenimiento" {% if dev.status == 'Mantenimiento' %}selected{% endif %}>Mantenimiento</option>
+                                    <option value="Inactivo" {% if dev.status == 'Inactivo' %}selected{% endif %}>Inactivo</option>
+                                </select>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                    {% if not devices %}
+                    <tr>
+                        <td colspan="7" class="text-center py-10 text-slate-500 italic text-sm">
+                            No hay equipos registrados en el inventario. Haz clic en "Registrar Nuevo Equipo" para agregar cámaras, grabadores o switches.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL: Registrar Nuevo Equipo -->
+    <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <!-- Backdrop -->
+            <div x-show="openModal" @click="openModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Panel -->
+            <div x-show="openModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-900">Registrar Nuevo Equipo CCTV</h3>
+                    </div>
+                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form action="/devices" method="POST" class="mt-4 space-y-4">
+                    
+                    <!-- Nombre -->
+                    <div>
+                        <label for="d_name" class="block text-xs font-semibold text-slate-700 mb-1">Nombre / Identificador del Equipo *</label>
+                        <input type="text" name="name" id="d_name" required minlength="3" maxlength="100"
+                               placeholder="Ej. Cámara PTZ 01 - Entrada Principal, NVR Dahua 32CH..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Tipo y Sede -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="d_type" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipo *</label>
+                            <select name="device_type" id="d_type" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Cámara PTZ">Cámara PTZ</option>
+                                <option value="Cámara Domo">Cámara Domo</option>
+                                <option value="Cámara Bala">Cámara Bala</option>
+                                <option value="NVR">NVR / Grabador</option>
+                                <option value="Switch PoE / Switch">Switch PoE / Switch</option>
+                                <option value="UPS">UPS / Respaldo Eléctrico</option>
+                                <option value="Otro">Otro</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="d_sede" class="block text-xs font-semibold text-slate-700 mb-1">Sede de Asignación *</label>
+                            <select name="sede" id="d_sede" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                {% for s in sedes %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Ubicación Detallada -->
+                    <div>
+                        <label for="d_location" class="block text-xs font-semibold text-slate-700 mb-1">Ubicación Específica / Detalle</label>
+                        <input type="text" name="location_detail" id="d_location"
+                               placeholder="Ej. Poste exterior #3, Rack Principal piso 2, Portería..."
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Marca y Modelo -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="d_brand" class="block text-xs font-semibold text-slate-700 mb-1">Marca</label>
+                            <input type="text" name="brand" id="d_brand" placeholder="Hikvision, Dahua, Cisco, APC..."
+                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <div>
+                            <label for="d_model" class="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
+                            <input type="text" name="model" id="d_model" placeholder="DS-2DE4425IW-DE, etc."
+                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Serial e IP -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="d_serial" class="block text-xs font-semibold text-slate-700 mb-1">Número de Serie (S/N)</label>
+                            <input type="text" name="serial_number" id="d_serial" placeholder="SN123456789"
+                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <div>
+                            <label for="d_ip" class="block text-xs font-semibold text-slate-700 mb-1">Dirección IP</label>
+                            <input type="text" name="ip_address" id="d_ip" placeholder="192.168.1.100"
+                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Estado Inicial -->
+                    <div>
+                        <label for="d_status" class="block text-xs font-semibold text-slate-700 mb-1">Estado Inicial *</label>
+                        <select name="status" id="d_status" required
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="Operativo" selected>Operativo</option>
+                            <option value="Alerta Menor">Alerta Menor</option>
+                            <option value="En Falla">En Falla</option>
+                            <option value="Mantenimiento">Mantenimiento</option>
+                            <option value="Inactivo">Inactivo</option>
+                        </select>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                        <button type="button" @click="openModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
+                            Guardar Equipo
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

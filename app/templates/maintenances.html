@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Mantenimientos - CCTV{% endblock %}
+{% block page_title %}Mantenimientos CCTV{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="{
+    openModal: false,
+    imagePreviewModal: null,
+    searchQuery: '',
+    selectedStatus: 'all',
+    selectedType: 'all',
+    selectedSede: 'all'
+}">
+
+    <!-- Top Action Bar & Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold text-slate-900">Programación y Control de Mantenimientos</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                    {{ maintenances|length }} Registros
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">Control de mantenimientos preventivos y correctivos en circuitos de San Agustín, Huila.</p>
+        </div>
+        <button @click="openModal = true"
+                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Programar Mantenimiento
+        </button>
+    </div>
+
+    <!-- KPI Quick Metrics -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Programados</p>
+            <p class="text-2xl font-black text-blue-600 mt-1">
+                {{ maintenances | selectattr('status', 'equalto', 'Programado') | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">En Ejecución</p>
+            <p class="text-2xl font-black text-amber-600 mt-1">
+                {{ maintenances | selectattr('status', 'equalto', 'En Ejecución') | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Completados</p>
+            <p class="text-2xl font-black text-emerald-600 mt-1">
+                {{ maintenances | selectattr('status', 'equalto', 'Completado') | list | length }}
+            </p>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-xs text-slate-500 font-semibold uppercase">Preventivos / Correctivos</p>
+            <p class="text-2xl font-black text-slate-800 mt-1">
+                {{ maintenances | selectattr('type', 'equalto', 'Preventivo') | list | length }} / {{ maintenances | selectattr('type', 'equalto', 'Correctivo') | list | length }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters & Search Toolbar -->
+    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        
+        <!-- Search Input -->
+        <div class="relative flex-1">
+            <input type="text" x-model="searchQuery" placeholder="Buscar mantenimiento por título o sede..."
+                   class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </div>
+
+        <!-- Filter Selects -->
+        <div class="flex flex-wrap items-center gap-2">
+            <select x-model="selectedStatus" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Estados</option>
+                <option value="Programado">Programado</option>
+                <option value="En Ejecución">En Ejecución</option>
+                <option value="Completado">Completado</option>
+                <option value="Cancelado">Cancelado</option>
+            </select>
+
+            <select x-model="selectedType" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Tipos</option>
+                <option value="Preventivo">Preventivo</option>
+                <option value="Correctivo">Correctivo</option>
+            </select>
+
+            <select x-model="selectedSede" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todas las Sedes</option>
+                {% for s in sedes %}
+                <option value="{{ s.name }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Maintenances Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="px-5 py-3.5">ID / Título</th>
+                        <th class="px-5 py-3.5">Sede (San Agustín)</th>
+                        <th class="px-5 py-3.5">Tipo</th>
+                        <th class="px-5 py-3.5">Fecha Programada</th>
+                        <th class="px-5 py-3.5">Estado</th>
+                        <th class="px-5 py-3.5">Evidencia</th>
+                        <th class="px-5 py-3.5">Registrado Por</th>
+                        <th class="px-5 py-3.5 text-right">Cambiar Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 text-slate-700">
+                    {% for maint in maintenances %}
+                    <tr class="hover:bg-slate-50/80 transition"
+                        x-show="(selectedStatus === 'all' || '{{ maint.status }}' === selectedStatus) &&
+                                (selectedType === 'all' || '{{ maint.type }}' === selectedType) &&
+                                (selectedSede === 'all' || '{{ maint.sede or '' }}' === selectedSede) &&
+                                ('{{ maint.title|lower }}'.includes(searchQuery.toLowerCase()) || '{{ maint.description|lower }}'.includes(searchQuery.toLowerCase()) || '{{ maint.sede|lower if maint.sede else '' }}'.includes(searchQuery.toLowerCase()))">
+                        
+                        <!-- ID / Título -->
+                        <td class="px-5 py-4 max-w-xs">
+                            <div class="flex items-start gap-2">
+                                <span class="font-bold text-slate-900 shrink-0">#{{ maint.id }}</span>
+                                <div>
+                                    <p class="font-semibold text-slate-900 text-sm">{{ maint.title }}</p>
+                                    <p class="text-slate-500 text-xs mt-0.5 line-clamp-2">{{ maint.description }}</p>
+                                    {% if maint.incident_id %}
+                                    <span class="inline-block text-[10px] text-blue-600 font-medium mt-1">
+                                        🔗 Incidente asociado #{{ maint.incident_id }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Sede & Equipo -->
+                        <td class="px-5 py-4">
+                            <p class="font-medium text-slate-800">{{ maint.sede if maint.sede else 'General (San Agustín)' }}</p>
+                            {% if maint.device %}
+                            <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                📹 {{ maint.device.name }} ({{ maint.device.device_type }})
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Tipo -->
+                        <td class="px-5 py-4">
+                            {% if maint.type == 'Preventivo' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                Preventivo
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                                Correctivo
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Fecha Programada -->
+                        <td class="px-5 py-4">
+                            <p class="font-semibold text-slate-800">{{ maint.scheduled_date.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% if maint.completed_date %}
+                            <p class="text-[10px] text-emerald-600 font-medium">Fin: {{ maint.completed_date.strftime('%d/%m/%Y %H:%M') }}</p>
+                            {% endif %}
+                        </td>
+
+                        <!-- Estado -->
+                        <td class="px-5 py-4">
+                            {% if maint.status == 'Programado' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Programado
+                            </span>
+                            {% elif maint.status == 'En Ejecución' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> En Ejecución
+                            </span>
+                            {% elif maint.status == 'Completado' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Completado
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Cancelado
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Evidencia Fotográfica -->
+                        <td class="px-5 py-4">
+                            {% if maint.image_path %}
+                            <button @click="imagePreviewModal = '{{ maint.image_path }}'"
+                                    class="group relative inline-block rounded-lg overflow-hidden border border-slate-300 shadow-sm hover:scale-105 transition">
+                                <img src="{{ maint.image_path }}" alt="Evidencia" class="w-12 h-12 object-cover">
+                                <span class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/>
+                                    </svg>
+                                </span>
+                            </button>
+                            {% else %}
+                            <span class="text-[11px] text-slate-400 italic">Sin foto</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Creador -->
+                        <td class="px-5 py-4">
+                            <span class="font-medium text-slate-800">{{ maint.creator.username if maint.creator else 'Sistema' }}</span>
+                        </td>
+
+                        <!-- Acciones / Cambio de Estado -->
+                        <td class="px-5 py-4 text-right">
+                            <form action="/maintenance/{{ maint.id }}/status" method="POST" class="inline-flex items-center gap-1">
+                                <select name="status" onchange="this.form.submit()"
+                                        class="text-xs py-1 px-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+                                    <option value="Programado" {% if maint.status == 'Programado' %}selected{% endif %}>Programado</option>
+                                    <option value="En Ejecución" {% if maint.status == 'En Ejecución' %}selected{% endif %}>En Ejecución</option>
+                                    <option value="Completado" {% if maint.status == 'Completado' %}selected{% endif %}>Completado</option>
+                                    {% if current_user.role in ['Admin', 'Supervisor'] or maint.status == 'Cancelado' %}
+                                    <option value="Cancelado" {% if maint.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+                                    {% endif %}
+                                </select>
+                            </form>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                    {% if not maintenances %}
+                    <tr>
+                        <td colspan="8" class="text-center py-10 text-slate-500 italic text-sm">
+                            No se han registrado mantenimientos programados.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL: Programar Nuevo Mantenimiento -->
+    <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <!-- Backdrop -->
+            <div x-show="openModal" @click="openModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Panel -->
+            <div x-show="openModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-900">Programar Nuevo Mantenimiento</h3>
+                    </div>
+                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form action="/maintenance" method="POST" enctype="multipart/form-data" class="mt-4 space-y-4">
+                    
+                    <!-- Título -->
+                    <div>
+                        <label for="m_title" class="block text-xs font-semibold text-slate-700 mb-1">Título de la Orden / Mantenimiento *</label>
+                        <input type="text" name="title" id="m_title" required minlength="3" maxlength="100"
+                               placeholder="Ej. Mantenimiento Preventivo Trimestral - Servidor y Cámaras"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- Tipo y Sede -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="m_type" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Mantenimiento *</label>
+                            <select name="type" id="m_type" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Preventivo">Preventivo</option>
+                                <option value="Correctivo">Correctivo</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="m_sede" class="block text-xs font-semibold text-slate-700 mb-1">Sede (San Agustín, Huila) *</label>
+                            <select name="sede" id="m_sede" required
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                {% for s in sedes %}
+                                <option value="{{ s.name }}">{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Fecha Programada e Incidente Vinculado -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="scheduled_date" class="block text-xs font-semibold text-slate-700 mb-1">Fecha y Hora Programada *</label>
+                            <input type="datetime-local" name="scheduled_date" id="scheduled_date" required
+                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+
+                        <div>
+                            <label for="incident_id" class="block text-xs font-semibold text-slate-700 mb-1">Vincular a Incidente (Opcional)</label>
+                            <select name="incident_id" id="incident_id"
+                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">Sin incidente vinculado</option>
+                                {% for inc in active_incidents %}
+                                <option value="{{ inc.id }}">#{{ inc.id }} - {{ inc.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Equipo Asociado (Inventario) -->
+                    <div>
+                        <label for="m_device_id" class="block text-xs font-semibold text-slate-700 mb-1">Equipo Asociado del Inventario (Opcional)</label>
+                        <select name="device_id" id="m_device_id"
+                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">Sin equipo específico / Mantenimiento general</option>
+                            {% for d in devices %}
+                            <option value="{{ d.id }}">[{{ d.device_type }}] {{ d.name }} - {{ d.sede }} ({{ d.status }})</option>
+                            {% endfor %}
+                        </select>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Asocia la orden a una cámara, NVR, switch o UPS específico.</p>
+                    </div>
+
+                    <!-- Descripción -->
+                    <div>
+                        <label for="m_description" class="block text-xs font-semibold text-slate-700 mb-1">Descripción del Trabajo a Realizar *</label>
+                        <textarea name="description" id="m_description" rows="3" required minlength="5"
+                                  placeholder="Detalle de las tareas: limpieza de domos, revisión de fuentes de poder, verificación de cableado..."
+                                  class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+                    </div>
+
+                    <!-- Evidencia Fotográfica -->
+                    <div>
+                        <label for="m_photo" class="block text-xs font-semibold text-slate-700 mb-1">Evidencia Fotográfica / Acta (Opcional)</label>
+                        <input type="file" name="photo" id="m_photo" accept="image/*"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                        <p class="text-[11px] text-slate-400 mt-1">Sube la foto del estado del equipo o acta técnica.</p>
+                    </div>
+
+                    <!-- Botones -->
+                    <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                        <button type="button" @click="openModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
+                            Programar Mantenimiento
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Lightbox Vista Previa de Imagen -->
+    <div x-show="imagePreviewModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" @click.self="imagePreviewModal = null">
+        <div class="relative max-w-3xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2">
+            <button @click="imagePreviewModal = null" class="absolute top-4 right-4 bg-slate-800/80 text-white p-2 rounded-full hover:bg-slate-700 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <img :src="imagePreviewModal" alt="Evidencia Fotográfica" class="max-w-full max-h-[80vh] object-contain rounded-xl mx-auto">
+        </div>
+    </div>
+
+</div>
+{% endblock %}

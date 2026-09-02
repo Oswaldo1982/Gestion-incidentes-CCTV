@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}Panel Principal - Gestión CCTV{% endblock %}
+{% block page_title %}Panel Principal{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="{ searchQuery: '', statusFilter: 'all' }">
+
+    <!-- Welcome & Header Banner -->
+    <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 border border-slate-700/70 rounded-2xl p-6 shadow-xl text-white relative overflow-hidden">
+        <div class="absolute right-0 top-0 bottom-0 w-1/3 bg-blue-500/10 blur-3xl pointer-events-none"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Sistema Operativo
+                    </span>
+                    <span class="text-xs text-slate-400 font-medium">| Monitoreo Local CCTV</span>
+                </div>
+                <h1 class="text-2xl font-bold text-white tracking-tight">
+                    ¡Bienvenido, <span class="text-blue-400">{{ current_user.username }}</span>!
+                </h1>
+                <p class="text-sm text-slate-300 mt-0.5">
+                    Centro de control de incidencias, mantenimientos y vigilancia de circuitos cerrados.
+                </p>
+            </div>
+
+            <div class="flex items-center gap-3 shrink-0">
+                <span class="px-3.5 py-1.5 rounded-xl bg-slate-800/90 border border-slate-600/80 text-xs font-medium text-slate-300 shadow-sm">
+                    Rol: <strong class="text-white">{{ current_user.role }}</strong>
+                </span>
+                <a href="/docs" target="_blank"
+                   class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-600/30 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                    </svg>
+                    API Docs
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sede Activa Selector Toolbar -->
+    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-xs font-bold text-slate-900">Sede Activa en Monitoreo</p>
+                <p class="text-[11px] text-slate-500">Filtra las métricas e incidentes por ubicación territorial.</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <label for="sedeFilterSelect" class="text-xs text-slate-600 font-semibold shrink-0">Filtrar Sede:</label>
+            <select id="sedeFilterSelect"
+                    onchange="window.location.href = '/dashboard?sede=' + encodeURIComponent(this.value)"
+                    class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+                <option value="all" {% if selected_sede == 'all' or selected_sede == current_site.full_name %}selected{% endif %}>🏢 Toda la Sede (Consolidado)</option>
+                {% for s in sedes %}
+                <option value="{{ s.name }}" {% if selected_sede == s.name %}selected{% endif %}>
+                    📍 {{ s.name }}
+                </option>
+                {% endfor %}
+            </select>
+
+            {% if selected_sede != 'all' %}
+            <a href="/dashboard" class="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition" title="Restablecer filtro">
+                ✖ Limpiar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- KPI Metric Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        
+        <!-- Card 1: Novedades / Incidentes Abiertos -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Incidentes Abiertos</p>
+                    <h3 class="text-3xl font-extrabold text-slate-900 mt-1">{{ metrics.open_incidents }}</h3>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Críticos: <strong class="text-red-600">{{ metrics.critical_incidents }}</strong></span>
+                <span class="text-emerald-600 font-medium">Total: {{ metrics.total_incidents }}</span>
+            </div>
+        </div>
+
+        <!-- Card 2: Mantenimientos Pendientes -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Mantenimientos Pendientes</p>
+                    <h3 class="text-3xl font-extrabold text-slate-900 mt-1">{{ metrics.pending_maintenances }}</h3>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Completados: <strong class="text-emerald-600">{{ metrics.completed_maintenances }}</strong></span>
+                <span>Total: {{ metrics.total_maintenances }}</span>
+            </div>
+        </div>
+
+        <!-- Card 3: Sedes Activas Registradas -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Sedes en Alcance</p>
+                    <h3 class="text-3xl font-extrabold text-slate-900 mt-1">{{ sedes|length }}</h3>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Alcance: <strong class="text-slate-800">{{ 'Sede seleccionada' if selected_sede != 'all' else 'San Agustín & Región' }}</strong></span>
+                <span class="text-emerald-600 font-semibold">Activas</span>
+            </div>
+        </div>
+
+        <!-- Card 4: Cámaras CCTV Monitoreadas -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Cámaras Monitoreadas</p>
+                    <h3 class="text-3xl font-extrabold text-slate-900 mt-1">{{ metrics.cameras_active }} / {{ metrics.cameras_total }}</h3>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Disponibilidad:</span>
+                <strong class="text-teal-600 font-bold">{{ ((metrics.cameras_active / metrics.cameras_total) * 100) | round(1) if metrics.cameras_total > 0 else 0 }}%</strong>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Sección de Sedes Activas -->
+    <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        
+        <!-- Header de la tabla / filtros -->
+        <div class="p-5 sm:p-6 border-b border-slate-200/80 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <h2 class="text-lg font-bold text-slate-900">
+                        {{ 'Detalle de la Sede Seleccionada' if selected_sede != 'all' else 'Inventario de Sedes (San Agustín, Huila & Sede 2)' }}
+                    </h2>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                        {{ sedes|length }} {{ 'Sede' if sedes|length == 1 else 'Sedes' }}
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5">Ubicaciones territoriales, puntos de vigilancia y estado de cámaras en tiempo real.</p>
+            </div>
+
+            <!-- Filtros interactivos con Alpine.js -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div class="relative">
+                    <input type="text" x-model="searchQuery" placeholder="Buscar sede o dirección..."
+                           class="w-full sm:w-64 pl-9 pr-4 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+                <select x-model="statusFilter"
+                        class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all">Todos los estados</option>
+                    <option value="Operativo">Operativo</option>
+                    <option value="Alerta Menor">Alerta Menor</option>
+                    <option value="Mantenimiento">Mantenimiento</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Sedes Grid / Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200/80">
+                    <tr>
+                        <th class="px-6 py-3.5">Sede / Punto de Vigilancia</th>
+                        <th class="px-6 py-3.5">Tipo / Ubicación</th>
+                        <th class="px-6 py-3.5">Cámaras CCTV</th>
+                        <th class="px-6 py-3.5">Estado Operativo</th>
+                        <th class="px-6 py-3.5">Contacto / Teléfono</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200/70 text-slate-700">
+                    {% for sede in sedes %}
+                    <tr class="hover:bg-slate-50/80 transition"
+                        x-show="(statusFilter === 'all' || '{{ sede.status }}' === statusFilter) &&
+                                ('{{ sede.name|lower }}'.includes(searchQuery.toLowerCase()) || '{{ sede.address|lower }}'.includes(searchQuery.toLowerCase()))">
+                        
+                        <!-- Sede info -->
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-slate-900 text-sm">{{ sede.name }}</p>
+                                    <p class="text-slate-500 text-xs">{{ sede.address }}</p>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Tipo y Municipio -->
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                                {{ sede.type }}
+                            </span>
+                            <p class="text-[11px] text-slate-500 mt-1">{{ sede.municipality }}</p>
+                        </td>
+
+                        <!-- Cámaras -->
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-slate-900">{{ sede.cameras_active }}/{{ sede.cameras_total }}</span>
+                                <span class="text-slate-400 text-[11px]">activas</span>
+                            </div>
+                            <div class="w-28 bg-slate-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                                <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ (sede.cameras_active / sede.cameras_total) * 100 if sede.cameras_total > 0 else 0 }}%"></div>
+                            </div>
+                        </td>
+
+                        <!-- Estado -->
+                        <td class="px-6 py-4">
+                            {% if sede.status == 'Operativo' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Operativo
+                            </span>
+                            {% elif sede.status == 'Alerta Menor' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Alerta Menor
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Mantenimiento
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Contacto -->
+                        <td class="px-6 py-4">
+                            <p class="font-medium text-slate-800">{{ sede.contact_person }}</p>
+                            <p class="text-slate-500 text-[11px]">{{ sede.phone }}</p>
+                        </td>
+
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Actividad Reciente: Incidentes y Mantenimientos -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Últimos Incidentes -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Novedades e Incidentes Recientes {{ '(' + selected_sede + ')' if selected_sede != 'all' else '' }}
+                </h3>
+            </div>
+            
+            {% if recent_incidents %}
+            <div class="divide-y divide-slate-100">
+                {% for inc in recent_incidents %}
+                <div class="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-semibold text-slate-900 truncate">#{{ inc.id }} - {{ inc.title }}</p>
+                        <p class="text-[11px] text-slate-500 truncate">{{ inc.sede if inc.sede else 'General' }} | {{ inc.description }}</p>
+                        <span class="text-[10px] text-slate-400">{{ inc.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                    </div>
+                    <div class="shrink-0 flex flex-col items-end gap-1">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if inc.priority == 'Crítica' %}bg-red-100 text-red-700{% elif inc.priority == 'Alta' %}bg-orange-100 text-orange-700{% else %}bg-slate-100 text-slate-700{% endif %}">
+                            {{ inc.priority }}
+                        </span>
+                        <span class="text-[10px] font-medium text-slate-500">{{ inc.status }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="py-8 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                <svg class="w-10 h-10 text-emerald-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-xs font-semibold text-slate-700">Sin incidentes abiertos</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">El sistema se encuentra limpio y listo para registrar novedades en San Agustín, Huila.</p>
+                <a href="/incidents" class="inline-flex items-center gap-1 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium transition">
+                    + Registrar primer incidente
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Mantenimientos Programados -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Próximos Mantenimientos {{ '(' + selected_sede + ')' if selected_sede != 'all' else '' }}
+                </h3>
+            </div>
+            
+            {% if recent_maintenances %}
+            <div class="divide-y divide-slate-100">
+                {% for maint in recent_maintenances %}
+                <div class="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-semibold text-slate-900 truncate">#{{ maint.id }} - {{ maint.title }}</p>
+                        <p class="text-[11px] text-slate-500 truncate">{{ maint.sede if maint.sede else 'General' }} | {{ maint.type }}</p>
+                        <span class="text-[10px] text-slate-400">Fecha: {{ maint.scheduled_date.strftime('%d/%m/%Y') }}</span>
+                    </div>
+                    <div class="shrink-0 flex flex-col items-end gap-1">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">
+                            {{ maint.status }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="py-8 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                <svg class="w-10 h-10 text-slate-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <p class="text-xs font-semibold text-slate-700">Sin mantenimientos programados</p>
+                <p class="text-[11px] text-slate-400 mt-0.5">Programa la primera orden preventiva o correctiva en la sede.</p>
+                <a href="/maintenance" class="inline-flex items-center gap-1 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium transition">
+                    + Programar mantenimiento
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
