@@ -1,0 +1,9 @@
+# Configuración de soporte y compatibilidad de navegadores para CCTV Gestión
+> 0.5%
+last 2 versions
+Firefox ESR
+Safari >= 13
+iOS >= 13
+Chrome >= 80
+Edge >= 80
+not dead

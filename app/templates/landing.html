@@ -2,7 +2,9 @@
 <html lang="es" class="h-full bg-slate-950">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="color-scheme" content="dark" />
     <title>Portal Institucional - Gestión y Monitoreo CCTV</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -17,13 +19,36 @@
         }
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <style>[x-cloak] { display: none !important; }</style>
+    <style>
+        [x-cloak] { display: none !important; }
+        html {
+            font-size: 14.5px;
+            -webkit-text-size-adjust: 100%;
+            -moz-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+        @media (min-width: 1536px) {
+            html { font-size: 15px; }
+        }
+        @media (min-width: 1920px) {
+            html { font-size: 16px; }
+        }
+        @media screen and (max-width: 768px) and (hover: none) and (pointer: coarse) {
+            input, select, textarea { font-size: 16px !important; }
+        }
+        html, body {
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
 </head>
 <body class="h-full text-slate-100 flex flex-col justify-between bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black overflow-x-hidden"
       x-data="{
           selectedSite: 'san-agustin',
           selectedRole: 'admin',
-          username: 'admin',
+          username: '',
           password: '',
           showPassword: false,
           loadingOfficial: false,
@@ -31,18 +56,58 @@
           demoRole: 'admin',
           loadingDemo: false,
 
-          updateCredentials() {
-              if (this.selectedRole === 'admin') {
-                  this.username = 'admin';
-              } else if (this.selectedRole === 'supervisor') {
-                  if (this.selectedSite === 'san-agustin') {
-                      this.username = 'supervisor_sanagustin';
-                  } else {
-                      this.username = 'supervisor_guaviare';
+          openForgotModal: {{ 'true' if request.query_params.get('forgot') == '1' else 'false' }},
+          forgotEmail: '',
+          forgotLoading: false,
+          forgotError: '',
+          forgotSuccess: false,
+          forgotSuccessMsg: '',
+
+          async submitForgotPassword() {
+              this.forgotLoading = true;
+              this.forgotError = '';
+              this.forgotSuccess = false;
+              const formData = new FormData();
+              formData.append('email', this.forgotEmail);
+
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+              try {
+                  const resp = await fetch('/forgot-password', {
+                      method: 'POST',
+                      body: formData,
+                      signal: controller.signal,
+                      headers: {
+                          'X-Requested-With': 'XMLHttpRequest',
+                          'Accept': 'application/json'
+                      }
+                  });
+                  clearTimeout(timeoutId);
+                  const data = await resp.json().catch(() => null);
+                  if (!resp.ok || (data && !data.success)) {
+                      this.forgotError = (data && data.error) ? data.error : 'No se pudo procesar la solicitud de recuperación.';
+                      this.forgotLoading = false;
+                      return;
                   }
-              } else if (this.selectedRole === 'mantenimiento') {
-                  this.username = 'mantenimiento_cctv';
+
+                  this.forgotSuccess = true;
+                  this.forgotSuccessMsg = (data && data.message) ? data.message : 'Hemos enviado la contraseña temporal a su correo institucional.';
+              } catch (e) {
+                  clearTimeout(timeoutId);
+                  if (e.name === 'AbortError') {
+                      this.forgotError = 'Tiempo de espera agotado. Verifique su conexión de red.';
+                  } else {
+                      this.forgotError = 'Error de conexión con el servidor. Intente nuevamente.';
+                  }
+              } finally {
+                  this.forgotLoading = false;
               }
+          },
+
+          updateCredentials() {
+              this.username = '';
+              this.password = '';
           }
       }"
       @pageshow.window="loadingOfficial = false; loadingDemo = false;"
@@ -89,6 +154,31 @@
             </p>
         </div>
 
+        <!-- Alertas de Mensaje o Error General -->
+        {% if msg %}
+        <div class="max-w-5xl mx-auto w-full mb-5 p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
+            <div class="flex items-center gap-2.5">
+                <svg class="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="font-medium">{{ msg }}</span>
+            </div>
+            <button type="button" @click="$el.parentElement.remove()" class="text-emerald-400 hover:text-emerald-200 text-base font-bold ml-2">✖</button>
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="max-w-5xl mx-auto w-full mb-5 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between shadow-lg">
+            <div class="flex items-center gap-2.5">
+                <svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span class="font-medium">{{ error }}</span>
+            </div>
+            <button type="button" @click="$el.parentElement.remove()" class="text-rose-400 hover:text-rose-200 text-base font-bold ml-2">✖</button>
+        </div>
+        {% endif %}
+
         <!-- 2 Main Cards Grid: Form on Left + Sandbox on Right -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch max-w-5xl mx-auto w-full">
             
@@ -116,7 +206,7 @@
                     </div>
 
                     <!-- Single Screen Login Form -->
-                    <form action="/login" method="POST" @submit="loadingOfficial = true" class="space-y-3.5">
+                    <form action="/login" method="POST" @submit="loadingOfficial = true" autocomplete="off" class="space-y-3.5">
                         
                         <!-- 1. Selector de Sede -->
                         <div>
@@ -124,7 +214,7 @@
                                 Sede Territorial / Municipio
                             </label>
                             <div class="relative">
-                                <select id="site_id" name="site_id" x-model="selectedSite" @change="updateCredentials()"
+                                <select id="site_id" name="site_id" x-model="selectedSite" @change="updateCredentials()" autocomplete="off"
                                         class="block w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none pr-8">
                                     <option value="san-agustin">🏛️ San Agustín (Huila)</option>
                                     <option value="san-jose-guaviare">🏢 San José del Guaviare (Guaviare)</option>
@@ -143,9 +233,10 @@
                                 Perfil de Acceso
                             </label>
                             <div class="relative">
-                                <select id="role_type" name="role_type" x-model="selectedRole" @change="updateCredentials()"
+                                <select id="role_type" name="role_type" x-model="selectedRole" @change="updateCredentials()" autocomplete="off"
                                         class="block w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none pr-8">
                                     <option value="admin">👑 Administrador del Sistema</option>
+                                    <option value="validador">🔍 Validador (Revisión y Dictamen de Conformidad)</option>
                                     <option value="supervisor">🛡️ Supervisor(a) del Contrato</option>
                                     <option value="mantenimiento">👷 Empresa de Mantenimiento</option>
                                 </select>
@@ -155,22 +246,32 @@
                             </div>
                         </div>
 
-                        <!-- 3. Usuario & Contraseña -->
+                        <!-- 3. Correo Electrónico & Contraseña -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div>
                                 <label for="username" class="block text-[10px] font-bold uppercase tracking-wider text-slate-300 mb-1">
-                                    Usuario
+                                    CORREO ELECTRÓNICO
                                 </label>
                                 <input id="username" name="username" type="text" required x-model="username"
+                                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                       placeholder="usuario@entidad.gov.co"
                                        class="block w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
                             </div>
 
                             <div>
-                                <label for="password" class="block text-[10px] font-bold uppercase tracking-wider text-slate-300 mb-1">
-                                    Contraseña
-                                </label>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label for="password" class="block text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                                        Contraseña
+                                    </label>
+                                    <button type="button"
+                                            @click="openForgotModal = true; forgotEmail = (username && username.includes('@') ? username : ''); forgotError = ''; forgotSuccess = false;"
+                                            class="text-[10px] text-blue-400 hover:text-blue-300 hover:underline transition">
+                                        ¿Olvidó su contraseña?
+                                    </button>
+                                </div>
                                 <div class="relative">
                                     <input id="password" name="password" :type="showPassword ? 'text' : 'password'" required x-model="password"
+                                           autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
                                            placeholder="••••••••"
                                            class="block w-full px-3 py-2 pr-9 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
                                     <button type="button" @click="showPassword = !showPassword"
@@ -192,6 +293,18 @@
                                 </svg>
                                 <span x-text="loadingOfficial ? 'Validando...' : 'Ingresar al Sistema'">Ingresar al Sistema</span>
                                 <svg x-show="!loadingOfficial" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                            </button>
+                        </div>
+
+                        <!-- Enlace Auxiliar Recuperación -->
+                        <div class="text-center pt-0.5">
+                            <button type="button"
+                                    @click="openForgotModal = true; forgotEmail = (username && username.includes('@') ? username : ''); forgotError = ''; forgotSuccess = false;"
+                                    class="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition">
+                                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                                </svg>
+                                <span>¿Olvidó su contraseña? Solicite una temporal</span>
                             </button>
                         </div>
                     </form>
@@ -222,7 +335,7 @@
                     </div>
 
                     <!-- Demo 1-Click Form -->
-                    <form action="/demo/quick-login" method="POST" @submit="loadingDemo = true" class="space-y-4">
+                    <form action="/demo/quick-login" method="POST" @submit="loadingDemo = true" autocomplete="off" class="space-y-4">
                         
                         <!-- 1. Indicador de Sede: Sitio de Prueba -->
                         <div>
@@ -241,9 +354,10 @@
                                 Perfil de Acceso
                             </label>
                             <div class="relative">
-                                <select id="demo_role" name="demo_role" x-model="demoRole" @change="loadingDemo = false"
+                                <select id="demo_role" name="demo_role" x-model="demoRole" @change="loadingDemo = false" autocomplete="off"
                                         class="block w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition appearance-none pr-8">
                                     <option value="admin">👑 Administrador (Control Total y Configuración)</option>
+                                    <option value="validador">🔍 Validador (Revisión y Dictamen de Conformidad)</option>
                                     <option value="supervisor">🛡️ Supervisor(a) del Contrato (Auditoría e Informes)</option>
                                     <option value="mantenimiento">👷 Empresa de Mantenimiento (Novedades y Órdenes)</option>
                                 </select>
@@ -287,6 +401,123 @@
     <footer class="relative z-10 max-w-7xl mx-auto w-full px-6 py-4 text-center text-xs text-slate-500 border-t border-slate-900">
         <p>Sistema Central de Gestión y Mantenimiento de Circuitos Cerrados de Televisión &copy; 2026</p>
     </footer>
+
+    <!-- Modal Recuperación de Contraseña -->
+    <div x-show="openForgotModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+
+        <div @click.away="if (!forgotLoading) openForgotModal = false"
+             class="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl p-6 shadow-2xl relative text-left"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100">
+
+            <!-- Botón Cerrar -->
+            <button type="button" @click="openForgotModal = false"
+                    :disabled="forgotLoading"
+                    class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+
+            <!-- Encabezado del Modal -->
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">Recuperar Contraseña</h3>
+                    <p class="text-xs text-slate-400">Emisión de clave temporal de acceso</p>
+                </div>
+            </div>
+
+            <!-- Formulario (Cuando aún no ha sido exitoso) -->
+            <div x-show="!forgotSuccess">
+                <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+                    Ingrese el correo electrónico institucional asociado a su cuenta. Le enviaremos una <strong class="text-blue-400">contraseña temporal</strong> válida por 24 horas. Al iniciar sesión con ella, el sistema le solicitará configurar su clave definitiva.
+                </p>
+
+                <!-- Alerta de Error en Modal -->
+                <div x-show="forgotError" x-cloak class="mb-4 p-3 bg-red-500/15 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-start gap-2">
+                    <svg class="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span x-text="forgotError"></span>
+                </div>
+
+                <form @submit.prevent="submitForgotPassword()" autocomplete="off" class="space-y-4">
+                    <div>
+                        <label for="forgotEmailInput" class="block text-[10px] font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                            Correo Electrónico Institucional
+                        </label>
+                        <input id="forgotEmailInput" type="email" required x-model="forgotEmail"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               placeholder="usuario@entidad.gov.co"
+                               class="block w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+                    </div>
+
+                    <div class="flex items-center justify-end gap-2 pt-2">
+                        <button type="button" @click="openForgotModal = false" :disabled="forgotLoading"
+                                class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit" :disabled="forgotLoading"
+                                class="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition disabled:opacity-50 shadow-lg shadow-blue-600/30">
+                            <svg x-show="forgotLoading" x-cloak class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                            </svg>
+                            <span x-text="forgotLoading ? 'Enviando...' : 'Enviar Contraseña Temporal'">Enviar Contraseña Temporal</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Estado Exitoso -->
+            <!-- Estado Exitoso: Notificación amigable de envío de correo (Sin mostrar la contraseña) -->
+            <div x-show="forgotSuccess" x-cloak class="space-y-4">
+                <div class="p-4 bg-emerald-500/15 border border-emerald-500/40 rounded-2xl flex items-start gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-emerald-300">¡Correo Enviado Exitosamente!</h4>
+                        <p class="text-[11px] text-emerald-200/90 mt-1 leading-relaxed" x-text="forgotSuccessMsg"></p>
+                    </div>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/70 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-2">
+                    <p class="font-semibold text-white flex items-center gap-1.5">
+                        <span>📬</span> <span>Próximos pasos:</span>
+                    </p>
+                    <ol class="list-decimal list-inside space-y-1.5 text-slate-400 text-[11px] leading-relaxed">
+                        <li>Abra su correo institucional y localice el mensaje con asunto <strong class="text-blue-400">"Contraseña temporal sistema gestión CCTV"</strong>.</li>
+                        <li>Copie la contraseña temporal indicada en el correo e inicie sesión en este portal.</li>
+                        <li>El sistema le solicitará inmediatamente crear su nueva contraseña definitiva y personal.</li>
+                    </ol>
+                </div>
+
+                <div class="pt-2 flex justify-end">
+                    <button type="button" @click="openForgotModal = false"
+                            class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition shadow-lg shadow-blue-600/30">
+                        Entendido y Volver al Inicio
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
 
 </body>
 </html>

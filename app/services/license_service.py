@@ -32,18 +32,34 @@ def get_active_license_payload(db: Session) -> dict | None:
             
     return payload
 
-def check_license_validity(db: Session) -> tuple[bool, str]:
+from app.services.site_license_service import get_site_license_status
+
+def check_license_validity(db: Session, site_id: str | None = None) -> tuple[bool, str]:
     """
-    Performs full validity checks and returns (is_valid, reason).
+    Realiza la verificación de validez de la licencia:
+    - Si DEV_MODE está activo, bypass total automático.
+    - Si se especifica site_id, evalúa el estado del sitio (período de gracia 24h, año 1/2/3).
+    - Mantiene compatibilidad con el modelo de licencia legacy.
     """
+    if settings.DEV_MODE:
+        return True, "Modo desarrollador activo (DEV_MODE=True). Todas las restricciones están desactivadas."
+
+    if site_id:
+        status_info = get_site_license_status(db, site_id)
+        return status_info["is_allowed"], status_info["message"]
+
+    # Comprobar si existe licencia por sitio activa (cualquiera de los 4 sitios)
+    from app.models.license import SiteLicenseKey
+    active_site_lic = db.query(SiteLicenseKey).filter(SiteLicenseKey.is_activated == True).first()
+    if active_site_lic:
+        return True, "Licencia multi-sede activa y válida."
+
     payload = get_active_license_payload(db)
     if not payload:
         return False, "Licencia no encontrada, inválida o expirada."
     
     # Validate user counts
     max_users = payload.get("max_users", 0)
-    # Count active non-Admin users (or all active users).
-    # Since Superadmin is seeded, usually max_users applies to normal accounts, but let's count all active users for simplicity, or all normal users. Let's count normal active users (Supervisor, Responsable).
     active_users = db.query(User).filter(
         User.is_active == True,
         User.role != "Admin"
@@ -54,17 +70,50 @@ def check_license_validity(db: Session) -> tuple[bool, str]:
         
     return True, "Licencia activa y válida."
 
+def verify_user_limit(db: Session) -> dict:
+    """
+    Verifica si agregar o reactivar un usuario supera el límite criptográfico 'max_users'.
+    Lanza HTTPException si se supera el límite o no hay licencia activa.
+    En DEV_MODE, permite usuarios ilimitados.
+    """
+    if settings.DEV_MODE:
+        return {"client": "Modo Desarrollador", "max_users": 99999}
+
+    payload = get_active_license_payload(db)
+    if not payload:
+        # Si hay licencias de sitio activas, otorgar capacidad estándar
+        from app.models.license import SiteLicenseKey
+        if db.query(SiteLicenseKey).filter(SiteLicenseKey.is_activated == True).first():
+            return {"client": "Institucional Multi-Sede", "max_users": 100}
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="No hay una licencia activa en el sistema. Debe activar una licencia primero."
+        )
+    max_users = payload.get("max_users", 0)
+    active_users = db.query(User).filter(User.is_active == True, User.role != "Admin").count()
+    if active_users >= max_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Límite de usuarios activos de la licencia excedido ({active_users}/{max_users})."
+        )
+    return payload
+
 def verify_license_dependency(db: Session = Depends(get_db)) -> dict:
     """
     Dependency helper to raise exception if license is invalid.
+    En DEV_MODE retorna payload inmediato sin bloqueos.
     """
+    if settings.DEV_MODE:
+        return {"client": "Modo Desarrollador", "is_dev_mode": True}
+
     is_valid, reason = check_license_validity(db)
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=reason
         )
-    return get_active_license_payload(db)
+    payload = get_active_license_payload(db)
+    return payload or {"client": "Institucional Multi-Sede", "is_active": True}
 
 def activate_license(db: Session, license_key: str) -> dict:
     """

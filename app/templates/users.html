@@ -6,10 +6,30 @@
 {% block content %}
 <div class="space-y-6 max-w-7xl mx-auto" x-data="{
     openModal: false,
+    openProfileModal: {{ 'true' if request.query_params.get('edit_profile') == '1' else 'false' }},
+    openCredsModal: {{ 'true' if new_credentials else 'false' }},
     searchQuery: '',
     roleFilter: 'all',
     statusFilter: 'all',
-    showPassword: false
+    selectedCreateRole: 'Validador',
+    copiedUser: false,
+    copiedPass: false,
+    async copyAll() {
+        const text = 'SISTEMA CCTV - CREDENCIALES TEMPORALES (VIGENCIA 24 HORAS)\n' +
+                     'Funcionario: {{ new_credentials.name if new_credentials else '' }}\n' +
+                     'Documento: {{ new_credentials.doc if new_credentials else '' }}\n' +
+                     ('{{ new_credentials.badge if new_credentials and new_credentials.badge else '' }}' ? 'Número de Placa Policial: {{ new_credentials.badge if new_credentials and new_credentials.badge else '' }}\n' : '') +
+                     'Sede Territorial: {{ new_credentials.site if new_credentials else '' }}\n' +
+                     'Rol Asignado: {{ new_credentials.role if new_credentials else '' }}\n' +
+                     'Correo / Usuario de Ingreso: {{ new_credentials.user if new_credentials else '' }}\n' +
+                     'Contraseña Temporal: {{ new_credentials.pass if new_credentials else '' }}\n' +
+                     'Nota: Ingrese a la plataforma con sus credenciales y clave temporal. Antes de 24 horas deberá actualizar tanto su correo electrónico como contraseña definitiva obligatoria.';
+        const ok = await window.copyToClipboardSafe(text);
+        if (ok) {
+            this.copiedUser = true;
+            setTimeout(() => this.copiedUser = false, 3000);
+        }
+    }
 }">
 
     <!-- Alert Messages (Success / Error) -->
@@ -46,52 +66,86 @@
                     {{ users|length }} Cuentas
                 </span>
             </div>
-            <p class="text-xs text-slate-500 mt-0.5">Administra los accesos al sistema, credenciales de seguridad y asignación de roles (Supervisor u Operario).</p>
+            <p class="text-xs text-slate-500 mt-0.5">Administra los accesos institucionales basados en <strong>correo electrónico</strong> para la sede <strong>{{ current_site.full_name }}</strong>.</p>
         </div>
         
-        <button @click="openModal = true"
-                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-            </svg>
-            Crear Nueva Cuenta
-        </button>
+        {% if current_user.role == 'Admin' %}
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- ÚNICO BOTÓN PRINCIPAL PARA EDITAR DATOS DEL ADMINISTRADOR -->
+            <button @click="openProfileModal = true"
+                    class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold shadow-sm transition shrink-0">
+                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                Editar Mis Datos
+            </button>
+
+            <button @click="openModal = true; selectedCreateRole = 'Validador'"
+                    class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                </svg>
+                Crear Nueva Cuenta
+            </button>
+        </div>
+        {% endif %}
     </div>
 
-    <!-- KPI Metrics -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <!-- KPI Metrics: Administrador Principal y 3 Roles Operativos -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <!-- Card 1: Total Usuarios -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Total Usuarios</p>
-            <p class="text-2xl font-black text-slate-900 mt-1">{{ users|length }}</p>
-            <p class="text-[11px] text-slate-400 mt-0.5">Registrados en la plataforma</p>
+        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Cuentas</p>
+            <p class="text-xl sm:text-2xl font-black text-slate-900 mt-1">{{ users|length }}</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">En plataforma CCTV</p>
         </div>
 
-        <!-- Card 2: Supervisores -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Supervisores</p>
-            <p class="text-2xl font-black text-blue-600 mt-1">
-                {{ users | selectattr('role', 'equalto', 'Supervisor') | list | length }}
-            </p>
-            <p class="text-[11px] text-slate-400 mt-0.5">Gestión operativa & sedes</p>
-        </div>
-
-        <!-- Card 3: Operarios / Responsables -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Operarios</p>
-            <p class="text-2xl font-black text-emerald-600 mt-1">
-                {{ users | selectattr('role', 'in', ['Operario', 'Responsable']) | list | length }}
-            </p>
-            <p class="text-[11px] text-slate-400 mt-0.5">Reportes y mantenimiento</p>
-        </div>
-
-        <!-- Card 4: Administradores -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Administradores</p>
-            <p class="text-2xl font-black text-purple-600 mt-1">
+        <!-- Card 2: Administrador Principal -->
+        <div class="bg-white p-3.5 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/50 to-white shadow-sm">
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] text-amber-700 font-bold uppercase tracking-wider">Superadmin</p>
+                <span class="text-xs">👑</span>
+            </div>
+            <p class="text-xl sm:text-2xl font-black text-amber-700 mt-1">
                 {{ users | selectattr('role', 'equalto', 'Admin') | list | length }}
             </p>
-            <p class="text-[11px] text-slate-400 mt-0.5">Control global del sistema</p>
+            <p class="text-[10px] text-amber-600/80 mt-0.5 font-medium">Control Global Único</p>
+        </div>
+
+        <!-- Card 3: Validador -->
+        <div class="bg-white p-3.5 rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/50 to-white shadow-sm">
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] text-indigo-700 font-bold uppercase tracking-wider">Validadores</p>
+                <span class="text-xs">🔍</span>
+            </div>
+            <p class="text-xl sm:text-2xl font-black text-indigo-700 mt-1">
+                {{ users | selectattr('role', 'equalto', 'Validador') | list | length }}
+            </p>
+            <p class="text-[10px] text-indigo-600/80 mt-0.5 font-medium">Dictamen y Conformidad</p>
+        </div>
+
+        <!-- Card 4: Supervisores -->
+        <div class="bg-white p-3.5 rounded-xl border border-blue-200 shadow-sm">
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] text-blue-700 font-bold uppercase tracking-wider">Supervisores</p>
+                <span class="text-xs">🛡️</span>
+            </div>
+            <p class="text-xl sm:text-2xl font-black text-blue-600 mt-1">
+                {{ users | selectattr('role', 'equalto', 'Supervisor') | list | length }}
+            </p>
+            <p class="text-[10px] text-slate-400 mt-0.5 font-medium">Seguimiento Operativo</p>
+        </div>
+
+        <!-- Card 5: Empresa de Mantenimiento -->
+        <div class="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-sm">
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">Mantenimiento</p>
+                <span class="text-xs">👷</span>
+            </div>
+            <p class="text-xl sm:text-2xl font-black text-emerald-600 mt-1">
+                {{ users | selectattr('role', 'in', ['Empresa de Mantenimiento', 'Operario', 'Responsable']) | list | length }}
+            </p>
+            <p class="text-[10px] text-slate-400 mt-0.5 font-medium">Ejecución en Campo</p>
         </div>
     </div>
 
@@ -100,7 +154,7 @@
         
         <!-- Search Input -->
         <div class="relative flex-1">
-            <input type="text" x-model="searchQuery" placeholder="Buscar por nombre de usuario o correo electrónico..."
+            <input type="text" x-model="searchQuery" placeholder="Buscar por correo electrónico, nombre o documento..."
                    class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -111,9 +165,10 @@
         <div class="flex flex-wrap items-center gap-2">
             <select x-model="roleFilter" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todos los Roles</option>
-                <option value="Admin">Administrador</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Operario">Operario</option>
+                <option value="Admin">👑 Administrador Principal</option>
+                <option value="Validador">🔍 Validador</option>
+                <option value="Supervisor">🛡️ Supervisor</option>
+                <option value="Empresa de Mantenimiento">👷 Empresa de Mantenimiento</option>
             </select>
 
             <select x-model="statusFilter" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -130,90 +185,160 @@
             <table class="w-full text-left text-xs">
                 <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
                     <tr>
-                        <th class="px-6 py-3.5">Usuario / Credencial</th>
-                        <th class="px-6 py-3.5">Correo Electrónico</th>
+                        <th class="px-6 py-3.5">Funcionario / Nombre</th>
+                        <th class="px-6 py-3.5">Correo Electrónico (Usuario)</th>
+                        <th class="px-6 py-3.5">Documento</th>
+                        <th class="px-6 py-3.5">Sede Asignada</th>
                         <th class="px-6 py-3.5">Rol de Acceso</th>
-                        <th class="px-6 py-3.5">Estado</th>
-                        <th class="px-6 py-3.5">Fecha de Registro</th>
+                        <th class="px-6 py-3.5">Estado / Credencial</th>
+                        <th class="px-6 py-3.5">Registro</th>
                         <th class="px-6 py-3.5 text-right">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 text-slate-700">
                     {% for u in users %}
                     <tr class="hover:bg-slate-50/80 transition"
-                        x-show="(roleFilter === 'all' || '{{ u.role }}' === roleFilter || (roleFilter === 'Operario' && '{{ u.role }}' === 'Responsable')) &&
+                        x-show="(roleFilter === 'all' || '{{ u.role }}' === roleFilter || (roleFilter === 'Empresa de Mantenimiento' && ('{{ u.role }}' === 'Operario' || '{{ u.role }}' === 'Responsable'))) &&
                                 (statusFilter === 'all' || '{{ 'true' if u.is_active else 'false' }}' === statusFilter) &&
-                                ('{{ u.username|lower }}'.includes(searchQuery.toLowerCase()) || '{{ u.email|lower }}'.includes(searchQuery.toLowerCase()))">
+                                ('{{ u.email|lower }}'.includes(searchQuery.toLowerCase()) ||
+                                 '{{ u.username|lower }}'.includes(searchQuery.toLowerCase()) ||
+                                 '{{ (u.full_name or '')|lower }}'.includes(searchQuery.toLowerCase()) ||
+                                 '{{ (u.document_id or '')|lower }}'.includes(searchQuery.toLowerCase()) ||
+                                 '{{ (u.badge_number or '')|lower }}'.includes(searchQuery.toLowerCase()))">
                         
-                        <!-- Usuario y Avatar -->
+                        <!-- Funcionario -->
                         <td class="px-6 py-4">
                             <div class="flex items-center gap-3">
                                 <div class="w-9 h-9 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase border border-slate-600">
-                                    {{ u.username[:2] }}
+                                    {{ (u.full_name[:2] if u.full_name else (u.email[:2] if u.email else 'US'))|upper }}
                                 </div>
                                 <div>
                                     <p class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                                        {{ u.username }}
+                                        {{ u.full_name if u.full_name else u.username }}
                                         {% if u.id == current_user.id %}
                                         <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Tú</span>
                                         {% endif %}
                                     </p>
-                                    <span class="text-[10px] text-slate-400 font-mono">ID #{{ u.id }}</span>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        <span class="text-[11px] text-slate-400">CC: {{ u.document_id if u.document_id else '0000000000' }}</span>
+                                        {% if u.badge_number %}
+                                        <span class="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                            Placa: {{ u.badge_number }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
                         </td>
 
-                        <!-- Correo Electrónico -->
+                        <!-- Correo Electrónico (Usuario de Ingreso) -->
                         <td class="px-6 py-4">
-                            <span class="text-slate-800 font-medium">{{ u.email }}</span>
+                            <div class="text-slate-900 font-semibold flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                <span>{{ u.email }}</span>
+                            </div>
+                            <span class="text-[10px] text-slate-400">Identificador de acceso</span>
+                        </td>
+
+                        <!-- Documento de Identidad -->
+                        <td class="px-6 py-4 text-slate-700 font-mono">
+                            <div>{{ u.document_id if u.document_id else 'No registrado' }}</div>
+                            {% if u.badge_number %}
+                            <div class="text-[10px] text-indigo-600 font-mono font-semibold">Placa: #{{ u.badge_number }}</div>
+                            {% endif %}
+                        </td>
+
+                        <!-- Sede Asignada -->
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                {{ u.assigned_site if u.assigned_site else current_site.full_name }}
+                            </span>
                         </td>
 
                         <!-- Rol -->
                         <td class="px-6 py-4">
                             {% if u.role == 'Admin' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
-                                👑 Administrador
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                👑 Administrador Principal
                             </span>
+                            {% elif u.role == 'Validador' %}
+                            <div>
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    🔍 Validador (Policía)
+                                </span>
+                                {% if u.badge_number %}
+                                <div class="mt-1 flex items-center gap-1 font-mono font-bold text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 w-fit">
+                                    <span>👮 Placa:</span>
+                                    <span>#{{ u.badge_number }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
                             {% elif u.role == 'Supervisor' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                 🛡️ Supervisor
                             </span>
                             {% else %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                👷 Operario
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                👷 Empresa de Mantenimiento
                             </span>
                             {% endif %}
                         </td>
 
-                        <!-- Estado -->
+                        <!-- Estado y Credenciales -->
                         <td class="px-6 py-4">
-                            {% if u.is_active %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
-                            </span>
-                            {% else %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Inactivo
-                            </span>
-                            {% endif %}
+                            <div class="space-y-1">
+                                {% if u.is_active %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Inactivo
+                                </span>
+                                {% endif %}
+
+                                {% if u.must_change_password %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 block w-fit" title="Vigencia de 24h">
+                                    ⏳ Temporal (24h)
+                                </span>
+                                {% endif %}
+                            </div>
                         </td>
 
                         <!-- Fecha de Registro -->
-                        <td class="px-6 py-4 text-slate-500">
+                        <td class="px-6 py-4 text-slate-500 text-[11px]">
                             {{ u.created_at.strftime('%d/%m/%Y %H:%M') }}
                         </td>
 
                         <!-- Acciones -->
                         <td class="px-6 py-4 text-right">
-                            {% if u.id != current_user.id %}
-                            <form action="/users/{{ u.id }}/toggle-active" method="POST" class="inline-block">
-                                <button type="submit"
-                                        class="px-2.5 py-1 rounded-lg text-xs font-medium border transition {% if u.is_active %}border-rose-200 text-rose-600 hover:bg-rose-50{% else %}border-emerald-200 text-emerald-600 hover:bg-emerald-50{% endif %}">
-                                    {{ 'Desactivar' if u.is_active else 'Activar' }}
-                                </button>
-                            </form>
+                            {% if u.id == current_user.id %}
+                            <span class="text-slate-400 text-xs italic">Cuenta en uso</span>
+                            {% elif u.id == 1 or u.username == 'admin' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 shadow-sm" title="La cuenta del Administrador Inicial no puede ser eliminada ni desactivada.">
+                                🔒 Cuenta Principal Protegida
+                            </span>
+                            {% elif is_main_admin or current_user.role == 'Admin' %}
+                            <div class="flex items-center justify-end gap-1.5">
+                                <form action="/users/{{ u.id }}/toggle-active" method="POST" class="inline-block">
+                                    <button type="submit"
+                                            class="px-2.5 py-1 rounded-lg text-xs font-medium border transition {% if u.is_active %}border-slate-300 text-slate-600 hover:bg-slate-100{% else %}border-emerald-200 text-emerald-600 hover:bg-emerald-50{% endif %}"
+                                            title="{{ 'Suspender acceso' if u.is_active else 'Reactivar acceso' }}">
+                                        {{ 'Suspender' if u.is_active else 'Activar' }}
+                                    </button>
+                                </form>
+
+                                <form action="/users/{{ u.id }}/delete" method="POST" class="inline-block"
+                                      onsubmit="return confirm('¿Estás seguro de eliminar de forma permanente la cuenta de {{ u.email }} ({{ u.full_name or '' }})?');">
+                                    <button type="submit"
+                                            class="px-2.5 py-1 rounded-lg text-xs font-medium border border-rose-200 text-rose-600 hover:bg-rose-50 transition"
+                                            title="Eliminar usuario">
+                                        🗑️ Borrar
+                                    </button>
+                                </form>
+                            </div>
                             {% else %}
-                            <span class="text-slate-400 text-xs italic">Cuenta actual</span>
+                            <span class="text-slate-400 text-xs italic" title="Solo el Administrador puede suspender o eliminar cuentas">Solo lectura</span>
                             {% endif %}
                         </td>
 
@@ -224,7 +349,7 @@
         </div>
     </div>
 
-    <!-- MODAL: Crear Nueva Cuenta de Usuario -->
+    <!-- MODAL 1: Crear Nueva Cuenta de Usuario -->
     <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             
@@ -249,60 +374,96 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
                             </svg>
                         </div>
-                        <h3 class="text-base font-bold text-slate-900">Crear Nueva Cuenta de Usuario</h3>
+                        <h3 class="text-base font-bold text-slate-900">Crear Nueva Cuenta</h3>
                     </div>
                     <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
 
-                <form action="/users" method="POST" class="mt-4 space-y-4">
+                <form action="/users" method="POST" autocomplete="off" class="mt-4 space-y-3.5">
                     
-                    <!-- Nombre de Usuario -->
+                    <!-- 1. Nombre Completo (Solo letras) -->
                     <div>
-                        <label for="u_username" class="block text-xs font-semibold text-slate-700 mb-1">Nombre de Usuario *</label>
-                        <input type="text" name="username" id="u_username" required minlength="3" maxlength="50"
-                               placeholder="Ej. supervisor_sanagustin, operario_cctv..."
+                        <label for="u_fullname" class="block text-xs font-semibold text-slate-700 mb-1">Nombre Completo *</label>
+                        <input type="text" name="full_name" id="u_fullname" required maxlength="150"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               pattern="[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+"
+                               title="Solo se permiten letras y espacios"
+                               placeholder="Ej. Carlos Alberto Mendoza"
+                               oninput="this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')"
                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <p class="text-[10px] text-slate-400 mt-0.5">Ingresa solo letras y espacios.</p>
                     </div>
 
-                    <!-- Correo Electrónico -->
+                    <!-- 2. Documento de Identidad (Solo números) -->
                     <div>
-                        <label for="u_email" class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico *</label>
+                        <label for="u_doc" class="block text-xs font-semibold text-slate-700 mb-1">Número de Identidad (Cédula) *</label>
+                        <input type="text" name="document_id" id="u_doc" required maxlength="30"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               inputmode="numeric"
+                               pattern="[0-9]+"
+                               title="Solo se permiten números"
+                               placeholder="Ej. 1075284910"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono">
+                        <p class="text-[10px] text-blue-600 font-medium mt-0.5">ℹ️ No es necesario separar dicho número por puntos.</p>
+                    </div>
+
+                    <!-- 3. Correo Electrónico Institucional (Usuario de Ingreso) -->
+                    <div>
+                        <label for="u_email" class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico (Usuario de Acceso) *</label>
                         <input type="email" name="email" id="u_email" required maxlength="100"
-                               placeholder="usuario@seguridad-sanagustin.gov.co"
-                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               placeholder="carlos.mendoza@seguridad.gov.co"
+                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium">
+                        <p class="text-[10px] text-slate-500 mt-0.5">🌐 La plataforma verificará los registros DNS MX del dominio para validar que exista realmente.</p>
                     </div>
 
-                    <!-- Contraseña -->
+                    <!-- 4. Perfil Operativo Asignado (Exclusivamente los 3 roles operativos) -->
                     <div>
-                        <label for="u_password" class="block text-xs font-semibold text-slate-700 mb-1">Contraseña de Acceso *</label>
-                        <div class="relative">
-                            <input :type="showPassword ? 'text' : 'password'" name="password" id="u_password" required minlength="6"
-                                   placeholder="Mínimo 6 caracteres"
-                                   class="w-full pl-3 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <button type="button" @click="showPassword = !showPassword"
-                                    class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none">
-                                <svg x-show="!showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                </svg>
-                                <svg x-show="showPassword" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Selección de Rol -->
-                    <div>
-                        <label for="u_role" class="block text-xs font-semibold text-slate-700 mb-1">Selección de Rol *</label>
-                        <select name="role" id="u_role" required
+                        <label for="u_role" class="block text-xs font-semibold text-slate-700 mb-1">Perfil Operativo Asignado *</label>
+                        <select name="role" id="u_role" required x-model="selectedCreateRole" @change="selectedCreateRole = $event.target.value" autocomplete="off"
                                 class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
-                            <option value="Supervisor" selected>🛡️ Supervisor (Control territorial y programación)</option>
-                            <option value="Operario">👷 Operario (Reporte de incidentes y ejecución)</option>
-                            <option value="Admin">👑 Administrador (Acceso total al sistema)</option>
+                            <option value="Validador">🔍 1. Validador (Policía Nacional - Dictamen de conformidad)</option>
+                            <option value="Supervisor">🛡️ 2. Supervisor (Seguimiento operativo y auditoría general)</option>
+                            <option value="Empresa de Mantenimiento">👷 3. Empresa de Mantenimiento (Labores técnicas y ejecución en campo)</option>
                         </select>
+                        <p class="text-[10px] text-slate-500 mt-1">
+                            ℹ️ Como Administrador Principal, gestionas y asignas exclusivamente los tres (3) perfiles operativos del sistema.
+                        </p>
+                    </div>
+
+                    <!-- 5. Campo exclusivo para Validador: Número de Placa Policial (Solo datos numéricos) -->
+                    <div x-show="selectedCreateRole === 'Validador'" x-cloak class="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1">
+                        <label for="u_badge" class="block text-xs font-bold text-purple-900 mb-0.5">
+                            Número de Placa Policial (Agente Validador) *
+                        </label>
+                        <input type="text" name="badge_number" id="u_badge"
+                               :required="selectedCreateRole === 'Validador'"
+                               :disabled="selectedCreateRole !== 'Validador'"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               maxlength="20"
+                               inputmode="numeric"
+                               pattern="[0-9]+"
+                               title="Solo se permiten números"
+                               placeholder="Ej. 109845"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                               class="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono font-bold">
+                        <p class="text-[10px] text-purple-700 font-medium">
+                            👮 Exclusivo para agentes de policía validadores (solo se permiten datos numéricos).
+                        </p>
+                    </div>
+
+                    <!-- Generación Automática de Contraseña Temporal (24 Horas) -->
+                    <div class="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+                        <span class="text-base leading-none mt-0.5">⏳</span>
+                        <div>
+                            <p class="font-bold text-[11px] text-blue-950">Contraseña Temporal Automática (24 Horas)</p>
+                            <p class="text-[10px] text-blue-800/90 mt-0.5 leading-relaxed">
+                                El sistema generará una clave temporal segura de 24 horas. El nuevo usuario ingresará con su correo institucional y dicha clave, solicitándole inmediatamente configurar su contraseña definitiva.
+                            </p>
+                        </div>
                     </div>
 
                     <!-- Botones -->
@@ -313,7 +474,7 @@
                         </button>
                         <button type="submit"
                                 class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
-                            Crear Cuenta
+                            Generar y Crear Cuenta
                         </button>
                     </div>
                 </form>
@@ -321,6 +482,221 @@
             </div>
         </div>
     </div>
+
+    <!-- MODAL 2: Credenciales Temporales Generadas (Vigencia 24h) -->
+    {% if new_credentials %}
+    <div x-show="openCredsModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <div @click="openCredsModal = false"
+                 class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div class="inline-block align-bottom bg-white rounded-3xl px-6 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-200">
+                
+                <div class="text-center mb-4">
+                    <div class="mx-auto w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-xl mb-2.5">
+                        🎉
+                    </div>
+                    <span class="px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                        Cuenta Creada Exitosamente
+                    </span>
+                    <h3 class="text-lg font-black text-slate-900 mt-1">Credenciales Temporales Generadas</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">El usuario ingresará con su <strong>correo electrónico</strong>. Estas credenciales tienen vigencia de <strong>24 horas</strong>.</p>
+                </div>
+
+                <!-- Resumen de Datos -->
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2 text-xs mb-4">
+                    <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+                        <span class="text-slate-500">Funcionario:</span>
+                        <span class="font-bold text-slate-900">{{ new_credentials.name }}</span>
+                    </div>
+                    <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+                        <span class="text-slate-500">Documento de Identidad:</span>
+                        <span class="font-bold text-slate-900">{{ new_credentials.doc }}</span>
+                    </div>
+                    {% if new_credentials.badge %}
+                    <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+                        <span class="text-purple-700 font-semibold">Número de Placa Policial:</span>
+                        <span class="font-mono font-bold text-purple-900">#{{ new_credentials.badge }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+                        <span class="text-slate-500">Rol Asignado:</span>
+                        <span class="font-bold text-blue-600">{{ new_credentials.role }}</span>
+                    </div>
+                    <div class="flex justify-between pb-0.5">
+                        <span class="text-slate-500">Sede Territorial:</span>
+                        <span class="font-bold text-slate-900">{{ new_credentials.site }}</span>
+                    </div>
+                </div>
+
+                <!-- Credenciales Generadas con botón de copiar -->
+                <div class="bg-slate-900 rounded-2xl p-4 text-white space-y-3 mb-4 shadow-inner">
+                    
+                    <div>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">1. Correo Electrónico (Usuario de Ingreso):</span>
+                        <div class="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="font-mono text-sm font-bold text-amber-300 select-all">{{ new_credentials.user }}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">2. Contraseña Temporal Asignada:</span>
+                        <div class="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="font-mono text-sm font-bold text-emerald-400 select-all">{{ new_credentials.pass }}</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-1 flex items-center gap-1.5 text-[11px] text-amber-300/90">
+                        <span class="text-sm">⏳</span>
+                        <span>Vigencia: <strong>24 horas continuas</strong> desde su creación.</span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-2 justify-end pt-2">
+                    <button type="button" @click="copyAll()"
+                            class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                        <span x-text="copiedUser ? '✓ ¡Copiado al Portapapeles!' : '📋 Copiar Todas las Credenciales'">📋 Copiar Todas las Credenciales</span>
+                    </button>
+                    <button type="button" @click="openCredsModal = false"
+                            class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/20">
+                        Entendido y Cerrar
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- MODAL 3: Editar Mis Datos de Administrador -->
+    {% if current_user.role == 'Admin' %}
+    <div x-show="openProfileModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            
+            <!-- Backdrop -->
+            <div x-show="openProfileModal" @click="openProfileModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Panel -->
+            <div x-show="openProfileModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-3xl px-6 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full border border-slate-200">
+                
+                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-base">
+                            👑
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">Editar Mis Datos de Administrador</h3>
+                            <p class="text-[11px] text-slate-500">Actualiza tus datos personales. Tu rol permanecerá como Administrador.</p>
+                        </div>
+                    </div>
+                    <button @click="openProfileModal = false" class="text-slate-400 hover:text-slate-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <form action="/users/me/profile" method="POST" autocomplete="off" class="mt-4 space-y-3.5">
+                    
+                    <!-- 1. Nombre Completo (Solo letras) -->
+                    <div>
+                        <label for="p_fullname" class="block text-xs font-semibold text-slate-700 mb-1">Nombre Completo *</label>
+                        <input type="text" name="full_name" id="p_fullname" required maxlength="150"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               pattern="[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+"
+                               title="Solo se permiten letras y espacios"
+                               value="{{ current_user.full_name or '' }}"
+                               placeholder="Ej. Oswaldo Cerón Muñoz"
+                               oninput="this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')"
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium">
+                        <p class="text-[10px] text-slate-400 mt-0.5">Ingresa solo letras y espacios.</p>
+                    </div>
+
+                    <!-- 2. Documento de Identidad (Solo números) -->
+                    <div>
+                        <label for="p_doc" class="block text-xs font-semibold text-slate-700 mb-1">Número de Identidad (Cédula) *</label>
+                        <input type="text" name="document_id" id="p_doc" required maxlength="30"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               inputmode="numeric"
+                               pattern="[0-9]+"
+                               title="Solo se permiten números"
+                               value="{{ current_user.document_id or '' }}"
+                               placeholder="Ej. 12181240"
+                               oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none font-mono">
+                        <p class="text-[10px] text-purple-600 font-medium mt-0.5">ℹ️ No es necesario separar dicho número por puntos.</p>
+                    </div>
+
+                    <!-- 3. Correo Electrónico Institucional (Usuario de Ingreso) -->
+                    <div>
+                        <label for="p_email" class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico (Usuario de Acceso) *</label>
+                        <input type="email" name="email" id="p_email" required maxlength="100"
+                               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               value="{{ current_user.email or '' }}"
+                               placeholder="tu.correo@entidad.gov.co"
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium">
+                        <p class="text-[10px] text-slate-500 mt-0.5">🌐 El sistema consultará los registros DNS MX del dominio para validar su existencia.</p>
+                    </div>
+
+                    <!-- 4. Rol de Acceso (Fijo como Administrador) -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Rol de Acceso</label>
+                        <div class="px-3.5 py-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-bold flex items-center justify-between">
+                            <span class="flex items-center gap-1.5">👑 Administrador(a) Principal</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-md bg-purple-200/70 text-purple-800 font-bold uppercase">Rol Inmutable</span>
+                        </div>
+                    </div>
+
+                    <!-- 5. Nueva Contraseña (Opcional) -->
+                    <div class="pt-2 border-t border-slate-200">
+                        <p class="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">Cambio de Contraseña (Opcional):</p>
+                        
+                        <div class="space-y-2.5">
+                            <div>
+                                <label for="p_pass" class="block text-[11px] font-medium text-slate-600 mb-1">Nueva Contraseña</label>
+                                <input type="password" name="new_password" id="p_pass" minlength="6"
+                                       autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                       placeholder="Dejar en blanco para mantener la contraseña actual"
+                                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label for="p_confirm_pass" class="block text-[11px] font-medium text-slate-600 mb-1">Confirmar Nueva Contraseña</label>
+                                <input type="password" name="confirm_password" id="p_confirm_pass" minlength="6"
+                                       autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                       placeholder="Repite la nueva contraseña"
+                                       class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción -->
+                    <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                        <button type="button" @click="openProfileModal = false"
+                                class="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition flex items-center gap-1.5">
+                            <span>💾 Guardar Cambios</span>
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

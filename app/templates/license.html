@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Licenciamiento del Sitio - {{ current_site.name }} - CCTV{% endblock %}
+{% block page_title %}Licenciamiento de Sede{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto" x-data="{
+    formatKey(el) {
+        let val = el.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        if (val.length > 16) val = val.substring(0, 16);
+        let parts = [];
+        for (let i = 0; i < val.length; i += 4) {
+            parts.push(val.substring(i, i + 4));
+        }
+        el.value = parts.join('-');
+    }
+}">
+
+    <!-- Banner Modo Desarrollador (Bypass Total) -->
+    {% if dev_mode %}
+    <div class="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 text-amber-900 shadow-sm flex items-start sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-md">
+                🛠️
+            </span>
+            <div>
+                <h3 class="text-xs font-black uppercase tracking-wider text-amber-800">Modo Desarrollador Activo (DEV_MODE=true)</h3>
+                <p class="text-xs text-amber-700 mt-0.5">
+                    Las restricciones de licencia, temporizadores de 24 horas y bloqueos de contraseña se encuentran <strong>completamente desactivados</strong> para el flujo de programación y pruebas.
+                </p>
+            </div>
+        </div>
+        <span class="px-3 py-1 rounded-full bg-amber-200 text-amber-900 text-[11px] font-bold border border-amber-300 shrink-0">
+            Bypass Total
+        </span>
+    </div>
+    {% endif %}
+
+    <!-- Alertas de Éxito / Error -->
+    {% if msg %}
+    <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2.5">
+            <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span class="font-semibold">{{ msg }}</span>
+        </div>
+        <button type="button" @click="$el.parentElement.remove()" class="text-emerald-500 hover:text-emerald-700 font-bold px-2">✖</button>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-2.5">
+            <svg class="w-5 h-5 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <span class="font-semibold">{{ error }}</span>
+        </div>
+        <button type="button" @click="$el.parentElement.remove()" class="text-rose-500 hover:text-rose-700 font-bold px-2">✖</button>
+    </div>
+    {% endif %}
+
+    <!-- Header Principal Exclusivo de la Sede -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-2xl shadow-sm shrink-0">
+                {% if current_site.id == 'san-agustin' %}🏛️{% elif current_site.id == 'san-jose-guaviare' %}🏢{% elif current_site.id == 'el-retorno' %}🌳{% else %}🚤{% endif %}
+            </div>
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <h1 class="text-xl font-bold text-slate-900">Licenciamiento de Sede: {{ current_site.name }}</h1>
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                        {{ current_site.region or 'Territorial' }}
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    Control de período de gracia (24 horas), vigencia anual y activación de servicio para {{ current_site.full_name }}.
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 self-start sm:self-auto">
+            <span class="text-xs font-black text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                Sede Activa: {{ current_site.name }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Estado Actual y Tiempos de Esta Sede -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
+        
+        <!-- Hero del Estado -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 rounded-2xl {{ 'bg-emerald-50 border border-emerald-200' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-amber-50 border border-amber-200' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-50 border border-rose-200') }}">
+            <div class="flex items-start gap-4">
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm {{ 'bg-emerald-500 text-white' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-amber-500 text-white' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-500 text-white') }}">
+                    {% if dev_mode or 'ACTIVE' in site_status.status %}
+                    ✓
+                    {% elif site_status.status == 'GRACE_PERIOD' %}
+                    ⏳
+                    {% else %}
+                    🔒
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-base font-black text-slate-900">
+                            Estado Operativo de {{ current_site.name }}
+                        </h2>
+                        {% if dev_mode %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900">Modo Desarrollo</span>
+                        {% elif 'ACTIVE' in site_status.status %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900">100% Operativo</span>
+                        {% elif site_status.status == 'GRACE_PERIOD' %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900">Período de Gracia (24h)</span>
+                        {% else %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-200 text-rose-900">Bloqueado por Licencia</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                        {{ site_status.message }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Métricas Clave de Tiempo de la Sede -->
+            <div class="flex items-center gap-4 border-t lg:border-t-0 lg:border-l border-slate-200/80 pt-4 lg:pt-0 lg:pl-6 shrink-0">
+                {% if site_status.status == 'GRACE_PERIOD' and not dev_mode %}
+                <div>
+                    <p class="text-[11px] font-bold uppercase text-slate-400">Horas de Gracia Restantes</p>
+                    <p class="text-2xl font-black text-amber-600 mt-0.5">{{ site_status.hours_remaining_grace }}h</p>
+                    <p class="text-[10px] text-slate-500">De las 24 horas iniciales</p>
+                </div>
+                {% elif 'ACTIVE' in site_status.status and not dev_mode %}
+                <div>
+                    <p class="text-[11px] font-bold uppercase text-slate-400">Vigencia Restante</p>
+                    <p class="text-2xl font-black text-emerald-600 mt-0.5">{{ site_status.days_remaining_active }} Días</p>
+                    <p class="text-[10px] text-slate-500">Servicio activo en {{ current_site.name }}</p>
+                </div>
+                {% elif dev_mode %}
+                <div>
+                    <p class="text-[11px] font-bold uppercase text-slate-400">Estado de Pruebas</p>
+                    <p class="text-2xl font-black text-amber-600 mt-0.5">Ilimitado</p>
+                    <p class="text-[10px] text-slate-500">Bypass desarrollador activo</p>
+                </div>
+                {% else %}
+                <div>
+                    <p class="text-[11px] font-bold uppercase text-slate-400">Contraseña Requerida</p>
+                    <p class="text-lg font-black text-rose-600 mt-0.5">Año {{ site_status.required_year or 1 }}</p>
+                    <p class="text-[10px] text-slate-500">Operaciones bloqueadas</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Roadmap de Vigencia de los 3 Años de Esta Sede -->
+        <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+                Ciclo Anual de Licenciamiento (3 Años de Cobertura para {{ current_site.name }})
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {% for y_info in site_status.years_status %}
+                <div class="p-4 rounded-2xl border {{ 'bg-emerald-50/50 border-emerald-300' if y_info.is_activated else 'bg-slate-50 border-slate-200' }} flex flex-col justify-between gap-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-black text-slate-900">Año {{ y_info.year }}</span>
+                        {% if y_info.is_activated %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Activado ✓
+                        </span>
+                        {% elif site_status.required_year == y_info.year %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            Requerido Ahora
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
+                            En Espera
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="text-[11px] text-slate-600 space-y-1">
+                        <p><strong>Duración:</strong> 365 días calendario</p>
+                        {% if y_info.is_activated and y_info.expires_at %}
+                        <p><strong>Vence:</strong> {{ y_info.expires_at.strftime('%d/%m/%Y') }}</p>
+                        <p class="font-mono text-[10px] text-slate-400">Verificación: {{ y_info.mask }}</p>
+                        {% else %}
+                        <p class="text-slate-400">Pendiente de activación</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Formulario de Activación de Contraseña de 16 Dígitos -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="max-w-2xl">
+            <div class="flex items-center gap-2.5 mb-1">
+                <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                    🔑
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900">
+                        Ingresar Contraseña de Licencia para {{ current_site.name }}
+                    </h3>
+                    <p class="text-xs text-slate-500">
+                        Digite la contraseña alfanumérica de 16 dígitos suministrada por el desarrollador para habilitar o renovar este sitio.
+                    </p>
+                </div>
+            </div>
+
+            <form action="/license/activate" method="POST" class="space-y-4 mt-5">
+                <div>
+                    <label for="password_key" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Contraseña de Activación de 16 Dígitos (Año {{ site_status.required_year or site_status.current_year }}) *
+                    </label>
+                    <input type="text"
+                           id="password_key"
+                           name="password_key"
+                           required
+                           autocomplete="off"
+                           maxlength="19"
+                           @input="formatKey($el)"
+                           placeholder="EJEMPLO: K9X2-M7PQ-4W8T-H2N6"
+                           class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold uppercase tracking-widest text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                    <p class="text-[11px] text-slate-400 mt-1">
+                        Puede ingresar la clave continua de 16 caracteres o separada por guiones. El sistema la normaliza automáticamente.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-3 pt-1">
+                    <button type="submit"
+                            class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Validar y Activar {{ current_site.name }}
+                    </button>
+                    <span class="text-xs text-slate-500">
+                        Aplica para el <strong>Año {{ site_status.required_year or site_status.current_year }}</strong>
+                    </span>
+                </div>
+            </form>
+
+            <!-- Nota de Seguridad y Anti-Fuerza Bruta -->
+            <div class="mt-5 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-500 space-y-1">
+                <p class="font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>🛡️</span> Medidas de Seguridad Activas:
+                </p>
+                <p>
+                    • Máximo 5 intentos fallidos consecutivos antes de activar una suspensión temporal de 15 minutos.<br/>
+                    • Cada intento de activación es auditado inmutablemente con usuario, fecha y dirección IP.<br/>
+                    • Las credenciales maestras son confidenciales y custodiadas exclusivamente por el desarrollador principal.
+                </p>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

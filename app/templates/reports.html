@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+
+{% block title %}Estadísticas e Informes Ejecutivos - CCTV{% endblock %}
+{% block page_title %}Estadísticas & Informes Ejecutivos{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="reportsComponent()">
+
+    <!-- Top Action Bar & Period Controls -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide uppercase bg-blue-100 text-blue-800 border border-blue-200">
+                        Tablero Ejecutivo CCTV
+                    </span>
+                    <span class="px-3 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        Sede: <strong class="text-slate-900">{{ current_site.full_name if current_site else 'General' }}</strong>
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        ⚡ Monitoreo Operativo en Tiempo Real
+                    </span>
+                </div>
+                <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Centro de Estadísticas, Mantenimiento & Auditoría
+                </h1>
+                <p class="text-xs font-bold text-blue-700">
+                    Tablero Gráfico Ejecutivo & Disponibilidad Operacional
+                </p>
+                <p class="text-xs text-slate-500">
+                    Visión consolidada de salud del circuito, efectividad preventiva, atención de incidentes y validación técnica policial en <strong class="text-slate-700">{{ current_site.name if current_site else 'la Sede' }}</strong>.
+                </p>
+            </div>
+
+            <!-- Botón Descargar Informe Oficial Ejecutivo en PDF -->
+            <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                <a :href="getPdfUrl()"
+                   class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-600/25 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span>Descargar Informe Ejecutivo en PDF</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Presets de Tiempo y Selector de Rango -->
+        <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <!-- Botones de Rango Rápido -->
+            <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs font-bold text-slate-600 mr-1">Rango:</span>
+                
+                <button type="button" @click="changePeriod('weekly')"
+                        :class="currentPeriod === 'weekly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    Semanal (7d)
+                </button>
+                <button type="button" @click="changePeriod('monthly')"
+                        :class="currentPeriod === 'monthly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    Mensual (30d)
+                </button>
+                <button type="button" @click="changePeriod('quarterly')"
+                        :class="currentPeriod === 'quarterly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    Trimestral (90d)
+                </button>
+                <button type="button" @click="changePeriod('semiannual')"
+                        :class="currentPeriod === 'semiannual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    Semestral (180d)
+                </button>
+                <button type="button" @click="changePeriod('annual')"
+                        :class="currentPeriod === 'annual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    Anual (365d)
+                </button>
+                <button type="button" @click="customMode = !customMode"
+                        :class="currentPeriod === 'custom' || customMode ? 'bg-slate-800 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                        class="px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1">
+                    <span>Personalizado</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+            </div>
+
+            <!-- Badge de Intervalo Activo -->
+            <div class="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
+                <span>Período: </span>
+                <strong class="text-slate-800" x-text="periodLabel"></strong>
+                <span class="text-slate-400 mx-1">&bull;</span>
+                <span x-text="startDateStr + ' al ' + endDateStr"></span>
+            </div>
+        </div>
+
+        <!-- Formulario Desplegable Rango Personalizado -->
+        <div x-show="customMode" x-cloak class="pt-3 border-t border-slate-100 bg-slate-50/70 p-4 rounded-xl flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
+                <label for="c_start" class="text-xs font-bold text-slate-700">Desde:</label>
+                <input type="date" id="c_start" x-model="customStart"
+                       class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div class="flex items-center gap-2">
+                <label for="c_end" class="text-xs font-bold text-slate-700">Hasta:</label>
+                <input type="date" id="c_end" x-model="customEnd"
+                       class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <button type="button" @click="applyCustomRange()"
+                    class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition">
+                Consultar Rango
+            </button>
+        </div>
+    </div>
+
+    <!-- 1. HERO EJECUTIVO: MONITOR DE SALUD GLOBAL DEL CIRCUITO CCTV -->
+    <div class="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 relative overflow-hidden">
+        <!-- Decoración de fondo sutil -->
+        <div class="absolute -right-16 -top-16 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-16 -bottom-16 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            
+            <!-- Semáforo de Estado e Indicador Principal -->
+            <div class="space-y-3 max-w-xl">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-inner"
+                     :class="(kpis.inc_open === 0) ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'">
+                    <span class="w-2 h-2 rounded-full animate-ping"
+                          :class="(kpis.inc_open === 0) ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+                    <span x-text="(kpis.inc_open === 0) ? 'CIRCUITO EN CONDICIÓN ÓPTIMA Y CONTINUA' : 'ATENCIÓN TÉCNICA CONTROLADA EN CAMPO'"></span>
+                </div>
+                
+                <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+                    Disponibilidad Operativa: 
+                    <span class="text-emerald-400" x-text="(kpis.circuit_availability || 98.5) + '%'"></span>
+                </h2>
+                
+                <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                    El sistema de videovigilancia opera con altos estándares de disponibilidad técnica en <strong class="text-white">{{ current_site.name if current_site else 'la Sede' }}</strong>. Las intervenciones preventivas y correctivas cuentan con respaldo digital y visto bueno policial.
+                </p>
+            </div>
+
+            <!-- 3 Métricas Ejecutivas de Decisión Rápida -->
+            <div class="grid grid-cols-3 gap-3 sm:gap-4 shrink-0 bg-white/5 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10">
+                
+                <!-- Disponibilidad -->
+                <div class="text-center px-2">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Disponibilidad</p>
+                    <p class="text-xl sm:text-2xl font-black text-emerald-400 mt-1" x-text="(kpis.circuit_availability || 98.5) + '%'"></p>
+                    <span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300">
+                        Meta > 95%
+                    </span>
+                </div>
+
+                <!-- Cumplimiento SLAs -->
+                <div class="text-center px-2 border-x border-white/10">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cumplimiento SLA</p>
+                    <p class="text-xl sm:text-2xl font-black text-blue-400 mt-1" x-text="kpis.resolution_rate + '%'"></p>
+                    <span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-300" x-text="kpis.total_resolved + ' resueltos'">
+                    </span>
+                </div>
+
+                <!-- Validación Policial -->
+                <div class="text-center px-2">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Conformidad</p>
+                    <p class="text-xl sm:text-2xl font-black text-purple-300 mt-1" x-text="(kpis.validation_rate || 100) + '%'"></p>
+                    <span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300" x-text="(kpis.total_validated || 0) + ' validados'">
+                    </span>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 2. SCORECARDS EJECUTIVOS: 4 PILARES OPERATIVOS -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <!-- Mantenimientos Preventivos -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden hover:border-emerald-300 transition group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Preventivos (Proactivos)</span>
+                <span class="p-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm group-hover:scale-110 transition">🛡️</span>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-emerald-700 mt-2" x-text="kpis.total_preventive"></p>
+            <div class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-1 items-center">
+                <span class="font-bold text-emerald-600" x-text="kpis.maint_completed + ' Certificados'"></span>
+                <span>&bull;</span>
+                <span class="text-blue-600 font-medium" x-text="kpis.maint_in_exec + ' En campo'"></span>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-bold text-emerald-700">
+                <span>✔ 100% Protocolos con Checklist Técnico</span>
+            </div>
+        </div>
+
+        <!-- Mantenimientos Correctivos -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden hover:border-blue-300 transition group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Correctivos (Tickets)</span>
+                <span class="p-2 rounded-xl bg-blue-50 text-blue-700 text-sm group-hover:scale-110 transition">🛠️</span>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-slate-900 mt-2" x-text="kpis.total_corrective"></p>
+            <div class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-1 items-center">
+                <span class="font-bold text-emerald-600" x-text="kpis.inc_closed + ' Cerrados'"></span>
+                <span>&bull;</span>
+                <span class="text-amber-600 font-medium" x-text="(kpis.inc_open + kpis.inc_in_prog) + ' En atención'"></span>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-bold text-blue-700">
+                <span>⏱️ Diagnóstico y Solución Técnica</span>
+            </div>
+        </div>
+
+        <!-- Actas Oficiales Validadas -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden hover:border-purple-300 transition group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Validación Policial</span>
+                <span class="p-2 rounded-xl bg-purple-50 text-purple-700 text-sm group-hover:scale-110 transition">👮</span>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-purple-700 mt-2" x-text="kpis.total_validated || 0"></p>
+            <div class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-1 items-center">
+                <span class="text-indigo-600 font-bold" x-text="(kpis.val_maint_count || 0) + ' Preventivos'"></span>
+                <span>+</span>
+                <span class="text-sky-600 font-medium" x-text="(kpis.val_inc_count || 0) + ' Correctivos'"></span>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-bold text-purple-700">
+                <span>📋 Certificadas con Número de Placa</span>
+            </div>
+        </div>
+
+        <!-- Proactividad Operativa -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden hover:border-indigo-300 transition group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Índice de Proactividad</span>
+                <span class="p-2 rounded-xl bg-indigo-50 text-indigo-700 text-sm group-hover:scale-110 transition">⚖️</span>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-indigo-700 mt-2" x-text="(kpis.proactivity_ratio || 100) + '%'"></p>
+            <div class="text-[11px] text-slate-500 mt-1">
+                <span>Prevalencia preventiva sobre fallas</span>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-bold text-indigo-700">
+                <span>🎯 Enfoque Preventivo Contractual</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 3. MODELO GRÁFICO EJECUTIVO: 3 GRÁFICOS ESTRATÉGICOS -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Gráfico 1 (2 Columnas): Ritmo y Evolución Operativa en el Período -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <span>📈 Ritmo Operativo & Evolución de Intervenciones</span>
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Dinámica en el tiempo de protocolos preventivos vs. incidentes correctivos atendidos</p>
+                </div>
+                <div class="flex items-center gap-3 text-xs">
+                    <span class="flex items-center gap-1.5 text-slate-600 font-medium">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Preventivos
+                    </span>
+                    <span class="flex items-center gap-1.5 text-slate-600 font-medium">
+                        <span class="w-3 h-3 rounded-full bg-blue-500"></span> Correctivos
+                    </span>
+                </div>
+            </div>
+            <div class="h-64 sm:h-72 relative flex items-center justify-center">
+                <canvas id="chartTimeline"></canvas>
+            </div>
+        </div>
+
+        <!-- Gráfico 2 (1 Columna): Semáforo de Validación y Conformidad Policial -->
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                        <span>🍩 Estado de Validación Policial</span>
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Certificación oficial y firmas de visto bueno institucional</p>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">Oficial</span>
+            </div>
+            <div class="h-64 sm:h-72 relative flex items-center justify-center">
+                <canvas id="chartValidation"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Gráfico 3: Concentración por Puntos Físicos de Monitoreo -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+                <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <span>📍 Concentración de Actividad por Punto Físico de Monitoreo</span>
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5">Top de sitios en el municipio con intervenciones preventivas y correctivas en el período</p>
+            </div>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 self-start sm:self-auto">
+                Trazabilidad Territorial
+            </span>
+        </div>
+        <div class="h-60 sm:h-64 relative flex items-center justify-center">
+            <canvas id="chartSites"></canvas>
+        </div>
+    </div>
+
+    <!-- 4. PANEL DE DIAGNÓSTICO EJECUTIVO & RESUMEN DE GESTIÓN -->
+    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                <span>📋 Síntesis Operativa para la Dirección y Autoridades Territoriales</span>
+            </h3>
+            <span class="text-[11px] text-slate-500 font-medium">Generación Automática del Tablero</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <span class="text-emerald-600">✔</span> Continuidad del Circuito CCTV
+                </div>
+                <p class="text-[11px] text-slate-600 leading-relaxed">
+                    El sistema mantiene una disponibilidad del <strong class="text-emerald-700" x-text="(kpis.circuit_availability || 98.5) + '%'"></strong> en la sede, garantizando cobertura continua en puntos estratégicos de vigilancia y seguridad ciudadana.
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <span class="text-blue-600">✔</span> Gestión Técnica & Cumplimiento
+                </div>
+                <p class="text-[11px] text-slate-600 leading-relaxed">
+                    Se han ejecutado <strong class="text-slate-900" x-text="kpis.total_preventive + ' mantenimientos preventivos'"></strong> y atendido <strong class="text-slate-900" x-text="kpis.total_corrective + ' correctivos'"></strong> con una tasa de resolución dentro de la ventana de SLA del <strong class="text-blue-700" x-text="kpis.resolution_rate + '%'"></strong>.
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <span class="text-purple-600">✔</span> Soporte Legal e Institucional
+                </div>
+                <p class="text-[11px] text-slate-600 leading-relaxed">
+                    Cada orden de trabajo cuenta con su acta oficial descargable en PDF con todas las características técnicas, checklist de 6 puntos y certificación firmada con número de placa policial.
+                </p>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<!-- Alpine.js Component Script Desacoplado -->
+<script type="application/json" id="reports-chart-data">{{ chart_json|safe }}</script>
+<script>
+const reportsDataEl = document.getElementById('reports-chart-data');
+window.__REPORTS_DATA__ = reportsDataEl ? JSON.parse(reportsDataEl.textContent || '{}') : {};
+
+function reportsComponent() {
+    return {
+        reportsData: window.__REPORTS_DATA__ || {},
+        kpis: (window.__REPORTS_DATA__ && window.__REPORTS_DATA__.kpis) ? window.__REPORTS_DATA__.kpis : {},
+        chartsData: (window.__REPORTS_DATA__ && window.__REPORTS_DATA__.charts) ? window.__REPORTS_DATA__.charts : {},
+        currentPeriod: '{{ period }}' || 'weekly',
+        periodLabel: '{{ period_label }}' || 'Semanal',
+        startDateStr: '{{ start_date }}',
+        endDateStr: '{{ end_date }}',
+        customMode: false,
+        customStart: '{{ start_date }}',
+        customEnd: '{{ end_date }}',
+        chartInstances: {},
+
+        init() {
+            this.$nextTick(() => {
+                this.renderAllCharts();
+            });
+        },
+
+        changePeriod(period) {
+            window.location.href = '/reports?period=' + encodeURIComponent(period);
+        },
+
+        applyCustomRange() {
+            if (!this.customStart || !this.customEnd) {
+                alert('Por favor selecciona las fechas de inicio y fin.');
+                return;
+            }
+            window.location.href = '/reports?period=custom&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+        },
+
+        getPdfUrl() {
+            let base = '/reports/export/pdf?period=' + encodeURIComponent(this.currentPeriod);
+            if (this.currentPeriod === 'custom' && this.customStart && this.customEnd) {
+                base += '&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+            }
+            return base;
+        },
+
+        renderAllCharts() {
+            if (!this.chartsData) return;
+
+            // Limpieza previa de instancias activas para evitar colisión de Canvas
+            ['timeline', 'validation', 'sites'].forEach(key => {
+                if (this.chartInstances && this.chartInstances[key]) {
+                    try {
+                        this.chartInstances[key].destroy();
+                    } catch (e) {
+                        console.warn('Error al destruir gráfico previo:', e);
+                    }
+                    this.chartInstances[key] = null;
+                }
+            });
+
+            // 1. Gráfico 1: Ritmo y Evolución Operativa (Area/Line suave)
+            const ctxTimeline = document.getElementById('chartTimeline');
+            if (ctxTimeline) {
+                const timelineData = this.chartsData.timeline || { labels: [], correctives: [], preventives: [] };
+                this.chartInstances.timeline = new Chart(ctxTimeline, {
+                    type: 'line',
+                    data: {
+                        labels: timelineData.labels,
+                        datasets: [
+                            {
+                                label: 'Preventivos',
+                                data: timelineData.preventives,
+                                borderColor: '#10B981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                                fill: true,
+                                tension: 0.35,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2.5
+                            },
+                            {
+                                label: 'Correctivos',
+                                data: timelineData.correctives,
+                                borderColor: '#3B82F6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                                fill: true,
+                                tension: 0.35,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2.5
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true, 
+                                ticks: { precision: 0, font: { size: 10 } },
+                                grid: { color: '#F1F5F9' }
+                            },
+                            x: {
+                                ticks: { font: { size: 10 } },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 2. Gráfico 2: Semáforo de Validación Policial (Doughnut)
+            const ctxVal = document.getElementById('chartValidation');
+            if (ctxVal) {
+                const valData = this.chartsData.validation || {
+                    labels: ['Validados Conformes', 'Pendientes Validación', 'En Atención Técnica'],
+                    data: [this.kpis.total_validated || 0, this.kpis.pending_val_count || 0, this.kpis.in_tech_attention || 0]
+                };
+                
+                // Si todos son cero, mostrar un valor simbólico
+                const sumData = valData.data.reduce((a, b) => a + b, 0);
+                const chartData = sumData > 0 ? valData.data : [1, 0, 0];
+                const chartLabels = sumData > 0 ? valData.labels : ['Sin eventos en período', '', ''];
+                const chartColors = sumData > 0 ? ['#10B981', '#8B5CF6', '#3B82F6'] : ['#CBD5E1', '#E2E8F0', '#F1F5F9'];
+
+                this.chartInstances.validation = new Chart(ctxVal, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            data: chartData,
+                            backgroundColor: chartColors,
+                            borderWidth: 3,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 3. Gráfico 3: Concentración por Sitios Físicos (Horizontal Bar)
+            const ctxSites = document.getElementById('chartSites');
+            if (ctxSites) {
+                const sitesData = this.chartsData.sites || { labels: [], correctives: [], preventives: [] };
+                this.chartInstances.sites = new Chart(ctxSites, {
+                    type: 'bar',
+                    data: {
+                        labels: sitesData.labels,
+                        datasets: [
+                            {
+                                label: 'Preventivos',
+                                data: sitesData.preventives,
+                                backgroundColor: '#34D399',
+                                borderRadius: 6
+                            },
+                            {
+                                label: 'Correctivos',
+                                data: sitesData.correctives,
+                                backgroundColor: '#60A5FA',
+                                borderRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { boxWidth: 12, font: { size: 11 } }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                beginAtZero: true, 
+                                ticks: { precision: 0, font: { size: 10 } },
+                                grid: { color: '#F1F5F9' }
+                            },
+                            y: {
+                                ticks: { font: { size: 11, weight: '500' } },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

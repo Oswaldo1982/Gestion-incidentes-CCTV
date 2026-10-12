@@ -1,23 +1,39 @@
-import os
-from pydantic_settings import BaseSettings
+from typing import Optional
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Carga de variables de entorno desde el archivo .env si existe
+load_dotenv()
 
 class Settings(BaseSettings):
     # Modo Demo / Sandbox (Volátil en Memoria)
-    DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() in ("true", "1", "t", "yes", "demo")
-    DEMO_DATABASE_URL: str = os.getenv("DEMO_DATABASE_URL", "sqlite:///:memory:")
+    DEMO_MODE: bool = False
+    DEMO_DATABASE_URL: str = "sqlite:///:memory:"
+
+    # Modo Desarrollador (Bypass Total de Restricciones y Licencias para Desarrollo/Pruebas)
+    DEV_MODE: bool = False
 
     # Base de Datos de Producción / Desarrollo Estándar
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sqlite.db")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key-change-it-in-production-12345")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    DATABASE_URL: str = "sqlite:///./sqlite.db"
+    SECRET_KEY: str = "cctv-secret-key-production-2026"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
     # Licenciamiento
-    LICENSE_SECRET_KEY: str = os.getenv("LICENSE_SECRET_KEY", "license-hmac-secret-key-987654321")
+    LICENSE_SECRET_KEY: str = "license-hmac-secret-key-987654321"
     
     # Credenciales Administrador Inicial
-    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
-    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@example.com")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_EMAIL: str = "admin@example.com"
+    ADMIN_PASSWORD: str = "admin123"
+
+    # Configuración de Correo Electrónico (SMTP)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "notificaciones@cctv-seguridad.gov.co"
+    SMTP_FROM_NAME: str = "Sistema CCTV Institucional"
+    SMTP_USE_TLS: bool = True
 
     @property
     def effective_database_url(self) -> str:
@@ -30,8 +46,11 @@ class Settings(BaseSettings):
             return self.DEMO_DATABASE_URL
         return self.DATABASE_URL
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 settings = Settings()
+

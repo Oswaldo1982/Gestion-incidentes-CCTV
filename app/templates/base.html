@@ -2,7 +2,9 @@
 <html lang="es" class="h-full bg-gray-100">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="color-scheme" content="light dark" />
     <title>{% block title %}CCTV Incidentes{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -18,12 +20,111 @@
     </script>
     <style>
         [x-cloak] { display: none !important; }
+
+        /* Escala y densidad óptima para monitoreo de escritorio y prevención de Font Boosting */
+        html {
+            font-size: 14.5px;
+            -webkit-text-size-adjust: 100%;
+            -moz-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+        @media (min-width: 1536px) {
+            html {
+                font-size: 15px;
+            }
+        }
+        @media (min-width: 1920px) {
+            html {
+                font-size: 16px;
+            }
+        }
+
+        /* Prevención del auto-zoom solo en pantallas táctiles móviles reales */
+        @media screen and (max-width: 768px) and (hover: none) and (pointer: coarse) {
+            input, select, textarea {
+                font-size: 16px !important;
+            }
+        }
+
+        /* Viewport dinámico para iOS Safari y Android Chrome */
+        html, body {
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Soporte para Safe Areas en iPhone (Notch / Dynamic Island) */
+        .safe-pb { padding-bottom: env(safe-area-inset-bottom, 16px); }
+        .safe-pt { padding-top: env(safe-area-inset-top, 16px); }
+
+        /* Scrollbars elegantes y homogéneas (Firefox + WebKit/Blink) */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #475569 #0f172a;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Prefijo explícito de desenfoque de fondo para Safari <= 15.6 */
+        .backdrop-blur-xl, .backdrop-blur-lg, .backdrop-blur-sm, .backdrop-blur-md {
+            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(16px);
+        }
     </style>
+
+    <!-- Helper Universal de Portapapeles (Compatible con HTTP, HTTPS, iOS Safari y WebViews) -->
+    <script>
+        window.copyToClipboardSafe = async function(text) {
+            if (!text || text === 'NO APLICA') return false;
+
+            // 1. API Moderna si estamos en HTTPS / localhost y está disponible
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (err) {
+                    console.warn('Clipboard API rechazó la solicitud, usando fallback execCommand:', err);
+                }
+            }
+
+            // 2. Fallback de Textarea para HTTP local e iOS/Safari con restricciones
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                textArea.setAttribute('readonly', '');
+                document.body.appendChild(textArea);
+                textArea.select();
+                textArea.setSelectionRange(0, 99999);
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                return successful;
+            } catch (err) {
+                console.error('Error al copiar al portapapeles:', err);
+                return false;
+            }
+        };
+    </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="h-full font-sans">
 
-{% if current_user %}
+{% if current_user and not current_user.must_change_password %}
 <!-- ───── SIDEBAR + LAYOUT ───── -->
 <div class="flex h-full" x-data="{ sidebarOpen: false }">
 
@@ -68,14 +169,44 @@
             </a>
 
             <a href="/maintenance"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'maintenance' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                Mantenimientos
+               class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'maintenance' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span>Mantenimientos</span>
+                </div>
             </a>
+
+            {% if current_user.role in ['Validador', 'Admin', 'Supervisor'] %}
+            <a href="/validation"
+               class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'validation' %}bg-purple-700 text-white shadow-md shadow-purple-900/30{% else %}text-purple-200 hover:bg-purple-900/40 hover:text-white{% endif %} transition border border-purple-500/20">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                    <span>Validación Policial</span>
+                </div>
+                {% if pending_validation_count and pending_validation_count > 0 %}
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 animate-pulse" title="Órdenes pendientes de dictamen policial">
+                    {{ pending_validation_count }}
+                </span>
+                {% endif %}
+            </a>
+            {% else %}
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
+                 title="Acceso restringido: Exclusivo para Validador Policial, Administrador y Supervisión">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <span>Validación Policial</span>
+                </div>
+                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Sin Acceso</span>
+            </div>
+            {% endif %}
 
             <a href="/devices"
                class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'devices' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
@@ -85,7 +216,15 @@
                 Equipos CCTV
             </a>
 
-            {% if current_user.role in ['Admin', 'Supervisor'] %}
+            <a href="/reports"
+               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'reports' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+                Estadísticas e Informes
+            </a>
+
+            {% if current_user.role == 'Admin' %}
             <a href="/users"
                class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'users' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,6 +233,18 @@
                 </svg>
                 Usuarios
             </a>
+            {% else %}
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
+                 title="Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de usuarios">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                    <span>Usuarios</span>
+                </div>
+                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Solo Admin</span>
+            </div>
             {% endif %}
 
             {% if current_user.role == 'Admin' %}
@@ -105,6 +256,18 @@
                 </svg>
                 Licencia
             </a>
+            {% else %}
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
+                 title="Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de licencias">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                    <span>Licencia</span>
+                </div>
+                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Solo Admin</span>
+            </div>
             {% endif %}
         </nav>
 
@@ -112,10 +275,10 @@
         <div class="px-4 py-4 border-t border-gray-700">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm font-bold">
-                    {{ current_user.username[0] | upper }}
+                    {{ (current_user.full_name[0] if current_user.full_name else current_user.username[0]) | upper }}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium truncate">{{ current_user.username }}</p>
+                    <p class="text-sm font-medium truncate">{{ current_user.full_name if current_user.full_name else current_user.username }}</p>
                     <p class="text-xs text-gray-400">{{ current_user.role }}</p>
                 </div>
                 <a href="/logout" title="Cerrar sesión"
@@ -152,12 +315,16 @@
                             class="px-2.5 py-1 rounded-md text-[11px] font-bold transition {% if current_user.role == 'Admin' %}bg-white text-slate-900 shadow-sm{% else %}bg-black/20 text-amber-100 hover:bg-black/40{% endif %}">
                         👑 Admin
                     </button>
+                    <button type="submit" name="demo_role" value="validador"
+                            class="px-2.5 py-1 rounded-md text-[11px] font-bold transition {% if current_user.role == 'Validador' %}bg-white text-slate-900 shadow-sm{% else %}bg-black/20 text-amber-100 hover:bg-black/40{% endif %}">
+                        🔍 Validador
+                    </button>
                     <button type="submit" name="demo_role" value="supervisor"
                             class="px-2.5 py-1 rounded-md text-[11px] font-bold transition {% if current_user.role == 'Supervisor' %}bg-white text-slate-900 shadow-sm{% else %}bg-black/20 text-amber-100 hover:bg-black/40{% endif %}">
                         🛡️ Supervisor
                     </button>
                     <button type="submit" name="demo_role" value="mantenimiento"
-                            class="px-2.5 py-1 rounded-md text-[11px] font-bold transition {% if current_user.role == 'Operario' %}bg-white text-slate-900 shadow-sm{% else %}bg-black/20 text-amber-100 hover:bg-black/40{% endif %}">
+                            class="px-2.5 py-1 rounded-md text-[11px] font-bold transition {% if current_user.role in ['Empresa de Mantenimiento', 'Operario'] %}bg-white text-slate-900 shadow-sm{% else %}bg-black/20 text-amber-100 hover:bg-black/40{% endif %}">
                         👷 Mantenimiento
                     </button>
                 </form>
@@ -183,12 +350,12 @@
             </div>
 
             <!-- Right Controls: Fixed Authenticated Site Badge (No Switcher) -->
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2.5">
                 <div class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/90 text-xs font-semibold text-slate-800 shadow-sm">
-                    <span class="text-base">{{ current_site.icon if current_site else '🏛️' }}</span>
+                    <span class="text-base">{{ current_site.icon if current_site else '📍' }}</span>
                     <div class="text-left">
                         <span class="text-[9px] text-slate-500 uppercase tracking-wider block leading-none font-bold">Sede Activa</span>
-                        <span class="text-xs font-bold text-slate-900 leading-tight">{{ current_site.full_name if current_site else 'San Agustín (Huila)' }}</span>
+                        <span class="text-xs font-bold text-slate-900 leading-tight">{{ current_site.full_name if current_site else 'Sede Territorial' }}</span>
                     </div>
                 </div>
             </div>

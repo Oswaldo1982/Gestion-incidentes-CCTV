@@ -45,9 +45,13 @@ def seed_demo_data(db: Session):
     user_admin = User(
         username="admin",
         email="admin@cctv-seguridad.gov.co",
+        full_name="Administrador Principal",
+        assigned_site="Todas las Sedes",
+        document_id="0000000000",
         hashed_password=get_password_hash("admin123"),
         role="Admin",
         is_active=True,
+        must_change_password=False,
         created_at=now - datetime.timedelta(days=90)
     )
     # Perfil 2: Supervisor(a) del Contrato (General / Demo)
@@ -77,27 +81,52 @@ def seed_demo_data(db: Session):
         is_active=True,
         created_at=now - datetime.timedelta(days=60)
     )
-    # Perfil 3: Empresa de Mantenimiento (Preventivo / Correctivo)
+    # Perfil 3: Validador Técnico (Revisión y Conformidad - Policía Nacional)
+    user_validador = User(
+        username="validador",
+        email="validador.cctv@seguridad-cctv.gov.co",
+        full_name="Oficial Validador de Calidad CCTV (Policía Nacional)",
+        assigned_site="Todas las Sedes",
+        document_id="1010202303",
+        badge_number="109845",
+        hashed_password=get_password_hash("validador123"),
+        role="Validador",
+        is_active=True,
+        must_change_password=False,
+        created_at=now - datetime.timedelta(days=70)
+    )
+    # Perfil 4: Empresa de Mantenimiento (Preventivo, Correctivo y Proactivo)
     user_mantenimiento = User(
         username="mantenimiento_cctv",
         email="operaciones@contratistacctv.com",
+        full_name="Consorcio Mantenimiento CCTV",
+        document_id="9008887771",
+        assigned_site="Todas las Sedes",
         hashed_password=get_password_hash("mantenimiento123"),
-        role="Operario",
+        role="Empresa de Mantenimiento",
         is_active=True,
+        must_change_password=False,
         created_at=now - datetime.timedelta(days=50)
     )
     user_tecnico = User(
         username="tecnico_campo",
         email="soporte.tecnico@contratistacctv.com",
+        full_name="Técnico de Campo Especialista",
+        document_id="1085234567",
+        assigned_site="Todas las Sedes",
         hashed_password=get_password_hash("tecnico123"),
-        role="Operario",
+        role="Empresa de Mantenimiento",
         is_active=True,
+        must_change_password=False,
         created_at=now - datetime.timedelta(days=45)
     )
 
-    db.add_all([user_admin, user_sup_general, user_sup_huila, user_sup_guaviare, user_mantenimiento, user_tecnico])
+    all_seed_users = [
+        user_admin, user_validador, user_sup_general, user_sup_huila, user_sup_guaviare, user_mantenimiento, user_tecnico
+    ]
+    db.add_all(all_seed_users)
     db.commit()
-    for u in [user_admin, user_sup_general, user_sup_huila, user_sup_guaviare, user_mantenimiento, user_tecnico]:
+    for u in all_seed_users:
         db.refresh(u)
 
     # 4. Inventario de Equipos CCTV en los 4 Municipios
@@ -338,232 +367,13 @@ def seed_demo_data(db: Session):
     for d in devices_data:
         db.refresh(d)
 
-    # 5. Tickets de Incidencias Contextualizados
-    incidents_data = [
-        # San Agustín
-        Incident(
-            title="Pérdida de señal de video por sulfatación en conector RJ45",
-            description="La cámara domo de la terminal presentó pérdida de sincronismo IP. Se detectó humedad en conector pasante.",
-            priority="Media",
-            status="Resuelto",
-            sede="San Agustín (Huila)",
-            device_id=devices_data[1].id,
-            created_by_id=user_sup_huila.id,
-            assigned_to_id=user_mantenimiento.id,
-            created_at=now - datetime.timedelta(days=4),
-            updated_at=now - datetime.timedelta(days=2)
-        ),
-        Incident(
-            title="Mantenimiento preventivo y limpieza óptica de domo PTZ",
-            description="Limpieza de burbuja de policarbonato, revisión de zoom óptico 25x y verificación de paneo continuo.",
-            priority="Baja",
-            status="Cerrado",
-            sede="San Agustín (Huila)",
-            device_id=devices_data[0].id,
-            created_by_id=user_admin.id,
-            assigned_to_id=user_tecnico.id,
-            created_at=now - datetime.timedelta(days=8),
-            updated_at=now - datetime.timedelta(days=6)
-        ),
+    # 5. Tickets de Incidencias Contextualizados (Desactivados: los incidentes solo existen cuando el usuario los crea)
+    incidents_data = []
 
-        # San José del Guaviare
-        Incident(
-            title="Fallo de alimentación en switch PoE tras tormenta eléctrica",
-            description="Descarga atmosférica afectó puerto 8 del switch PoE alimentador de la cámara del puerto fluvial.",
-            priority="Alta",
-            status="En Proceso",
-            sede="San José del Guaviare (Guaviare)",
-            device_id=devices_data[5].id,
-            created_by_id=user_sup_guaviare.id,
-            assigned_to_id=user_mantenimiento.id,
-            created_at=now - datetime.timedelta(hours=18),
-            updated_at=now - datetime.timedelta(hours=6)
-        ),
-        Incident(
-            title="Alerta de sobretemperatura en banco de baterías UPS Sala CAD",
-            description="El sensor SNMP reporta 36°C en rack eléctrico. Se requiere inspección de sistema de climatización.",
-            priority="Media",
-            status="Abierto",
-            sede="San José del Guaviare (Guaviare)",
-            device_id=devices_data[7].id,
-            created_by_id=user_admin.id,
-            assigned_to_id=user_mantenimiento.id,
-            created_at=now - datetime.timedelta(hours=10),
-            updated_at=now - datetime.timedelta(hours=10)
-        ),
+    # 6. Órdenes de Mantenimiento Preventivo y Correctivo (Desactivados: solo cuando el usuario los crea)
+    maint_data = []
 
-        # El Retorno
-        Incident(
-            title="Atenuación en enlace de radiofrecuencia por desalineación",
-            description="Enlace 5GHz de la entrada municipal reporta pérdida de paquetes del 12% debido a vientos fuertes.",
-            priority="Alta",
-            status="Abierto",
-            sede="El Retorno (Guaviare)",
-            device_id=devices_data[8].id,
-            created_by_id=user_sup_guaviare.id,
-            assigned_to_id=user_tecnico.id,
-            created_at=now - datetime.timedelta(hours=22),
-            updated_at=now - datetime.timedelta(hours=22)
-        ),
-
-        # Calamar
-        Incident(
-            title="Ajuste de enfoque nocturno y sellado estanco en muelle fluvial",
-            description="Se evidenció condensación leve en cristal frontal de cámara PTZ Río Unilla en horario nocturno.",
-            priority="Media",
-            status="En Proceso",
-            sede="Calamar (Guaviare)",
-            device_id=devices_data[11].id,
-            created_by_id=user_sup_guaviare.id,
-            assigned_to_id=user_mantenimiento.id,
-            created_at=now - datetime.timedelta(days=1),
-            updated_at=now - datetime.timedelta(hours=8)
-        ),
-
-        # Sitio de Prueba (Demo)
-        Incident(
-            title="Pérdida intermitente de señal de video en cámara PTZ",
-            description="La cámara de acceso principal reporta intermitencias en la transmisión en horas de alto tráfico.",
-            priority="Alta",
-            status="Abierto",
-            sede="Sitio de Prueba",
-            device_id=devices_data[12].id,
-            created_by_id=user_admin.id,
-            assigned_to_id=user_mantenimiento.id,
-            created_at=now - datetime.timedelta(hours=6),
-            updated_at=now - datetime.timedelta(hours=6)
-        ),
-        Incident(
-            title="Alerta de reinicio por fluctuación de voltaje en Switch PoE",
-            description="El switch PoE principal registró evento de fluctuación eléctrica y reinicio automático.",
-            priority="Media",
-            status="En Proceso",
-            sede="Sitio de Prueba",
-            device_id=devices_data[15].id,
-            created_by_id=user_sup_huila.id,
-            assigned_to_id=user_tecnico.id,
-            created_at=now - datetime.timedelta(days=1),
-            updated_at=now - datetime.timedelta(hours=4)
-        )
-    ]
-    db.add_all(incidents_data)
-    db.commit()
-    for inc in incidents_data:
-        db.refresh(inc)
-
-    # 6. Órdenes de Mantenimiento Preventivo y Correctivo
-    maint_data = [
-        # San Agustín
-        Maintenance(
-            type="Preventivo",
-            title="Mantenimiento preventivo semestral circuito San Agustín",
-            description="Revisión de voltajes en fuentes, reapriete de borneras y limpieza de ópticas en puntos de control.",
-            scheduled_date=now - datetime.timedelta(days=6),
-            completed_date=now - datetime.timedelta(days=6),
-            status="Completado",
-            sede="San Agustín (Huila)",
-            device_id=devices_data[0].id,
-            incident_id=incidents_data[1].id,
-            created_by_id=user_admin.id
-        ),
-        Maintenance(
-            type="Correctivo",
-            title="Sustitución de conector estanco RJ45 en Terminal",
-            description="Reemplazo por conector blindado con gel antihumedad y prueba de reflectometría OK.",
-            scheduled_date=now - datetime.timedelta(days=2),
-            completed_date=now - datetime.timedelta(days=2),
-            status="Completado",
-            sede="San Agustín (Huila)",
-            device_id=devices_data[1].id,
-            incident_id=incidents_data[0].id,
-            created_by_id=user_sup_huila.id
-        ),
-
-        # San José del Guaviare
-        Maintenance(
-            type="Correctivo",
-            title="Reemplazo de módulo protector de sobretensión PoE",
-            description="Instalación de supresor de transitorios en línea de red de cámara muelle fluvial.",
-            scheduled_date=now + datetime.timedelta(hours=12),
-            status="En Ejecución",
-            sede="San José del Guaviare (Guaviare)",
-            device_id=devices_data[5].id,
-            incident_id=incidents_data[2].id,
-            created_by_id=user_sup_guaviare.id
-        ),
-
-        # El Retorno
-        Maintenance(
-            type="Preventivo",
-            title="Inspección y alineación de mástil de telecomunicaciones",
-            description="Calibración de ángulo de azimut y elevación en antena punto a punto entrada Retorno.",
-            scheduled_date=now + datetime.timedelta(days=1),
-            status="Programado",
-            sede="El Retorno (Guaviare)",
-            device_id=devices_data[8].id,
-            incident_id=incidents_data[4].id,
-            created_by_id=user_mantenimiento.id
-        ),
-
-        # Calamar
-        Maintenance(
-            type="Correctivo",
-            title="Mantenimiento correctivo de sellado O-ring y silica gel",
-            description="Cambio de empaques estancos IP67 y recambio de pastillas antihumedad en domo fluvial.",
-            scheduled_date=now + datetime.timedelta(hours=24),
-            status="En Ejecución",
-            sede="Calamar (Guaviare)",
-            device_id=devices_data[11].id,
-            incident_id=incidents_data[5].id,
-            created_by_id=user_mantenimiento.id
-        ),
-        Maintenance(
-            type="Preventivo",
-            title="Revisión y sellado estanco de domos perimetrales",
-            description="Inspección de empaques O-ring y verificación de estanqueidad IP67 en circuito Calamar.",
-            scheduled_date=now + datetime.timedelta(days=2),
-            status="Programado",
-            sede="Calamar (Guaviare)",
-            device_id=devices_data[11].id,
-            incident_id=incidents_data[5].id,
-            created_by_id=user_sup_guaviare.id
-        ),
-
-        # Sitio de Prueba (Demo)
-        Maintenance(
-            type="Preventivo",
-            title="Mantenimiento preventivo general circuito Sitio de Prueba",
-            description="Limpieza de domos, calibración de presets PTZ y verificación de fuentes de poder.",
-            scheduled_date=now + datetime.timedelta(days=3),
-            status="Programado",
-            sede="Sitio de Prueba",
-            device_id=devices_data[12].id,
-            incident_id=incidents_data[6].id,
-            created_by_id=user_admin.id
-        )
-    ]
-    db.add_all(maint_data)
-    db.commit()
-
-    # 7. Eventos de Bitácora
-    events_data = [
-        Event(
-            incident_id=incidents_data[0].id,
-            user_id=user_tecnico.id,
-            event_type="STATUS_CHANGE",
-            description="Conector ponchado y verificado con tester de red. Video 100% restablecido.",
-            created_at=now - datetime.timedelta(days=2)
-        ),
-        Event(
-            incident_id=incidents_data[2].id,
-            user_id=user_mantenimiento.id,
-            event_type="STATUS_CHANGE",
-            description="Técnico en sitio realizando medición de voltaje y reemplazo de supresor PoE.",
-            created_at=now - datetime.timedelta(hours=6)
-        )
-    ]
-    db.add_all(events_data)
-
+    # 7. Eventos de Bitácora (Solo se generan con la interacción operativa)
     # 8. Registro de Auditoría Inicial
     audit_data = [
         AuditLog(
@@ -579,7 +389,7 @@ def seed_demo_data(db: Session):
     db.commit()
 
     print("[+] [Modo Demo] Entorno Sandbox volátil en memoria generado exitosamente:")
-    print(f"    - Municipios: 4 (San Agustín, San José del Guaviare, El Retorno, Calamar)")
+    print("    - Municipios: 4 (San Agustín, San José del Guaviare, El Retorno, Calamar)")
     print(f"    - Usuarios Institucionales: {len([user_admin, user_sup_huila, user_sup_guaviare, user_mantenimiento, user_tecnico])}")
     print(f"    - Equipos CCTV: {len(devices_data)} (PTZ, Domo, Bala, NVR, PoE, UPS)")
     print(f"    - Incidentes Registrados: {len(incidents_data)}")

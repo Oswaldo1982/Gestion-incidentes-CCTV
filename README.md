@@ -11,14 +11,17 @@ Aplicación Web integral, segura y escalable para la gestión de incidentes téc
 ## 🚀 Características Principales
 
 - 📍 **Flujo Guiado por Sede Territorial**: Acceso institucional organizado en dos pasos (Paso 1: Selección de Municipio &rarr; Paso 2: Ingreso por Rol en la Sede).
-- 👥 **3 Perfiles Institucionales Contextualizados por Sede**:
-  1. **Administrador(a)**: Control total, gestión global y configuración del sitio seleccionado.
-  2. **Supervisor(a) del Contrato**: Acceso de auditoría, revisión de estado e informes de la sede activa.
-  3. **Empresa de Mantenimiento (Preventivo / Correctivo)**: Acceso operativo para registrar diagnósticos, atender incidencias y actualizar equipos.
-- 🧪 **Modo Demostración / Sandbox (Volátil en Memoria)**: Entorno aislado en memoria (`sqlite:///:memory:`) que simula la operación completa en los 4 municipios sin persistir cambios en disco ni alterar los registros reales.
-- 📊 **Panel Principal (Dashboard) Dinámico**: Métricas en vivo de incidentes abiertos, mantenimientos pendientes, disponibilidad de cámaras y **filtro estricto por sede activa**.
-- 🚨 **Módulo de Incidentes**: Reporte y seguimiento de novedades con niveles de prioridad (*Baja, Media, Alta, Crítica*), flujo de estados (*Abierto, En Proceso, Resuelto, Cerrado*), vinculación a equipos específicos y registro de auditoría.
-- 🛠️ **Módulo de Mantenimientos**: Planificación de órdenes preventivas y correctivas con fechas programadas, finalización y vinculación a incidentes y equipos del inventario.
+- 👑 **Estructura de Roles y Seguridad Simplificada**:
+  - **Administrador Principal Único**: Exactamente un (1) superadministrador en todo el sistema con control total y sin administradores secundarios.
+  - **3 Perfiles Operativos del Sistema**:
+    1. **Validador**: Encargado de revisar la intervención en detalle (hallazgos, actividades, checklist, comparativa de evidencias antes/después) y emitir el dictamen formal de conformidad.
+    2. **Supervisor**: Seguimiento, auditoría y supervisión global del estado del contrato y de las sedes.
+    3. **Empresa de Mantenimiento**: Personal técnico encargado de la ejecución física de las labores de campo (preventivo, correctivo o proactivo).
+- 🔄 **Flujo de Trabajo y Ciclo de Validación**:
+  1. *Programación / Apertura* (Preventivo, Correctivo o Proactivo) &rarr;
+  2. *Ejecución en Campo* (`En Ejecución`) &rarr;
+  3. *Cierre Técnico*: Al finalizar el técnico y certificar labores con checklist y fotos, la orden pasa automáticamente a **`Pendiente de Validación`**, bloqueando la edición por parte del contratista &rarr;
+  4. *Dictamen del Validador*: Panel exclusivo para **`Aprobar / Validar Conformidad`** (cerrando el ciclo como **`Conforme / Validado`** con fecha, hora y firma del auditor) o **`Rechazar con Observaciones`** (devolviendo la orden al contratista con los requerimientos de subsanación).
 - 🖲️ **Gestión de Inventario de Equipos**: Registro y control técnico de Cámaras (PTZ, Domo, Bala), NVRs, Switches PoE y UPS asignados a cada municipio, con control de direcciones IP, seriales y estados operativos.
 - 📸 **Evidencias Fotográficas 100% Locales**: Carga y almacenamiento directo en `static/uploads/` sin dependencias de servicios externos ni nubes de terceros, con visor modal (*lightbox*).
 - 📜 **Licenciamiento y Trazabilidad**: Control de llaves de activación HMAC y auditoría completa de eventos y cambios de estado.

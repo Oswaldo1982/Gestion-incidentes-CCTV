@@ -31,6 +31,20 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
+def is_password_already_in_use(plain_password: str, db: Session, exclude_user_id: Optional[int] = None) -> bool:
+    """Verifica si la contraseña ingresada ya está siendo utilizada por algún usuario registrado en el sistema."""
+    if not plain_password:
+        return False
+    query = db.query(User.id, User.hashed_password)
+    if exclude_user_id:
+        query = query.filter(User.id != exclude_user_id)
+    existing_users = query.all()
+    for _, hashed_pw in existing_users:
+        if hashed_pw and verify_password(plain_password, hashed_pw):
+            return True
+    return False
+
+
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None) -> str:
     """Genera un token JWT firmado con expiración configurada."""
     to_encode = data.copy()
@@ -44,9 +58,15 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
 
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-    """Autentica a un usuario verificando sus credenciales y estado activo en la base de datos."""
-    user = db.query(User).filter(User.username == username).first()
+    """Autentica a un usuario verificando sus credenciales institucionales (correo o usuario)."""
+    clean_id = username.strip()
+    user = db.query(User).filter(
+        (User.email == clean_id.lower()) | (User.username == clean_id)
+    ).first()
     if not user:
+        return None
+    # El perfil Validador solo puede ingresar obligatoriamente mediante su correo electrónico institucional
+    if user.role == "Validador" and clean_id.lower() != user.email.lower():
         return None
     if not verify_password(password, user.hashed_password):
         return None
@@ -83,13 +103,15 @@ def get_current_user(
         raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        sub: str = payload.get("sub")
+        if sub is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(
+        (User.email == sub.lower()) | (User.username == sub)
+    ).first()
     if user is None:
         raise credentials_exception
     if not user.is_active:
@@ -110,10 +132,12 @@ def get_current_user_optional(
         return None
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if not username:
+        sub: str = payload.get("sub")
+        if not sub:
             return None
-        user = db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(
+            (User.email == sub.lower()) | (User.username == sub)
+        ).first()
         if user and user.is_active:
             return user
     except Exception:

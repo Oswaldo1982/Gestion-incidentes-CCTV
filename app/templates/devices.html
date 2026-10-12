@@ -4,240 +4,518 @@
 {% block page_title %}Inventario de Equipos CCTV{% endblock %}
 
 {% block content %}
-<div class="space-y-6 max-w-7xl mx-auto" x-data="{
+<div class="space-y-6 max-w-7xl mx-auto" @keydown.escape.window="openModal = false; openRelocateModal = false; openDeleteModal = false" x-data="{
     openModal: false,
+    openRelocateModal: false,
+    openDeleteModal: false,
+    targetDevice: { id: null, name: '', sitio: '', serial: '', ip: '' },
+    targetSitio: '',
+    adminPassword: '',
+    viewMode: 'table',
     searchQuery: '',
-    selectedSede: 'all',
+    selectedSitio: 'all',
     selectedType: 'all',
-    selectedStatus: 'all'
+    selectedStatus: 'all',
+    copiedText: null,
+    ipNotApplicable: false,
+    async copyToClipboard(text, id) {
+        if (!text || text === 'NO APLICA') return;
+        const ok = await window.copyToClipboardSafe(text);
+        if (ok) {
+            this.copiedText = id;
+            setTimeout(() => { this.copiedText = null; }, 2000);
+        }
+    },
+    resetFilters() {
+        this.searchQuery = '';
+        this.selectedSitio = 'all';
+        this.selectedType = 'all';
+        this.selectedStatus = 'all';
+    },
+    initiateRelocate(dev) {
+        this.targetDevice = dev;
+        this.targetSitio = dev.sitio || '';
+        this.adminPassword = '';
+        this.openRelocateModal = true;
+    },
+    initiateDelete(dev) {
+        this.targetDevice = dev;
+        this.adminPassword = '';
+        this.openDeleteModal = true;
+    }
 }">
 
-    <!-- Top Action Bar & Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-        <div>
-            <div class="flex items-center gap-2">
-                <h1 class="text-xl font-bold text-slate-900">Inventario y Gestión de Equipos CCTV</h1>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                    {{ devices|length }} Registrados
-                </span>
-            </div>
-            <p class="text-xs text-slate-500 mt-0.5">Control de cámaras (PTZ, Domo, Bala), grabadores NVR, UPS y switches asociados a San Agustín, Huila y Sede 2.</p>
+    <!-- Mensajes de Notificación y Alerta -->
+    {% if msg %}
+    <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-3 shadow-sm animate-fade-in">
+        <div class="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/30">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         </div>
-        <button @click="openModal = true"
-                class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Registrar Nuevo Equipo
-        </button>
+        <div class="flex-1">
+            <p class="font-extrabold text-emerald-950">Operación Exitosa</p>
+            <p class="text-emerald-800 font-medium">{{ msg }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-3 shadow-sm animate-fade-in">
+        <div class="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-rose-500/30">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <div class="flex-1">
+            <p class="font-extrabold text-rose-950">Atención / Error</p>
+            <p class="text-rose-800 font-medium">{{ error }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Banner Superior Gráfico e Identidad Territorial -->
+    <div class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-slate-800">
+        <!-- Resplandor ambiental de fondo -->
+        <div class="absolute -right-16 -bottom-16 w-80 h-80 bg-blue-600/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-10 -top-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div>
+                <div class="flex flex-wrap items-center gap-2 mb-2.5">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 backdrop-blur-sm">
+                        {{ current_site.icon if current_site else '🏛️' }} {{ current_site.full_name if current_site else 'Sede Territorial' }}
+                    </span>
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Circuito Territorial Independiente
+                    </span>
+                    {% if current_site and current_site.badge %}
+                    <span class="hidden sm:inline-flex px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-800/80 text-slate-300 border border-slate-700">
+                        {{ current_site.badge }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                    Equipos e Infraestructura CCTV
+                </h1>
+                <p class="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Visualización gráfica e inventario de dispositivos distribuidos en los puntos de {{ current_site.name if current_site else 'la sede' }}. El estado operativo se actualiza automáticamente con la gestión de incidentes.
+                </p>
+            </div>
+
+            <!-- Controles Superiores: Selector de Vista y Registro -->
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+                
+                <!-- Selector de Vista: Tabla vs Cuadrícula Visual -->
+                <div class="bg-slate-800/90 p-1 rounded-2xl border border-slate-700/80 flex items-center shadow-inner">
+                    <button type="button" @click="viewMode = 'table'"
+                            :class="viewMode === 'table' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'"
+                            class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                        </svg>
+                        <span class="hidden sm:inline">Tabla</span>
+                    </button>
+                    <button type="button" @click="viewMode = 'grid'"
+                            :class="viewMode === 'grid' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'"
+                            class="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                        </svg>
+                        <span class="hidden sm:inline">Cuadrícula</span>
+                    </button>
+                </div>
+
+                <!-- Botón de Registro de Nuevo Equipo -->
+                {% if current_user.role == 'Supervisor' %}
+                <button disabled
+                        title="Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría en inventario de equipos. No puede registrar ni modificar dispositivos."
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800/80 text-slate-400 border border-slate-700 text-xs font-bold cursor-not-allowed shadow-none">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    <span>Registrar Equipo</span>
+                </button>
+                {% else %}
+                <button @click="openModal = true"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    <span>Registrar Equipo</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
-    <!-- KPI Quick Metrics -->
+    <!-- Tarjetas de Métricas Gráficas e Indicadores de Salud Operativa -->
+    {% set total_devs = devices|length %}
+    {% set op_count = devices | selectattr('calculated_status', 'equalto', 'Operativo') | list | length %}
+    {% set falla_count = devices | selectattr('calculated_status', 'equalto', 'En Falla') | list | length %}
+    {% set maint_count = devices | selectattr('calculated_status', 'equalto', 'En Mantenimiento') | list | length %}
+    {% set health_pct = ((op_count / total_devs * 100)|round|int) if total_devs > 0 else 100 %}
+
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <!-- Card 1: Total Cámaras -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Cámaras (PTZ/Domo/Bala)</p>
-            <p class="text-2xl font-black text-blue-600 mt-1">
-                {{ devices | selectattr('device_type', 'in', ['Cámara PTZ', 'Cámara Domo', 'Cámara Bala']) | list | length }}
+        
+        <!-- Card 1: Cámaras de Video -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Cámaras</span>
+                <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+                {{ devices | selectattr('device_type', 'in', ['Cámara PTZ', 'Cámara Fija', 'Cámara Domo', 'Cámara Bala', 'Cámara']) | list | length }}
             </p>
+            <p class="text-[11px] text-blue-600 font-medium mt-1">Dispositivos ópticos activos</p>
         </div>
 
-        <!-- Card 2: NVRs y Servidores -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Grabadores / NVR</p>
-            <p class="text-2xl font-black text-indigo-600 mt-1">
+        <!-- Card 2: Grabadores & NVR -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">NVR / Servidores</span>
+                <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
                 {{ devices | selectattr('device_type', 'equalto', 'NVR') | list | length }}
             </p>
+            <p class="text-[11px] text-indigo-600 font-medium mt-1">Grabación centralizada</p>
         </div>
 
-        <!-- Card 3: Switches y UPS -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Switches PoE & UPS</p>
-            <p class="text-2xl font-black text-teal-600 mt-1">
-                {{ devices | selectattr('device_type', 'in', ['Switch PoE / Switch', 'Switch', 'UPS']) | list | length }}
+        <!-- Card 3: Switches, UPS e Infraestructura -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Red & Respaldo</span>
+                <div class="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                </div>
+            </div>
+            <p class="text-2xl sm:text-3xl font-black text-slate-900 mt-2">
+                {{ devices | selectattr('device_type', 'in', ['Switch', 'Switch PoE / Switch', 'UPS', 'Transceiver', 'Gabinete', 'Planta Eléctrica']) | list | length }}
             </p>
+            <p class="text-[11px] text-teal-600 font-medium mt-1">Switches, UPS y Gabinetes</p>
         </div>
 
-        <!-- Card 4: Operatividad -->
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <p class="text-xs text-slate-500 font-semibold uppercase">Operativos / En Falla</p>
-            <p class="text-2xl font-black text-emerald-600 mt-1">
-                {{ devices | selectattr('status', 'equalto', 'Operativo') | list | length }} <span class="text-xs text-slate-400 font-normal">/ {{ devices | selectattr('status', 'in', ['En Falla', 'Alerta Menor']) | list | length }} alerta</span>
-            </p>
+        <!-- Card 4: Salud Operativa en Tiempo Real -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Operatividad</span>
+                <div class="w-8 h-8 rounded-xl {{ 'bg-emerald-50 text-emerald-600' if falla_count == 0 else 'bg-rose-50 text-rose-600' }} flex items-center justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="flex items-baseline gap-2 mt-2">
+                <p class="text-2xl sm:text-3xl font-black text-slate-900">{{ health_pct }}%</p>
+                <span class="text-xs font-bold {{ 'text-emerald-600' if falla_count == 0 else 'text-rose-500' }}">
+                    {{ op_count }}/{{ total_devs }} OK
+                </span>
+            </div>
+            <!-- Barra de salud visual -->
+            <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden flex">
+                <div class="bg-emerald-500 h-full transition-all duration-500" style="width: {{ health_pct }}%;"></div>
+                {% if falla_count > 0 %}
+                <div class="bg-rose-500 h-full" style="width: {{ (falla_count / total_devs * 100)|round|int }}%;"></div>
+                {% endif %}
+            </div>
         </div>
     </div>
 
-    <!-- Filters & Search Toolbar -->
-    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+    <!-- Navegación Rápida Visual por Sitio (Pills Horizontales) -->
+    <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex items-center gap-2 mb-2 px-1">
+            <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtrar por Sitio de Instalación:</span>
+        </div>
         
-        <!-- Search Input -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            <!-- Botón Todos -->
+            <button type="button" @click="selectedSitio = 'all'"
+                    :class="selectedSitio === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5">
+                <span>Todos los Sitios</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded-full"
+                      :class="selectedSitio === 'all' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-600'">
+                    {{ devices|length }}
+                </span>
+            </button>
+
+            <!-- Botones individuales por Sitio -->
+            {% for s in sitios %}
+            {% set count_in_site = devices | selectattr('location_detail', 'equalto', s) | list | length %}
+            <button type="button" @click="selectedSitio = '{{ s }}'"
+                    :class="selectedSitio === '{{ s }}' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                    class="px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition flex items-center gap-1.5">
+                <span>{{ s }}</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded-full font-bold"
+                      :class="selectedSitio === '{{ s }}' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-600'">
+                    {{ count_in_site }}
+                </span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Barra de Búsqueda y Filtros Complementarios -->
+    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        
+        <!-- Campo de Búsqueda Reactivo -->
         <div class="relative flex-1">
-            <input type="text" x-model="searchQuery" placeholder="Buscar equipo por nombre, serial, IP, marca o modelo..."
-                   class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <input type="text" x-model="searchQuery"
+                   placeholder="Buscar por sitio, nombre de equipo, serial, IP o marca..."
+                   class="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
+            <button x-show="searchQuery" @click="searchQuery = ''" type="button"
+                    class="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
         </div>
 
-        <!-- Filter Selects -->
+        <!-- Filtros Rápidos -->
         <div class="flex flex-wrap items-center gap-2">
-            <select x-model="selectedSede" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">Todas las Sedes</option>
-                {% for s in sedes %}
-                <option value="{{ s.name }}">{{ s.name }}</option>
-                {% endfor %}
-            </select>
-
-            <select x-model="selectedType" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <!-- Tipo de Dispositivo -->
+            <select x-model="selectedType"
+                    class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todos los Tipos</option>
                 <option value="Cámara PTZ">Cámara PTZ</option>
-                <option value="Cámara Domo">Cámara Domo</option>
-                <option value="Cámara Bala">Cámara Bala</option>
+                <option value="Cámara Fija">Cámara Fija</option>
+                <option value="Switch">Switch</option>
+                <option value="Transceiver">Transceiver</option>
+                <option value="UPS">UPS</option>
                 <option value="NVR">NVR / Grabador</option>
-                <option value="Switch PoE / Switch">Switch PoE / Switch</option>
-                <option value="UPS">UPS / Respaldo</option>
-                <option value="Otro">Otro</option>
+                <option value="Gabinete">Gabinete</option>
+                <option value="Planta Eléctrica">Planta Eléctrica</option>
+                <option value="Electroimán">Electroimán</option>
+                <option value="Videowall">Videowall</option>
+                <option value="Sistema Contra Incendios">Sistema Contra Incendios</option>
             </select>
 
-            <select x-model="selectedStatus" class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <!-- Estado Operativo Dinámico -->
+            <select x-model="selectedStatus"
+                    class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todos los Estados</option>
-                <option value="Operativo">Operativo</option>
-                <option value="Alerta Menor">Alerta Menor</option>
-                <option value="En Falla">En Falla</option>
-                <option value="Mantenimiento">Mantenimiento</option>
-                <option value="Inactivo">Inactivo</option>
+                <option value="Operativo">🟢 Operativo</option>
+                <option value="En Falla">🔴 En Falla</option>
+                <option value="En Mantenimiento">🔵 En Mantenimiento</option>
+                <option value="Inactivo">⚪ Inactivo</option>
             </select>
+
+            <!-- Botón Limpiar Filtros -->
+            <button @click="resetFilters()" type="button"
+                    x-show="searchQuery || selectedSitio !== 'all' || selectedType !== 'all' || selectedStatus !== 'all'"
+                    class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span>Limpiar</span>
+            </button>
         </div>
     </div>
 
-    <!-- Devices Table -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <!-- ==================== VISTA 1: TABLA ESTRUCTURADA ==================== -->
+    <div x-show="viewMode === 'table'" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-                <thead class="bg-slate-100/75 text-slate-600 font-semibold uppercase tracking-wider border-b border-slate-200">
+                <thead class="bg-slate-100/90 text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200">
                     <tr>
-                        <th class="px-5 py-3.5">ID / Equipo</th>
-                        <th class="px-5 py-3.5">Tipo de Equipo</th>
-                        <th class="px-5 py-3.5">Sede & Ubicación</th>
-                        <th class="px-5 py-3.5">Marca / Modelo</th>
-                        <th class="px-5 py-3.5">Dirección IP / Serial</th>
-                        <th class="px-5 py-3.5">Estado</th>
-                        <th class="px-5 py-3.5 text-right">Acciones</th>
+                        <th class="px-5 py-4">1. Sitio</th>
+                        <th class="px-5 py-4">2. Equipos por Sitio</th>
+                        <th class="px-5 py-4">3. Marca / Modelo</th>
+                        <th class="px-5 py-4">4. Serial</th>
+                        <th class="px-5 py-4">5. Dirección IP</th>
+                        <th class="px-5 py-4 text-center">6. Estado Operativo</th>
+                        {% if is_default_admin %}
+                        <th class="px-5 py-4 text-right">7. Acciones Admin</th>
+                        {% endif %}
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-200 text-slate-700">
+                <tbody class="divide-y divide-slate-200/80 text-slate-700">
                     {% for dev in devices %}
-                    <tr class="hover:bg-slate-50/80 transition"
-                        x-show="(selectedSede === 'all' || '{{ dev.sede }}' === selectedSede) &&
+                    <tr class="hover:bg-blue-50/40 transition group"
+                        x-show="(selectedSitio === 'all' || '{{ dev.location_detail }}' === selectedSitio) &&
                                 (selectedType === 'all' || '{{ dev.device_type }}' === selectedType) &&
-                                (selectedStatus === 'all' || '{{ dev.status }}' === selectedStatus) &&
-                                ('{{ dev.name|lower }}'.includes(searchQuery.toLowerCase()) || '{{ dev.brand|lower if dev.brand else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.model|lower if dev.model else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.serial_number|lower if dev.serial_number else '' }}'.includes(searchQuery.toLowerCase()) || '{{ dev.ip_address|lower if dev.ip_address else '' }}'.includes(searchQuery.toLowerCase()))">
+                                (selectedStatus === 'all' || '{{ dev.calculated_status }}' === selectedStatus) &&
+                                ('{{ dev.name|lower }}'.includes(searchQuery.toLowerCase()) || 
+                                 '{{ dev.location_detail|lower if dev.location_detail else '' }}'.includes(searchQuery.toLowerCase()) || 
+                                 '{{ dev.brand|lower if dev.brand else '' }}'.includes(searchQuery.toLowerCase()) || 
+                                 '{{ dev.serial_number|lower if dev.serial_number else '' }}'.includes(searchQuery.toLowerCase()) || 
+                                 '{{ dev.ip_address|lower if dev.ip_address else '' }}'.includes(searchQuery.toLowerCase()))">
                         
-                        <!-- Nombre e ID -->
+                        <!-- 1. Sitio -->
                         <td class="px-5 py-4">
-                            <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
-                                    {% if 'Cámara' in dev.device_type %}
-                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-                                    </svg>
-                                    {% elif 'NVR' in dev.device_type %}
-                                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                                    </svg>
-                                    {% elif 'UPS' in dev.device_type %}
-                                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                                    </svg>
-                                    {% else %}
-                                    <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                    </svg>
-                                    {% endif %}
-                                </div>
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-sm shadow-blue-500/50 shrink-0"></div>
                                 <div>
-                                    <p class="font-bold text-slate-900 text-sm">{{ dev.name }}</p>
-                                    <span class="text-[10px] text-slate-400 font-mono">ID #{{ dev.id }}</span>
+                                    <p class="font-black text-slate-900 text-xs">{{ dev.location_detail if dev.location_detail else 'Sitio General' }}</p>
+                                    <span class="text-[10px] text-slate-400 font-medium">{{ dev.sede }}</span>
                                 </div>
                             </div>
                         </td>
 
-                        <!-- Tipo -->
+                        <!-- 2. Equipos por Sitio -->
                         <td class="px-5 py-4">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
-                                {{ dev.device_type }}
-                            </span>
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border
+                                    {% if 'Cámara' in dev.device_type %} bg-blue-50 border-blue-200 text-blue-600
+                                    {% elif 'NVR' in dev.device_type %} bg-indigo-50 border-indigo-200 text-indigo-600
+                                    {% elif 'UPS' in dev.device_type %} bg-amber-50 border-amber-200 text-amber-600
+                                    {% elif 'Planta' in dev.device_type %} bg-orange-50 border-orange-200 text-orange-600
+                                    {% elif 'Switch' in dev.device_type or 'Transceiver' in dev.device_type %} bg-teal-50 border-teal-200 text-teal-600
+                                    {% else %} bg-slate-50 border-slate-200 text-slate-600 {% endif %}">
+                                    {% if 'Cámara' in dev.device_type %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                                    </svg>
+                                    {% elif 'NVR' in dev.device_type %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                                    </svg>
+                                    {% elif 'UPS' in dev.device_type or 'Planta' in dev.device_type %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    {% elif 'Switch' in dev.device_type or 'Transceiver' in dev.device_type %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    {% else %}
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                    </svg>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <p class="font-bold text-slate-900 text-xs">{{ dev.name }}</p>
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200 mt-0.5">
+                                        {{ dev.device_type }}
+                                    </span>
+                                </div>
+                            </div>
                         </td>
 
-                        <!-- Sede & Ubicación -->
+                        <!-- 3. Marca / Modelo -->
                         <td class="px-5 py-4">
-                            <p class="font-semibold text-slate-800">{{ dev.sede }}</p>
-                            <p class="text-slate-500 text-[11px]">{{ dev.location_detail if dev.location_detail else 'Ubicación general' }}</p>
-                        </td>
-
-                        <!-- Marca / Modelo -->
-                        <td class="px-5 py-4">
-                            <p class="font-medium text-slate-800">{{ dev.brand if dev.brand else 'N/D' }}</p>
-                            <p class="text-slate-500 text-[11px]">{{ dev.model if dev.model else 'Sin modelo' }}</p>
-                        </td>
-
-                        <!-- IP / Serial -->
-                        <td class="px-5 py-4">
-                            {% if dev.ip_address %}
-                            <span class="font-mono text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                {{ dev.ip_address }}
-                            </span>
-                            {% else %}
-                            <span class="text-slate-400 text-[11px]">Sin IP</span>
-                            {% endif %}
-                            <p class="text-[10px] font-mono text-slate-500 mt-1">{{ dev.serial_number if dev.serial_number else 'S/N no reg.' }}</p>
-                        </td>
-
-                        <!-- Estado -->
-                        <td class="px-5 py-4">
-                            {% if dev.status == 'Operativo' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Operativo
-                            </span>
-                            {% elif dev.status == 'Alerta Menor' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Alerta Menor
-                            </span>
-                            {% elif dev.status == 'En Falla' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> En Falla
-                            </span>
-                            {% elif dev.status == 'Mantenimiento' %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Mantenimiento
-                            </span>
-                            {% else %}
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
-                                <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Inactivo
-                            </span>
+                            <p class="font-bold text-slate-800 text-xs">{{ dev.brand if dev.brand else 'N/D' }}</p>
+                            {% if dev.model %}
+                            <p class="text-slate-500 text-[10px] mt-0.5">{{ dev.model }}</p>
                             {% endif %}
                         </td>
 
-                        <!-- Acciones -->
-                        <td class="px-5 py-4 text-right">
-                            <form action="/devices/{{ dev.id }}/status" method="POST" class="inline-flex items-center gap-1">
-                                <select name="status" onchange="this.form.submit()"
-                                        class="text-xs py-1 px-2 bg-white border border-slate-300 rounded-lg font-medium text-slate-700 hover:border-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
-                                    <option value="Operativo" {% if dev.status == 'Operativo' %}selected{% endif %}>Operativo</option>
-                                    <option value="Alerta Menor" {% if dev.status == 'Alerta Menor' %}selected{% endif %}>Alerta Menor</option>
-                                    <option value="En Falla" {% if dev.status == 'En Falla' %}selected{% endif %}>En Falla</option>
-                                    <option value="Mantenimiento" {% if dev.status == 'Mantenimiento' %}selected{% endif %}>Mantenimiento</option>
-                                    <option value="Inactivo" {% if dev.status == 'Inactivo' %}selected{% endif %}>Inactivo</option>
-                                </select>
-                            </form>
+                        <!-- 4. Serial -->
+                        <td class="px-5 py-4">
+                            {% if dev.serial_number %}
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-mono text-xs font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200 select-all">
+                                    {{ dev.serial_number }}
+                                </span>
+                                <button type="button" @click="copyToClipboard('{{ dev.serial_number }}', 'sn-{{ dev.id }}')"
+                                        title="Copiar serial"
+                                        class="text-slate-400 hover:text-blue-600 p-1 rounded transition">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                </button>
+                                <span x-show="copiedText === 'sn-{{ dev.id }}'" x-cloak class="text-[10px] text-emerald-600 font-bold">¡Copiado!</span>
+                            </div>
+                            {% else %}
+                            <span class="text-slate-400 text-xs italic">S/N no reg.</span>
+                            {% endif %}
                         </td>
+
+                        <!-- 5. Dirección IP -->
+                        <td class="px-5 py-4">
+                            {% if dev.ip_address and dev.ip_address.upper() != 'NO APLICA' %}
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 shadow-sm select-all">
+                                    {{ dev.ip_address }}
+                                </span>
+                                <button type="button" @click="copyToClipboard('{{ dev.ip_address }}', 'ip-{{ dev.id }}')"
+                                        title="Copiar dirección IP"
+                                        class="text-slate-400 hover:text-blue-600 p-1 rounded transition">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                </button>
+                                <span x-show="copiedText === 'ip-{{ dev.id }}'" x-cloak class="text-[10px] text-emerald-600 font-bold">¡Copiada!</span>
+                            </div>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                NO APLICA
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- 6. Estado Operativo Dinámico -->
+                        <td class="px-5 py-4 text-center">
+                            {% if dev.calculated_status == 'Operativo' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
+                                  title="100% Operativo y disponible">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                                Operativo
+                            </span>
+                            {% elif dev.calculated_status == 'En Falla' %}
+                            <div class="inline-flex flex-col items-center">
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-sm animate-pulse"
+                                      title="{{ 'Incidente abierto: ' ~ dev.active_incident.title if dev.active_incident else 'Falla reportada en Incidentes' }}">
+                                    <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                    En Falla
+                                </span>
+                                {% if dev.active_incident %}
+                                <a href="/incidents" class="text-[10px] text-rose-600 font-bold hover:underline mt-1 flex items-center gap-0.5"
+                                   title="{{ dev.active_incident.title }}">
+                                    <span>Ver Inc. #{{ dev.active_incident.id }}</span>
+                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                                </a>
+                                {% endif %}
+                            </div>
+                            {% elif dev.calculated_status == 'En Mantenimiento' %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-sm"
+                                  title="Mantenimiento preventivo/correctivo programado">
+                                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                Mantenimiento
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300">
+                                <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                                Inactivo
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- 7. Acciones Exclusivas de Administrador Principal por Defecto -->
+                        {% if is_default_admin %}
+                        <td class="px-5 py-4 text-right whitespace-nowrap">
+                            <div class="flex items-center justify-end gap-1.5">
+                                <button type="button"
+                                        @click="initiateRelocate({ id: {{ dev.id }}, name: '{{ dev.name|replace("'", "\\'") }}', sitio: '{{ dev.location_detail|replace("'", "\\'") if dev.location_detail else '' }}', serial: '{{ dev.serial_number|replace("'", "\\'") if dev.serial_number else '' }}', ip: '{{ dev.ip_address if dev.ip_address else '' }}' })"
+                                        title="Trasladar equipo de sitio (Requiere contraseña)"
+                                        class="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] border border-indigo-200 transition flex items-center gap-1 shadow-sm active:scale-95">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                                    <span>Trasladar</span>
+                                </button>
+                                <button type="button"
+                                        @click="initiateDelete({ id: {{ dev.id }}, name: '{{ dev.name|replace("'", "\\'") }}', sitio: '{{ dev.location_detail|replace("'", "\\'") if dev.location_detail else '' }}', serial: '{{ dev.serial_number|replace("'", "\\'") if dev.serial_number else '' }}', ip: '{{ dev.ip_address if dev.ip_address else '' }}' })"
+                                        title="Quitar equipo del inventario (Requiere contraseña)"
+                                        class="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 transition flex items-center gap-1 shadow-sm active:scale-95">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    <span>Quitar</span>
+                                </button>
+                            </div>
+                        </td>
+                        {% endif %}
 
                     </tr>
                     {% endfor %}
                     {% if not devices %}
                     <tr>
-                        <td colspan="7" class="text-center py-10 text-slate-500 italic text-sm">
-                            No hay equipos registrados en el inventario. Haz clic en "Registrar Nuevo Equipo" para agregar cámaras, grabadores o switches.
+                        <td colspan="{{ '7' if is_default_admin else '6' }}" class="text-center py-12 text-slate-500 italic text-xs">
+                            No hay equipos registrados en el inventario de {{ current_site.name if current_site else 'esta sede' }}.
                         </td>
                     </tr>
                     {% endif %}
@@ -246,7 +524,143 @@
         </div>
     </div>
 
-    <!-- MODAL: Registrar Nuevo Equipo -->
+    <!-- ==================== VISTA 2: CUADRÍCULA VISUAL (CARDS) ==================== -->
+    <div x-show="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for dev in devices %}
+        <div class="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col justify-between"
+             x-show="(selectedSitio === 'all' || '{{ dev.location_detail }}' === selectedSitio) &&
+                     (selectedType === 'all' || '{{ dev.device_type }}' === selectedType) &&
+                     (selectedStatus === 'all' || '{{ dev.calculated_status }}' === selectedStatus) &&
+                     ('{{ dev.name|lower }}'.includes(searchQuery.toLowerCase()) || 
+                      '{{ dev.location_detail|lower if dev.location_detail else '' }}'.includes(searchQuery.toLowerCase()) || 
+                      '{{ dev.brand|lower if dev.brand else '' }}'.includes(searchQuery.toLowerCase()) || 
+                      '{{ dev.serial_number|lower if dev.serial_number else '' }}'.includes(searchQuery.toLowerCase()) || 
+                      '{{ dev.ip_address|lower if dev.ip_address else '' }}'.includes(searchQuery.toLowerCase()))">
+            
+            <!-- Top de la Card -->
+            <div>
+                <div class="flex items-start justify-between gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center border shadow-sm
+                        {% if 'Cámara' in dev.device_type %} bg-blue-50 border-blue-200 text-blue-600
+                        {% elif 'NVR' in dev.device_type %} bg-indigo-50 border-indigo-200 text-indigo-600
+                        {% elif 'UPS' in dev.device_type %} bg-amber-50 border-amber-200 text-amber-600
+                        {% elif 'Planta' in dev.device_type %} bg-orange-50 border-orange-200 text-orange-600
+                        {% elif 'Switch' in dev.device_type or 'Transceiver' in dev.device_type %} bg-teal-50 border-teal-200 text-teal-600
+                        {% else %} bg-slate-50 border-slate-200 text-slate-600 {% endif %}">
+                        {% if 'Cámara' in dev.device_type %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+                        {% elif 'NVR' in dev.device_type %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+                        {% elif 'UPS' in dev.device_type or 'Planta' in dev.device_type %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        {% else %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        {% endif %}
+                    </div>
+
+                    <!-- Estado Badge -->
+                    <div>
+                        {% if dev.calculated_status == 'Operativo' %}
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Operativo
+                        </span>
+                        {% elif dev.calculated_status == 'En Falla' %}
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 animate-pulse">
+                            <span class="w-2 h-2 rounded-full bg-rose-500"></span> En Falla
+                        </span>
+                        {% elif dev.calculated_status == 'En Mantenimiento' %}
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            <span class="w-2 h-2 rounded-full bg-blue-500"></span> Mantenimiento
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300">
+                            Inactivo
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Nombre y Tipo -->
+                <h3 class="text-sm font-black text-slate-900 leading-snug">{{ dev.name }}</h3>
+                <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 mt-1">
+                    {{ dev.device_type }}
+                </span>
+
+                <!-- Sitio / Punto -->
+                <div class="mt-3 p-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <div class="min-w-0 flex-1 truncate">
+                        <p class="text-[11px] font-bold text-slate-800 truncate">{{ dev.location_detail if dev.location_detail else 'Sitio General' }}</p>
+                    </div>
+                </div>
+
+                <!-- Datos Técnicos -->
+                <div class="mt-3.5 space-y-2 text-xs">
+                    <div class="flex items-center justify-between text-slate-600 border-b border-slate-100 pb-1.5">
+                        <span class="text-[11px] text-slate-400 font-medium">Marca / Modelo:</span>
+                        <span class="font-bold text-slate-800">{{ dev.brand if dev.brand else 'N/D' }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between text-slate-600 border-b border-slate-100 pb-1.5">
+                        <span class="text-[11px] text-slate-400 font-medium">Serial (S/N):</span>
+                        <span class="font-mono font-bold text-slate-800 select-all">{{ dev.serial_number if dev.serial_number else 'S/N no reg.' }}</span>
+                    </div>
+
+                    <div class="flex items-center justify-between text-slate-600 pt-0.5">
+                        <span class="text-[11px] text-slate-400 font-medium">Dirección IP:</span>
+                        {% if dev.ip_address and dev.ip_address.upper() != 'NO APLICA' %}
+                        <span class="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200 select-all">
+                            {{ dev.ip_address }}
+                        </span>
+                        {% else %}
+                        <span class="text-[10px] font-bold text-slate-400">NO APLICA</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acciones Exclusivas de Administrador Principal por Defecto -->
+            {% if is_default_admin %}
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    Admin Principal
+                </span>
+                <div class="flex items-center gap-1.5">
+                    <button type="button"
+                            @click="initiateRelocate({ id: {{ dev.id }}, name: '{{ dev.name|replace("'", "\\'") }}', sitio: '{{ dev.location_detail|replace("'", "\\'") if dev.location_detail else '' }}', serial: '{{ dev.serial_number|replace("'", "\\'") if dev.serial_number else '' }}', ip: '{{ dev.ip_address if dev.ip_address else '' }}' })"
+                            class="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] border border-indigo-200 transition flex items-center gap-1 active:scale-95 shadow-sm">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        <span>Trasladar</span>
+                    </button>
+                    <button type="button"
+                            @click="initiateDelete({ id: {{ dev.id }}, name: '{{ dev.name|replace("'", "\\'") }}', sitio: '{{ dev.location_detail|replace("'", "\\'") if dev.location_detail else '' }}', serial: '{{ dev.serial_number|replace("'", "\\'") if dev.serial_number else '' }}', ip: '{{ dev.ip_address if dev.ip_address else '' }}' })"
+                            class="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 transition flex items-center gap-1 active:scale-95 shadow-sm">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        <span>Quitar</span>
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Footer Card con Incidente Activo si existe -->
+            {% if dev.active_incident %}
+            <div class="mt-4 pt-3 border-t border-rose-100 flex items-center justify-between bg-rose-50/70 -mx-5 -mb-5 p-3 px-5 rounded-b-3xl">
+                <span class="text-[11px] font-bold text-rose-700 flex items-center gap-1">
+                    <svg class="w-3 h-3 text-rose-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    Incidente #{{ dev.active_incident.id }}
+                </span>
+                <a href="/incidents" class="text-xs font-extrabold text-rose-600 hover:text-rose-800 underline">
+                    Gestionar
+                </a>
+            </div>
+            {% endif %}
+
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ==================== MODAL: REGISTRAR NUEVO EQUIPO ==================== -->
     <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             
@@ -254,126 +668,161 @@
             <div x-show="openModal" @click="openModal = false"
                  x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
                  x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+                 class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"></div>
 
             <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
-            <!-- Modal Panel -->
+            <!-- Panel Modal -->
             <div x-show="openModal"
                  x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
                  x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 class="inline-block align-bottom bg-white rounded-2xl px-4 pt-5 pb-4 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                 class="inline-block align-bottom bg-white rounded-3xl px-5 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-7 border border-slate-100">
                 
-                <div class="flex items-center justify-between pb-3 border-b border-slate-200">
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                <!-- Encabezado del Modal -->
+                <div class="flex items-start justify-between pb-4 border-b border-slate-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                             </svg>
                         </div>
-                        <h3 class="text-base font-bold text-slate-900">Registrar Nuevo Equipo CCTV</h3>
+                        <div>
+                            <h3 class="text-base font-black text-slate-900">Registrar Equipo CCTV</h3>
+                            <p class="text-xs text-slate-500">Incorporación de nuevo activo en el inventario</p>
+                        </div>
                     </div>
-                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600">
+                    <button @click="openModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-xl transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
 
-                <form action="/devices" method="POST" class="mt-4 space-y-4">
+                <!-- Banner Informativo: Sede Automática (Sin selector manual) -->
+                <div class="mt-4 p-3 bg-blue-50/80 border border-blue-200 rounded-2xl flex items-center gap-2.5">
+                    <span class="text-base">{{ current_site.icon if current_site else '🏛️' }}</span>
+                    <div>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-blue-600 block">Sede Activa de Registro</span>
+                        <p class="text-xs font-black text-blue-950">{{ current_site.full_name if current_site else 'Sede Territorial Activa' }}</p>
+                    </div>
+                </div>
+
+                <form action="/devices" method="POST" class="mt-5 space-y-4">
                     
-                    <!-- Nombre -->
+                    <!-- 1. Sitio / Punto de Instalación -->
                     <div>
-                        <label for="d_name" class="block text-xs font-semibold text-slate-700 mb-1">Nombre / Identificador del Equipo *</label>
-                        <input type="text" name="name" id="d_name" required minlength="3" maxlength="100"
-                               placeholder="Ej. Cámara PTZ 01 - Entrada Principal, NVR Dahua 32CH..."
-                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <label for="d_sitio" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                            <span>1. Sitio o Punto Físico *</span>
+                        </label>
+                        <input type="text" list="sitios_list" name="location_detail" id="d_sitio" required
+                               placeholder="Ej. Estación de Policía, Carabineros, Cam 1 'Terminal'..."
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                        <datalist id="sitios_list">
+                            {% for s in sitios %}
+                            <option value="{{ s }}"></option>
+                            {% endfor %}
+                        </datalist>
+                        <p class="text-[10px] text-slate-400 mt-1">Seleccione un sitio existente de la lista o escriba el nombre de un nuevo punto.</p>
                     </div>
 
-                    <!-- Tipo y Sede -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- 2. Equipos por Sitio (Nombre) y Tipo de Equipo -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                            <label for="d_type" class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Equipo *</label>
+                            <label for="d_name" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                                <span>2. Equipo (Nombre) *</span>
+                            </label>
+                            <input type="text" name="name" id="d_name" required minlength="2" maxlength="100"
+                                   placeholder="Ej. Switch Dlink x10, Cam PTZ..."
+                                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                        </div>
+
+                        <div>
+                            <label for="d_type" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+                                <span>Tipo de Equipo *</span>
+                            </label>
                             <select name="device_type" id="d_type" required
-                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                    class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
                                 <option value="Cámara PTZ">Cámara PTZ</option>
-                                <option value="Cámara Domo">Cámara Domo</option>
-                                <option value="Cámara Bala">Cámara Bala</option>
+                                <option value="Cámara Fija">Cámara Fija</option>
+                                <option value="Switch">Switch</option>
+                                <option value="Transceiver">Transceiver</option>
+                                <option value="UPS">UPS</option>
                                 <option value="NVR">NVR / Grabador</option>
-                                <option value="Switch PoE / Switch">Switch PoE / Switch</option>
-                                <option value="UPS">UPS / Respaldo Eléctrico</option>
-                                <option value="Otro">Otro</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label for="d_sede" class="block text-xs font-semibold text-slate-700 mb-1">Sede de Asignación *</label>
-                            <select name="sede" id="d_sede" required
-                                    class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                {% for s in sedes %}
-                                <option value="{{ s.name }}">{{ s.name }}</option>
-                                {% endfor %}
+                                <option value="Gabinete">Gabinete</option>
+                                <option value="Planta Eléctrica">Planta Eléctrica</option>
+                                <option value="Electroimán">Electroimán</option>
+                                <option value="Videowall">Videowall</option>
+                                <option value="Sistema Contra Incendios">Sistema Contra Incendios</option>
+                                <option value="Otro">Otro Dispositivo</option>
                             </select>
                         </div>
                     </div>
 
-                    <!-- Ubicación Detallada -->
-                    <div>
-                        <label for="d_location" class="block text-xs font-semibold text-slate-700 mb-1">Ubicación Específica / Detalle</label>
-                        <input type="text" name="location_detail" id="d_location"
-                               placeholder="Ej. Poste exterior #3, Rack Principal piso 2, Portería..."
-                               class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    </div>
-
-                    <!-- Marca y Modelo -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- 3. Marca y Modelo -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                            <label for="d_brand" class="block text-xs font-semibold text-slate-700 mb-1">Marca</label>
-                            <input type="text" name="brand" id="d_brand" placeholder="Hikvision, Dahua, Cisco, APC..."
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <label for="d_brand" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                <span>3. Marca</span>
+                            </label>
+                            <input type="text" name="brand" id="d_brand" placeholder="RUBIX, KATRON, BOSCH, HIKVISION, DLINK..."
+                                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
                         </div>
 
                         <div>
-                            <label for="d_model" class="block text-xs font-semibold text-slate-700 mb-1">Modelo</label>
-                            <input type="text" name="model" id="d_model" placeholder="DS-2DE4425IW-DE, etc."
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <label for="d_model" class="block text-xs font-bold text-slate-700 mb-1.5">
+                                <span>Modelo</span>
+                            </label>
+                            <input type="text" name="model" id="d_model" placeholder="Opcional..."
+                                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
                         </div>
                     </div>
 
-                    <!-- Serial e IP -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- 4. Serial y 5. Dirección IP -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                            <label for="d_serial" class="block text-xs font-semibold text-slate-700 mb-1">Número de Serie (S/N)</label>
-                            <input type="text" name="serial_number" id="d_serial" placeholder="SN123456789"
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <label for="d_serial" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-violet-600"></span>
+                                <span>4. Serial (S/N)</span>
+                            </label>
+                            <input type="text" name="serial_number" id="d_serial" placeholder="Ej. ÑAJFDÑJFAD"
+                                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
                         </div>
 
                         <div>
-                            <label for="d_ip" class="block text-xs font-semibold text-slate-700 mb-1">Dirección IP</label>
-                            <input type="text" name="ip_address" id="d_ip" placeholder="192.168.1.100"
-                                   class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label for="d_ip" class="block text-xs font-bold text-slate-700 flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                    <span>5. Dirección IP</span>
+                                </label>
+                                <label class="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer font-medium">
+                                    <input type="checkbox" x-model="ipNotApplicable" class="rounded text-blue-600 focus:ring-0">
+                                    <span>No Aplica</span>
+                                </label>
+                            </div>
+                            <input type="text" name="ip_address" id="d_ip"
+                                   :disabled="ipNotApplicable"
+                                   :value="ipNotApplicable ? 'NO APLICA' : ''"
+                                   placeholder="192.168.100.xx"
+                                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-mono font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:opacity-50">
                         </div>
                     </div>
 
-                    <!-- Estado Inicial -->
-                    <div>
-                        <label for="d_status" class="block text-xs font-semibold text-slate-700 mb-1">Estado Inicial *</label>
-                        <select name="status" id="d_status" required
-                                class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="Operativo" selected>Operativo</option>
-                            <option value="Alerta Menor">Alerta Menor</option>
-                            <option value="En Falla">En Falla</option>
-                            <option value="Mantenimiento">Mantenimiento</option>
-                            <option value="Inactivo">Inactivo</option>
-                        </select>
+                    <!-- Nota Dinámica de Operatividad -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-2.5 text-[11px] text-slate-600 leading-relaxed">
+                        <span class="text-sm">💡</span>
+                        <span>El equipo quedará registrado de inmediato con estado <strong class="text-emerald-700">Operativo</strong>. Su disponibilidad se sincronizará automáticamente según las órdenes de trabajo o fallas reportadas en Incidentes.</span>
                     </div>
 
-                    <!-- Botones -->
-                    <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                    <!-- Botones de Acción -->
+                    <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
                         <button type="button" @click="openModal = false"
-                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                                class="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition">
                             Cancelar
                         </button>
                         <button type="submit"
-                                class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20 transition">
+                                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition">
                             Guardar Equipo
                         </button>
                     </div>
@@ -382,6 +831,183 @@
             </div>
         </div>
     </div>
+
+    {% if is_default_admin %}
+    <!-- ==================== MODAL: TRASLADAR EQUIPO (SOLO ADMIN CON CONTRASEÑA) ==================== -->
+    <div x-show="openRelocateModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-relocate-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="openRelocateModal" @click="openRelocateModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="openRelocateModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-3xl px-5 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:p-7 border border-slate-100">
+                
+                <div class="flex items-start justify-between pb-4 border-b border-slate-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shadow-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-slate-900" id="modal-relocate-title">Trasladar Equipo CCTV</h3>
+                            <p class="text-xs text-slate-500">Reubicación física entre puntos de {{ current_site.name if current_site else 'la sede' }}</p>
+                        </div>
+                    </div>
+                    <button @click="openRelocateModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-xl transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <!-- Resumen del Equipo a Trasladar -->
+                <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Equipo:</span>
+                        <span class="font-bold text-slate-900" x-text="targetDevice.name"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Serial (S/N):</span>
+                        <span class="font-mono font-bold text-slate-700" x-text="targetDevice.serial || 'Sin serial'"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Sitio Actual:</span>
+                        <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200" x-text="targetDevice.sitio || 'General'"></span>
+                    </div>
+                </div>
+
+                <form :action="'/devices/' + targetDevice.id + '/relocate'" method="POST" class="mt-4 space-y-4">
+                    <!-- Nuevo Sitio -->
+                    <div>
+                        <label for="relocate_sitio" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                            <span>Nuevo Sitio o Punto de Instalación *</span>
+                        </label>
+                        <input type="text" list="sitios_list_relocate" name="new_sitio" id="relocate_sitio" required
+                               x-model="targetSitio"
+                               placeholder="Seleccione o escriba el nuevo sitio..."
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                        <datalist id="sitios_list_relocate">
+                            {% for s in sitios %}
+                            <option value="{{ s }}"></option>
+                            {% endfor %}
+                        </datalist>
+                    </div>
+
+                    <!-- Confirmación con Contraseña del Administrador -->
+                    <div>
+                        <label for="relocate_password" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                            <span>Contraseña del Administrador Principal *</span>
+                        </label>
+                        <input type="password" name="admin_password" id="relocate_password" required autocomplete="current-password"
+                               placeholder="Ingrese su contraseña de administrador..."
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none transition">
+                        <p class="text-[10px] text-amber-600 font-medium mt-1">Autorización requerida. Esta reubicación quedará registrada en el log de auditoría.</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                        <button type="button" @click="openRelocateModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5 active:scale-95">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <span>Confirmar Traslado</span>
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: QUITAR EQUIPO (SOLO ADMIN CON CONTRASEÑA) ==================== -->
+    <div x-show="openDeleteModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-delete-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="openDeleteModal" @click="openDeleteModal = false"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="openDeleteModal"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-3xl px-5 pt-6 pb-6 text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full sm:p-7 border border-rose-100">
+                
+                <div class="flex items-start justify-between pb-4 border-b border-rose-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shadow-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-black text-slate-900" id="modal-delete-title">Quitar Equipo del Inventario</h3>
+                            <p class="text-xs text-rose-600 font-semibold">Acción definitiva e irreversible</p>
+                        </div>
+                    </div>
+                    <button @click="openDeleteModal = false" class="text-slate-400 hover:text-slate-600 p-1 rounded-xl transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <!-- Advertencia de Seguridad -->
+                <div class="mt-4 p-3 bg-rose-50/80 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-xs text-rose-900">
+                    <svg class="w-5 h-5 text-rose-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <p class="leading-relaxed">
+                        ¿Está completamente seguro de retirar este equipo del inventario? El registro será eliminado permanentemente. Los incidentes y mantenimientos previos conservarán su historial desvinculado por integridad de auditoría.
+                    </p>
+                </div>
+
+                <!-- Resumen del Equipo a Eliminar -->
+                <div class="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Equipo:</span>
+                        <span class="font-bold text-slate-900" x-text="targetDevice.name"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Serial (S/N):</span>
+                        <span class="font-mono font-bold text-slate-700" x-text="targetDevice.serial || 'Sin serial'"></span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 font-medium">Sitio:</span>
+                        <span class="font-bold text-slate-700" x-text="targetDevice.sitio || 'General'"></span>
+                    </div>
+                </div>
+
+                <form :action="'/devices/' + targetDevice.id + '/delete'" method="POST" class="mt-4 space-y-4">
+                    <!-- Confirmación con Contraseña del Administrador -->
+                    <div>
+                        <label for="delete_password" class="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                            <span>Contraseña del Administrador Principal *</span>
+                        </label>
+                        <input type="password" name="admin_password" id="delete_password" required autocomplete="current-password"
+                               placeholder="Ingrese su contraseña de administrador..."
+                               class="w-full px-3.5 py-2.5 bg-slate-50 border border-rose-300 rounded-xl text-xs text-slate-800 font-medium focus:ring-2 focus:ring-rose-500 focus:outline-none transition">
+                        <p class="text-[10px] text-rose-600 font-medium mt-1">Autorización requerida. Esta acción quedará registrada en el log de auditoría.</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                        <button type="button" @click="openDeleteModal = false"
+                                class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition">
+                            Cancelar
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-500/25 transition flex items-center gap-1.5 active:scale-95">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            <span>Confirmar Eliminación</span>
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

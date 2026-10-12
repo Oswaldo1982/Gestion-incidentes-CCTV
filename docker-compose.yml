@@ -1,5 +1,10 @@
 version: '3.8'
 
+# =============================================================================
+# Estandarización de Concurrencia en Producción (PostgreSQL Exclusivo)
+# Garantiza acceso concurrente multihilo/multiproceso sin bloqueo de base de datos
+# =============================================================================
+
 services:
   db:
     image: postgres:15-alpine
@@ -13,6 +18,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incident_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   web:
     build: .
@@ -21,6 +31,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Conexión obligatoria a PostgreSQL (No SQLite) para alta concurrencia
       - DATABASE_URL=postgresql://postgres:postgres_secure_pass_123@db:5432/incident_db
       - SECRET_KEY=your-super-secret-key-change-it-in-production-12345
       - ACCESS_TOKEN_EXPIRE_MINUTES=60
@@ -29,7 +40,8 @@ services:
       - ADMIN_EMAIL=admin@example.com
       - ADMIN_PASSWORD=admin123
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./static/uploads:/app/static/uploads
 

@@ -1,18 +1,19 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from typing import Optional
+from sqlalchemy import Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.models.base import Base
 
 class Event(Base):
     __tablename__ = "events"
 
-    id = Column(Integer, primary_key=True, index=True)
-    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=True)
-    maintenance_id = Column(Integer, ForeignKey("maintenances.id"), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    event_type = Column(String(50), nullable=False)                 # CREATION, STATUS_CHANGE, COMMENT, ASSIGNMENT, etc.
-    description = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    incident_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("incidents.id"), nullable=True)
+    maintenance_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("maintenances.id"), nullable=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)                 # CREATION, STATUS_CHANGE, COMMENT, ASSIGNMENT, etc.
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     user = relationship("User")
     incident = relationship("Incident")

@@ -1,0 +1,873 @@
+{% extends "base.html" %}
+
+{% block title %}Validación Policial y Conformidad Técnica - CCTV{% endblock %}
+{% block page_title %}Estación de Policía - Centro de Validación Técnica CCTV{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto" x-data="validationComponent()">
+
+    <!-- Feedback Alerts -->
+    {% if msg %}
+    <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-xs">
+        <div class="flex items-center gap-2">
+            <span class="text-base">✅</span>
+            <span>{{ msg }}</span>
+        </div>
+        <button @click="$el.parentElement.remove()" class="text-emerald-700 hover:text-emerald-900 font-bold text-sm">✕</button>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between shadow-xs">
+        <div class="flex items-center gap-2">
+            <span class="text-base">⚠️</span>
+            <span>{{ error }}</span>
+        </div>
+        <button @click="$el.parentElement.remove()" class="text-rose-700 hover:text-rose-900 font-bold text-sm">✕</button>
+    </div>
+    {% endif %}
+
+    <!-- Top Institutional Police Banner -->
+    <div class="relative overflow-hidden bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white p-6 sm:p-7 rounded-3xl shadow-xl border border-blue-900/40">
+        <div class="absolute -right-8 -bottom-10 opacity-10 pointer-events-none">
+            <svg class="w-64 h-64 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+            </svg>
+        </div>
+
+        <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wide uppercase bg-amber-400 text-slate-950 shadow-sm">
+                        <span>🛡️</span>
+                        <span>Estación de Policía Nacional</span>
+                    </span>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold bg-white/10 text-blue-200 backdrop-blur-md border border-white/10">
+                        Sede: <strong>{{ current_site.full_name if current_site else 'Sede Central' }}</strong>
+                    </span>
+                    {% if current_user.badge_number %}
+                    <span class="px-3 py-1 rounded-full text-xs font-black bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                        Placa Policial: #{{ current_user.badge_number }}
+                    </span>
+                    {% endif %}
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    Panel Exclusivo de Auditoría y Validación de Conformidad
+                </h1>
+                <p class="text-xs sm:text-sm text-blue-200/90 max-w-3xl leading-relaxed">
+                    Facultad exclusiva de la Policía Nacional para auditar y dictaminar sobre los mantenimientos preventivos y correctivos finalizados por la <strong>Empresa de Mantenimiento</strong>, certificando actas oficiales en PDF con sello de tiempo y número de placa.
+                </p>
+            </div>
+
+            <div class="shrink-0 flex items-center gap-3">
+                <div class="text-right hidden sm:block">
+                    <p class="text-[10px] text-blue-300 uppercase tracking-widest font-bold">Oficial en Turno</p>
+                    <p class="text-sm font-black text-white">{{ current_user.full_name or current_user.username }}</p>
+                    <p class="text-[11px] text-amber-300 font-semibold">{{ current_user.role }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-2xl shadow-inner">
+                    👮
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4 KPI Strategic Metrics Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 1. Pendientes de Validación -->
+        <div @click="activeTab = 'pending'"
+             class="bg-white p-5 rounded-2xl border-2 cursor-pointer transition transform hover:-translate-y-0.5 shadow-sm"
+             :class="activeTab === 'pending' ? 'border-purple-600 bg-purple-50/40' : 'border-slate-200 hover:border-purple-300'">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black uppercase tracking-wider text-purple-700">Por Validar</span>
+                <span class="p-2 rounded-xl bg-purple-100 text-purple-700 text-sm">🔍</span>
+            </div>
+            <div class="flex items-baseline gap-2 mt-2">
+                <p class="text-3xl font-black text-purple-900">{{ pending_count }}</p>
+                {% if pending_count > 0 %}
+                <span class="w-2.5 h-2.5 rounded-full bg-purple-600 animate-ping"></span>
+                {% endif %}
+            </div>
+            <p class="text-[11px] text-slate-500 mt-1">Órdenes esperando dictamen policial</p>
+        </div>
+
+        <!-- 2. Validados Conformes -->
+        <div @click="activeTab = 'validated'"
+             class="bg-white p-5 rounded-2xl border-2 cursor-pointer transition transform hover:-translate-y-0.5 shadow-sm"
+             :class="activeTab === 'validated' ? 'border-emerald-600 bg-emerald-50/40' : 'border-slate-200 hover:border-emerald-300'">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black uppercase tracking-wider text-emerald-700">Validados Conformes</span>
+                <span class="p-2 rounded-xl bg-emerald-100 text-emerald-700 text-sm">📜</span>
+            </div>
+            <p class="text-3xl font-black text-emerald-900 mt-2">{{ validated_count }}</p>
+            <p class="text-[11px] text-slate-500 mt-1">Actas oficiales PDF generadas</p>
+        </div>
+
+        <!-- 3. Rechazados / Subsanación -->
+        <div @click="activeTab = 'rejected'"
+             class="bg-white p-5 rounded-2xl border-2 cursor-pointer transition transform hover:-translate-y-0.5 shadow-sm"
+             :class="activeTab === 'rejected' ? 'border-rose-600 bg-rose-50/40' : 'border-slate-200 hover:border-rose-300'">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black uppercase tracking-wider text-rose-700">En Subsanación</span>
+                <span class="p-2 rounded-xl bg-rose-100 text-rose-700 text-sm">↩️</span>
+            </div>
+            <p class="text-3xl font-black text-rose-900 mt-2">{{ rejected_count }}</p>
+            <p class="text-[11px] text-slate-500 mt-1">Reactivados con tiempo cero</p>
+        </div>
+
+        <!-- 4. Total Auditados -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-black uppercase tracking-wider text-slate-600">Total Auditados</span>
+                <span class="p-2 rounded-xl bg-slate-100 text-slate-700 text-sm">📊</span>
+            </div>
+            <p class="text-3xl font-black text-slate-900 mt-2">{{ pending_count + validated_count + rejected_count }}</p>
+            <p class="text-[11px] text-slate-500 mt-1">Mantenimientos y tickets CCTV</p>
+        </div>
+    </div>
+
+    <!-- Filter Bar and Search Controls -->
+    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <!-- Tab Selector -->
+        <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-full md:w-auto">
+            <button @click="activeTab = 'pending'"
+                    class="px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 flex-1 md:flex-none justify-center"
+                    :class="activeTab === 'pending' ? 'bg-purple-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                <span>Pendientes</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black" :class="activeTab === 'pending' ? 'bg-purple-900 text-white' : 'bg-slate-200 text-slate-800'">
+                    {{ pending_count }}
+                </span>
+            </button>
+            <button @click="activeTab = 'validated'"
+                    class="px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 flex-1 md:flex-none justify-center"
+                    :class="activeTab === 'validated' ? 'bg-emerald-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                <span>Conformes</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black" :class="activeTab === 'validated' ? 'bg-emerald-900 text-white' : 'bg-slate-200 text-slate-800'">
+                    {{ validated_count }}
+                </span>
+            </button>
+            <button @click="activeTab = 'rejected'"
+                    class="px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 flex-1 md:flex-none justify-center"
+                    :class="activeTab === 'rejected' ? 'bg-rose-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                <span>Rechazados</span>
+                <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black" :class="activeTab === 'rejected' ? 'bg-rose-900 text-white' : 'bg-slate-200 text-slate-800'">
+                    {{ rejected_count }}
+                </span>
+            </button>
+            <button @click="activeTab = 'all'"
+                    class="px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 flex-1 md:flex-none justify-center"
+                    :class="activeTab === 'all' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                <span>Todos</span>
+            </button>
+        </div>
+
+        <!-- Filter by Kind and Search -->
+        <div class="flex items-center gap-3 w-full md:w-auto">
+            <select x-model="filterType"
+                    class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                <option value="all">Todos los Mantenimientos</option>
+                <option value="incident">Mantenimiento Correctivo (Incidentes)</option>
+                <option value="maintenance">Mantenimiento Preventivo (Protocolos)</option>
+            </select>
+
+            <div class="relative flex-1 md:w-64">
+                <input type="text" x-model="searchQuery" placeholder="Buscar por ticket, equipo, técnico..."
+                       class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500">
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Table of Validation Items -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-100/80 border-b border-slate-200 text-[11px] font-black uppercase text-slate-600 tracking-wider">
+                        <th class="px-5 py-3.5">Orden / Ticket</th>
+                        <th class="px-5 py-3.5">Tipo & Prioridad</th>
+                        <th class="px-5 py-3.5">Equipo & Ubicación</th>
+                        <th class="px-5 py-3.5">Técnico & Entrega</th>
+                        <th class="px-5 py-3.5">Estado Dictamen</th>
+                        <th class="px-5 py-3.5 text-center">Evidencias</th>
+                        <th class="px-5 py-3.5 text-right">Acciones Exclusivas</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-xs">
+
+                    <!-- SECCIÓN 1: INCIDENTES (Mantenimiento Correctivo) -->
+                    {% for inc in all_incidents %}
+                    <tr class="hover:bg-slate-50/70 transition"
+                        x-show="shouldShowItem('{{ inc.status }}', '{{ inc.validation_status }}', 'incident', '{{ inc.ticket_code }} {{ inc.title }} {{ inc.location_detail }} {{ inc.device.name if inc.device else '' }} {{ inc.closed_by.full_name if inc.closed_by else '' }}')">
+                        <!-- Código y Título -->
+                        <td class="px-5 py-4 align-top">
+                            <span class="inline-block px-2 py-0.5 rounded-md font-mono text-[11px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                {{ inc.ticket_code }}
+                            </span>
+                            <p class="font-bold text-slate-900 mt-1 line-clamp-1 max-w-xs">{{ inc.title }}</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Reportado: {{ inc.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        </td>
+
+                        <!-- Tipo & Prioridad -->
+                        <td class="px-5 py-4 align-top">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                Mantenimiento Correctivo
+                            </span>
+                            <div class="mt-1 flex items-center gap-1.5 text-[11px]">
+                                <span class="font-semibold text-slate-600">{{ inc.fault_type }}</span>
+                                <span class="text-slate-300">•</span>
+                                <span class="font-bold {% if inc.priority == 'Crítica' %}text-rose-600{% elif inc.priority == 'Alta' %}text-amber-600{% else %}text-slate-600{% endif %}">
+                                    {{ inc.priority }}
+                                </span>
+                            </div>
+                        </td>
+
+                        <!-- Equipo & Ubicación -->
+                        <td class="px-5 py-4 align-top">
+                            <p class="font-bold text-slate-800 flex items-center gap-1">
+                                <span>📹</span>
+                                <span>{{ inc.device.name if inc.device else 'General / Circuito' }}</span>
+                            </p>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                {{ inc.location_detail or inc.sede }}
+                            </p>
+                            {% if inc.device and inc.device.ip_address %}
+                            <p class="text-[10px] font-mono text-blue-600 font-bold mt-0.5">{{ inc.device.ip_address }}</p>
+                            {% endif %}
+                        </td>
+
+                        <!-- Técnico & Cierre -->
+                        <td class="px-5 py-4 align-top">
+                            <p class="font-bold text-slate-800">
+                                {{ inc.closed_by.full_name or inc.closed_by.username if inc.closed_by else 'Empresa de Mantenimiento' }}
+                            </p>
+                            <p class="text-[10px] text-slate-500 font-medium">Rol: Empresa de Mantenimiento</p>
+                            <p class="text-[10px] text-emerald-700 font-bold mt-0.5">
+                                Finalizado: {{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'En atención' }}
+                            </p>
+                        </td>
+
+                        <!-- Estado Dictamen Policial -->
+                        <td class="px-5 py-4 align-top">
+                            {% if inc.status == 'Pendiente de Validación' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+                                <span class="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+                                Pendiente Validación
+                            </span>
+                            <p class="text-[10px] text-purple-700 font-semibold mt-1">Esperando dictamen policial</p>
+                            {% elif inc.status in ['Validado / Conforme', 'Conforme / Validado'] or inc.validation_status == 'Conforme' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span>✓</span>
+                                <span>Validado / Conforme</span>
+                            </span>
+                            <p class="text-[10px] text-slate-500 mt-1">
+                                Por: <strong class="text-slate-800">{{ inc.validator.full_name or inc.validator.username if inc.validator else 'Validador' }}</strong>
+                                {% if inc.validator and inc.validator.badge_number %}
+                                <span class="text-blue-700 font-bold">(Placa #{{ inc.validator.badge_number }})</span>
+                                {% endif %}
+                            </p>
+                            {% elif inc.validation_status == 'Rechazado' or inc.status == 'Rechazado' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                                <span>✕</span>
+                                <span>Rechazado / Subsanación</span>
+                            </span>
+                            <p class="text-[10px] text-rose-700 font-semibold mt-1">Tiempo cero reiniciado</p>
+                            {% else %}
+                            <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                {{ inc.status }}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Evidencias Fotográficas -->
+                        <td class="px-5 py-4 align-top text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                                {% if inc.image_path %}
+                                <button @click="previewImage('{{ inc.image_path }}', 'Evidencia Inicial de la Falla')"
+                                        title="Foto Inicial de Falla"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-slate-300 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ inc.image_path }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if inc.closing_image_path %}
+                                <button @click="previewImage('{{ inc.closing_image_path }}', 'Evidencia de Solución Técnica')"
+                                        title="Foto Solución Técnica"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-emerald-300 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ inc.closing_image_path }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if inc.rejection_photo %}
+                                <button @click="previewImage('{{ inc.rejection_photo }}', 'Evidencia de Rechazo Policial')"
+                                        title="Foto de Observación Policial"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-rose-400 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ inc.rejection_photo }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if not inc.image_path and not inc.closing_image_path and not inc.rejection_photo %}
+                                <span class="text-[10px] text-slate-400 italic">Sin fotos</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Acciones Exclusivas -->
+                        <td class="px-5 py-4 align-top text-right">
+                            <div class="flex flex-col items-end gap-1.5">
+                                {% if inc.status == 'Pendiente de Validación' %}
+                                    {% if current_user.role == 'Validador' %}
+                                    <button @click="openReviewModal({
+                                                type: 'incident',
+                                                id: {{ inc.id }},
+                                                code: '{{ inc.ticket_code }}',
+                                                title: '{{ inc.title|replace('\'', '\\\'') }}',
+                                                kind_label: 'Mantenimiento Correctivo (Incidente)',
+                                                fault: '{{ inc.fault_type }}',
+                                                priority: '{{ inc.priority }}',
+                                                location: '{{ inc.location_detail or inc.sede }}',
+                                                device_name: '{{ inc.device.name if inc.device else 'General' }}',
+                                                device_brand: '{{ inc.device.brand if inc.device else 'N/A' }}',
+                                                device_ip: '{{ inc.device.ip_address if inc.device else 'N/A' }}',
+                                                tech_name: '{{ inc.closed_by.full_name or inc.closed_by.username if inc.closed_by else 'Empresa de Mantenimiento' }}',
+                                                tech_role: 'Empresa de Mantenimiento',
+                                                closed_at: '{{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'N/A' }}',
+                                                findings: '{{ (inc.root_cause or 'Sin causa registrada')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                                actions: '{{ (inc.solution or 'Sin solución registrada')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                                recommendations: '',
+                                                initial_photo: '{{ inc.image_path or '' }}',
+                                                solution_photo: '{{ inc.closing_image_path or '' }}',
+                                                rejection_photo: '{{ inc.rejection_photo or '' }}',
+                                                validation_notes: '{{ (inc.validation_notes or '')|replace('\'', '\\\'') }}'
+                                            })"
+                                            class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white font-black text-xs shadow-md shadow-purple-600/25 transition active:scale-95 flex items-center gap-1.5 animate-pulse">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Revisar y Dictaminar
+                                    </button>
+                                    {% else %}
+                                    <button disabled
+                                            title="Acceso restringido: Solo el Validador (Policía Nacional) tiene permisos para revisar y dictaminar. El Administrador y Supervisor tienen acceso de consulta y descarga de actas."
+                                            class="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 border border-slate-300 font-bold text-xs cursor-not-allowed flex items-center gap-1.5">
+                                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        <span>Revisar y Validar</span>
+                                    </button>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% if inc.status in ['Validado / Conforme', 'Conforme / Validado'] or inc.validation_status == 'Conforme' %}
+                                <a href="/incidents/{{ inc.id }}/certificate.pdf" target="_blank"
+                                   class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] shadow-sm transition flex items-center gap-1.5 active:scale-95">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    Acta Oficial PDF
+                                </a>
+                                {% endif %}
+
+                                {% if inc.validation_status == 'Rechazado' or inc.status == 'Rechazado' %}
+                                <button @click="showObservationsModal('{{ inc.ticket_code }}', '{{ (inc.validation_notes or 'Sin observaciones registradas')|replace('\'', '\\\'') }}', '{{ inc.rejection_photo or '' }}')"
+                                        class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-[10px] transition">
+                                    Ver Observaciones
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    <!-- SECCIÓN 2: MANTENIMIENTOS PREVENTIVOS -->
+                    {% for m in all_maintenances %}
+                    <tr class="hover:bg-slate-50/70 transition"
+                        x-show="shouldShowItem('{{ m.status }}', '{{ m.validation_status }}', 'maintenance', '{{ m.code }} {{ m.title }} {{ m.location_detail }} {{ m.device.name if m.device else '' }} {{ m.completed_by.full_name if m.completed_by else '' }}')">
+                        <!-- Código y Título -->
+                        <td class="px-5 py-4 align-top">
+                            <span class="inline-block px-2 py-0.5 rounded-md font-mono text-[11px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                {{ m.code }}
+                            </span>
+                            <p class="font-bold text-slate-900 mt-1 line-clamp-1 max-w-xs">{{ m.title }}</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Programado: {{ m.scheduled_date.strftime('%d/%m/%Y') }}</p>
+                        </td>
+
+                        <!-- Tipo & Prioridad -->
+                        <td class="px-5 py-4 align-top">
+                            <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                {{ m.cycle_label }}
+                            </span>
+                            <div class="mt-1 flex items-center gap-1.5 text-[11px]">
+                                <span class="font-semibold text-slate-600">Preventivo</span>
+                                <span class="text-slate-300">•</span>
+                                <span class="font-bold text-slate-600">{{ m.priority }}</span>
+                            </div>
+                        </td>
+
+                        <!-- Equipo & Ubicación -->
+                        <td class="px-5 py-4 align-top">
+                            <p class="font-bold text-slate-800 flex items-center gap-1">
+                                <span>📹</span>
+                                <span>{{ m.device.name if m.device else 'General / Punto de Monitoreo' }}</span>
+                            </p>
+                            <p class="text-[11px] text-slate-500 mt-0.5">
+                                {{ m.location_detail or m.sede }}
+                            </p>
+                            {% if m.device and m.device.ip_address %}
+                            <p class="text-[10px] font-mono text-blue-600 font-bold mt-0.5">{{ m.device.ip_address }}</p>
+                            {% endif %}
+                        </td>
+
+                        <!-- Técnico & Cierre -->
+                        <td class="px-5 py-4 align-top">
+                            <p class="font-bold text-slate-800">
+                                {{ m.completed_by.full_name or m.completed_by.username if m.completed_by else 'Empresa de Mantenimiento' }}
+                            </p>
+                            <p class="text-[10px] text-slate-500 font-medium">Rol: Empresa de Mantenimiento</p>
+                            <p class="text-[10px] text-emerald-700 font-bold mt-0.5">
+                                Finalizado: {{ m.completed_date.strftime('%d/%m/%Y %H:%M') if m.completed_date else 'En ejecución' }}
+                            </p>
+                        </td>
+
+                        <!-- Estado Dictamen Policial -->
+                        <td class="px-5 py-4 align-top">
+                            {% if m.status == 'Pendiente de Validación' %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+                                <span class="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+                                Pendiente Validación
+                            </span>
+                            <p class="text-[10px] text-purple-700 font-semibold mt-1">Esperando dictamen policial</p>
+                            {% elif m.status in ['Validado / Conforme', 'Conforme / Validado'] or m.validation_status == 'Conforme' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span>✓</span>
+                                <span>Validado / Conforme</span>
+                            </span>
+                            <p class="text-[10px] text-slate-500 mt-1">
+                                Por: <strong class="text-slate-800">{{ m.validator.full_name or m.validator.username if m.validator else 'Validador' }}</strong>
+                                {% if m.validator and m.validator.badge_number %}
+                                <span class="text-blue-700 font-bold">(Placa #{{ m.validator.badge_number }})</span>
+                                {% endif %}
+                            </p>
+                            {% elif m.validation_status == 'Rechazado' or m.status == 'Rechazado' %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                                <span>✕</span>
+                                <span>Rechazado / Subsanación</span>
+                            </span>
+                            <p class="text-[10px] text-rose-700 font-semibold mt-1">Tiempo cero reiniciado</p>
+                            {% else %}
+                            <span class="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                {{ m.status }}
+                            </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Evidencias Fotográficas -->
+                        <td class="px-5 py-4 align-top text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                                {% if m.image_path %}
+                                <button @click="previewImage('{{ m.image_path }}', 'Evidencia Previa de Mantenimiento')"
+                                        title="Foto Previa"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-slate-300 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ m.image_path }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if m.completion_photo %}
+                                <button @click="previewImage('{{ m.completion_photo }}', 'Evidencia de Cierre de Protocolo')"
+                                        title="Foto Cierre Técnico"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-emerald-300 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ m.completion_photo }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if m.rejection_photo %}
+                                <button @click="previewImage('{{ m.rejection_photo }}', 'Evidencia de Rechazo Policial')"
+                                        title="Foto de Observación Policial"
+                                        class="w-9 h-9 rounded-lg overflow-hidden border border-rose-400 shadow-2xs hover:scale-105 transition">
+                                    <img src="{{ m.rejection_photo }}" class="w-full h-full object-cover">
+                                </button>
+                                {% endif %}
+
+                                {% if not m.image_path and not m.completion_photo and not m.rejection_photo %}
+                                <span class="text-[10px] text-slate-400 italic">Sin fotos</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Acciones Exclusivas -->
+                        <td class="px-5 py-4 align-top text-right">
+                            <div class="flex flex-col items-end gap-1.5">
+                                {% if m.status == 'Pendiente de Validación' %}
+                                    {% if current_user.role == 'Validador' %}
+                                    <button @click="openReviewModal({
+                                                type: 'maintenance',
+                                                id: {{ m.id }},
+                                                code: '{{ m.code }}',
+                                                title: '{{ m.title|replace('\'', '\\\'') }}',
+                                                kind_label: 'Mantenimiento Preventivo ({{ m.cycle_label }})',
+                                                fault: 'Preventivo Planificado',
+                                                priority: '{{ m.priority }}',
+                                                location: '{{ m.location_detail or m.sede }}',
+                                                device_name: '{{ m.device.name if m.device else 'General' }}',
+                                                device_brand: '{{ m.device.brand if m.device else 'N/A' }}',
+                                                device_ip: '{{ m.device.ip_address if m.device else 'N/A' }}',
+                                                tech_name: '{{ m.completed_by.full_name or m.completed_by.username if m.completed_by else 'Empresa de Mantenimiento' }}',
+                                                tech_role: 'Empresa de Mantenimiento',
+                                                closed_at: '{{ m.completed_date.strftime('%d/%m/%Y %H:%M') if m.completed_date else 'N/A' }}',
+                                                findings: '{{ (m.technical_findings or 'Inspección técnica satisfactoria')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                                actions: '{{ (m.actions_taken or 'Protocolo preventivo ejecutado en campo')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                                recommendations: '{{ (m.recommendations or 'Ninguna recomendación')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                                initial_photo: '{{ m.image_path or '' }}',
+                                                solution_photo: '{{ m.completion_photo or '' }}',
+                                                rejection_photo: '{{ m.rejection_photo or '' }}',
+                                                validation_notes: '{{ (m.validation_notes or '')|replace('\'', '\\\'') }}'
+                                            })"
+                                            class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white font-black text-xs shadow-md shadow-purple-600/25 transition active:scale-95 flex items-center gap-1.5 animate-pulse">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Revisar y Dictaminar
+                                    </button>
+                                    {% else %}
+                                    <button disabled
+                                            title="Acceso restringido: Solo el Validador (Policía Nacional) tiene permisos para revisar y dictaminar. El Administrador y Supervisor tienen acceso de consulta y descarga de actas."
+                                            class="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 border border-slate-300 font-bold text-xs cursor-not-allowed flex items-center gap-1.5">
+                                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        <span>Revisar y Validar</span>
+                                    </button>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% if m.status in ['Validado / Conforme', 'Conforme / Validado'] or m.validation_status == 'Conforme' %}
+                                <a href="/maintenance/{{ m.id }}/certificate.pdf" target="_blank"
+                                   class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] shadow-sm transition flex items-center gap-1.5 active:scale-95">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    Acta Oficial PDF
+                                </a>
+                                {% endif %}
+
+                                {% if m.validation_status == 'Rechazado' or m.status == 'Rechazado' %}
+                                <button @click="showObservationsModal('{{ m.code }}', '{{ (m.validation_notes or 'Sin observaciones registradas')|replace('\'', '\\\'') }}', '{{ m.rejection_photo or '' }}')"
+                                        class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-[10px] transition">
+                                    Ver Observaciones
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if not all_incidents and not all_maintenances %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-400 bg-slate-50/50">
+                            <p class="text-3xl">🛡️</p>
+                            <p class="font-bold text-slate-700 text-sm mt-2">Sin órdenes registradas en esta sede</p>
+                            <p class="text-xs text-slate-500">No hay órdenes preventivas ni correctivas pendientes de auditoría policial.</p>
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- MODAL PRINCIPAL: REVISIÓN Y DICTAMEN DE CONFORMIDAD POLICIAL -->
+    <div x-show="reviewModal" x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div @click.away="reviewModal = null"
+             class="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden transform transition-all my-8">
+
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white p-6 flex items-start justify-between gap-4">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/30 flex items-center justify-center text-2xl shrink-0">
+                        🛡️
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 uppercase" x-text="reviewModal?.code"></span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white" x-text="reviewModal?.kind_label"></span>
+                        </div>
+                        <h3 class="text-lg font-black text-white mt-1" x-text="reviewModal?.title"></h3>
+                        <p class="text-xs text-blue-200">Revisión técnica de trabajo finalizado por el contratista</p>
+                    </div>
+                </div>
+                <button @click="reviewModal = null" class="text-white/70 hover:text-white font-black text-xl p-1 rounded-lg">✕</button>
+            </div>
+
+            <!-- Modal Body Details -->
+            <div class="p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
+
+                <!-- 1. Ficha del Equipo y Localización -->
+                <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <p class="font-black text-[11px] uppercase tracking-wider text-slate-700">1. Dispositivo CCTV Intervenido & Punto</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                        <div>
+                            <span class="text-slate-400 block text-[10px]">Equipo:</span>
+                            <strong class="text-slate-800 text-xs" x-text="reviewModal?.device_name"></strong>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block text-[10px]">Marca / IP:</span>
+                            <span class="text-slate-700" x-text="(reviewModal?.device_brand || 'CCTV') + ' • ' + (reviewModal?.device_ip || 'DHCP')"></span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400 block text-[10px]">Ubicación Física:</span>
+                            <span class="text-slate-700 font-semibold" x-text="reviewModal?.location"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Personal Técnico Responsable (Empresa de Mantenimiento) -->
+                <div class="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-2">
+                    <p class="font-black text-[11px] uppercase tracking-wider text-blue-900">2. Personal Técnico Responsable (Empresa de Mantenimiento)</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                            <span class="text-blue-600 block text-[10px]">Técnico de Campo:</span>
+                            <strong class="text-slate-900 text-xs" x-text="reviewModal?.tech_name"></strong>
+                            <p class="text-[10px] text-blue-700 font-medium">Rol: Empresa de Mantenimiento</p>
+                        </div>
+                        <div>
+                            <span class="text-blue-600 block text-[10px]">Fecha y Hora de Cierre Técnico:</span>
+                            <strong class="text-slate-900 text-xs" x-text="reviewModal?.closed_at"></strong>
+                            <p class="text-[10px] text-emerald-700 font-bold">Estado: Finalizado para Validación</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Detalle de Labores y Solución Técnica -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                        <span class="font-black text-[10px] uppercase tracking-wider text-slate-500 block">Diagnóstico / Hallazgos</span>
+                        <p class="text-slate-800 leading-relaxed font-medium" x-text="reviewModal?.findings || 'Sin observaciones previas'"></p>
+                    </div>
+                    <div class="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-1">
+                        <span class="font-black text-[10px] uppercase tracking-wider text-emerald-800 block">Solución Técnica / Acciones Ejecutadas</span>
+                        <p class="text-slate-800 leading-relaxed font-medium" x-text="reviewModal?.actions || 'Mantenimiento integral ejecutado'"></p>
+                    </div>
+                </div>
+
+                <!-- 4. Registro Fotográfico de Evidencias -->
+                <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <p class="font-black text-[11px] uppercase tracking-wider text-slate-700">4. Evidencias Fotográficas Registradas en Sitio</p>
+                    <div class="grid grid-cols-2 gap-4 pt-1">
+                        <!-- Foto 1 -->
+                        <div class="text-center space-y-1">
+                            <span class="text-[10px] font-bold text-slate-500 block">Condición Inicial / Falla</span>
+                            <template x-if="reviewModal?.initial_photo">
+                                <div class="relative group rounded-xl overflow-hidden border border-slate-300 shadow-sm aspect-video bg-black/5">
+                                    <img :src="reviewModal?.initial_photo" class="w-full h-full object-cover">
+                                </div>
+                            </template>
+                            <template x-if="!reviewModal?.initial_photo">
+                                <div class="rounded-xl border border-dashed border-slate-300 p-6 text-slate-400 italic text-[11px]">
+                                    Sin fotografía inicial
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Foto 2 -->
+                        <div class="text-center space-y-1">
+                            <span class="text-[10px] font-bold text-emerald-700 block">Cierre Técnico / Solución</span>
+                            <template x-if="reviewModal?.solution_photo">
+                                <div class="relative group rounded-xl overflow-hidden border border-emerald-300 shadow-sm aspect-video bg-black/5">
+                                    <img :src="reviewModal?.solution_photo" class="w-full h-full object-cover">
+                                </div>
+                            </template>
+                            <template x-if="!reviewModal?.solution_photo">
+                                <div class="rounded-xl border border-dashed border-slate-300 p-6 text-slate-400 italic text-[11px]">
+                                    Sin fotografía de cierre
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Dictamen Policial / Auditoría -->
+                {% if current_user.role == 'Validador' %}
+                <div class="p-5 rounded-2xl bg-gradient-to-br from-indigo-50/70 to-purple-50/70 border border-indigo-200 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <p class="font-black text-xs uppercase tracking-wider text-indigo-900">
+                            5. Dictamen y Firma Institucional del Validador Policial
+                        </p>
+                        <span class="text-[11px] font-bold text-indigo-700">
+                            Oficial: {{ current_user.full_name or current_user.username }} (Placa: #{{ current_user.badge_number or 'No registrada' }})
+                        </span>
+                    </div>
+
+                    <!-- FORMULARIO DE ACCIÓN -->
+                    <form :action="reviewModal?.type === 'incident' ? ('/incidents/' + reviewModal?.id + '/validate') : ('/maintenance/' + reviewModal?.id + '/validate')"
+                          method="POST" enctype="multipart/form-data" class="space-y-4" id="policeValidationForm">
+
+                        <input type="hidden" name="redirect_to" value="/validation">
+
+                        <!-- Campo de Observaciones (Obligatorio en Rechazo, Opcional en Aprobación) -->
+                        <div>
+                            <label class="block text-xs font-bold text-slate-800 mb-1">
+                                Observaciones y Justificación del Dictamen Técnico:
+                            </label>
+                            <textarea name="validation_notes" rows="3" required
+                                      placeholder="Indica las razones técnicas de conformidad o describe detalladamente las falencias encontradas para que el equipo técnico subsane..."
+                                      class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 shadow-2xs"></textarea>
+                        </div>
+
+                        <!-- Carga Opcional de Registro Fotográfico de Rechazo -->
+                        <div x-show="pendingAction === 'reject'" x-cloak class="p-3.5 bg-rose-50 rounded-xl border border-rose-200 space-y-1.5">
+                            <label class="block text-xs font-bold text-rose-900">
+                                📷 Registro Fotográfico de Evidencia de Rechazo (Opcional):
+                            </label>
+                            <input type="file" name="rejection_photo" accept="image/*"
+                                   class="block w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-rose-600 file:text-white hover:file:bg-rose-700">
+                            <p class="text-[10px] text-rose-700">
+                                Al rechazar, el ticket se <strong>reiniciará con tiempo cero</strong> y regresará a la Empresa de Mantenimiento para su corrección.
+                            </p>
+                        </div>
+
+                        <!-- Botones de Acción Claros -->
+                        <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+                            <!-- Botón Rechazar -->
+                            <button type="submit" name="action" value="reject"
+                                    @click="pendingAction = 'reject'"
+                                    class="w-full sm:w-auto px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs shadow-md shadow-rose-600/25 transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                <span>Rechazar con Observaciones</span>
+                            </button>
+
+                            <!-- Botón Aprobar -->
+                            <button type="submit" name="action" value="approve"
+                                    @click="pendingAction = 'approve'"
+                                    class="w-full sm:w-auto px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                <span>Aprobar y Validar Trabajo</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {% else %}
+                <!-- MODO AUDITORÍA Y LECTURA PARA ADMINISTRADOR Y SUPERVISOR -->
+                <div class="p-5 rounded-2xl bg-slate-100 border border-slate-200 space-y-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm">
+                            🔒
+                        </div>
+                        <div>
+                            <p class="font-bold text-slate-800 text-xs">Modo Auditoría y Consulta ({{ current_user.role }})</p>
+                            <p class="text-[11px] text-slate-500">
+                                Como {{ current_user.role }}, usted tiene acceso completo para conocer y consultar los detalles técnicos, evidencias y descargar las actas oficiales en PDF.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-[11px] text-amber-900 flex items-center gap-2">
+                        <span>ℹ️</span>
+                        <span>La función de <strong>Revisar y Validar</strong> (aprobar o rechazar dictamen) es facultad exclusiva del <strong>Validador (Policía Nacional)</strong>.</span>
+                    </div>
+                    <div class="flex justify-end pt-1">
+                        <button type="button" @click="reviewModal = null"
+                                class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition">
+                            Cerrar Visualización
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL DE VISUALIZACIÓN DE IMÁGENES -->
+    <div x-show="imageModal" x-cloak
+         class="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div @click.away="imageModal = null" class="max-w-3xl w-full bg-white rounded-2xl overflow-hidden shadow-2xl">
+            <div class="p-3 bg-slate-900 text-white flex items-center justify-between">
+                <span class="text-xs font-bold" x-text="imageModalTitle"></span>
+                <button @click="imageModal = null" class="text-white hover:text-slate-300 font-bold px-2">✕</button>
+            </div>
+            <div class="p-2 bg-black flex items-center justify-center max-h-[80vh]">
+                <img :src="imageModal" class="max-w-full max-h-[75vh] object-contain">
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONSULTA DE OBSERVACIONES DE RECHAZO -->
+    <div x-show="obsModal" x-cloak
+         class="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div @click.away="obsModal = null" class="max-w-lg w-full bg-white rounded-2xl p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="p-2 rounded-xl bg-rose-100 text-rose-700 text-sm">↩️</span>
+                    <h3 class="font-black text-slate-900 text-sm">Observaciones de Rechazo Policial</h3>
+                </div>
+                <button @click="obsModal = null" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+            <div>
+                <span class="text-[10px] text-slate-400 block uppercase font-bold" x-text="obsCode"></span>
+                <p class="text-xs text-slate-800 leading-relaxed font-medium bg-rose-50/60 p-3.5 rounded-xl border border-rose-200 mt-1" x-text="obsNotes"></p>
+            </div>
+            <template x-if="obsPhoto">
+                <div>
+                    <span class="text-[10px] text-slate-500 font-bold block mb-1">Evidencia Fotográfica de la Novedad:</span>
+                    <img :src="obsPhoto" class="rounded-xl border border-rose-300 max-h-48 w-full object-cover">
+                </div>
+            </template>
+            <div class="text-right pt-2">
+                <button @click="obsModal = null" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+function validationComponent() {
+    return {
+        activeTab: '{{ status_filter if status_filter in ["pending", "validated", "rejected", "all"] else "pending" }}',
+        filterType: '{{ type_filter or "all" }}',
+        searchQuery: '',
+        reviewModal: null,
+        pendingAction: 'approve',
+        imageModal: null,
+        imageModalTitle: '',
+        obsModal: null,
+        obsCode: '',
+        obsNotes: '',
+        obsPhoto: '',
+
+        shouldShowItem(status, valStatus, itemType, textSearch) {
+            // 1. Filtro de Tipo
+            if (this.filterType !== 'all' && this.filterType !== itemType) {
+                return false;
+            }
+
+            // 2. Filtro de Pestaña Activa
+            if (this.activeTab === 'pending') {
+                if (status !== 'Pendiente de Validación') return false;
+            } else if (this.activeTab === 'validated') {
+                if (!['Validado / Conforme', 'Conforme / Validado'].includes(status) && valStatus !== 'Conforme') return false;
+            } else if (this.activeTab === 'rejected') {
+                if (status !== 'Rechazado' && valStatus !== 'Rechazado') return false;
+            }
+
+            // 3. Filtro de Texto
+            if (this.searchQuery && this.searchQuery.trim() !== '') {
+                const q = this.searchQuery.trim().toLowerCase();
+                if (!textSearch.toLowerCase().includes(q)) return false;
+            }
+
+            return true;
+        },
+
+        openReviewModal(item) {
+            this.reviewModal = item;
+            this.pendingAction = 'approve';
+        },
+
+        previewImage(url, title) {
+            this.imageModal = url;
+            this.imageModalTitle = title || 'Evidencia Fotográfica';
+        },
+
+        showObservationsModal(code, notes, photo) {
+            this.obsCode = code;
+            this.obsNotes = notes;
+            this.obsPhoto = photo;
+            this.obsModal = true;
+        }
+    };
+}
+</script>
+{% endblock %}

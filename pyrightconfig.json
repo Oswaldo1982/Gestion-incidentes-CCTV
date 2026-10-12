@@ -1,0 +1,12 @@
+{
+    "venvPath": ".",
+    "venv": "venv",
+    "extraPaths": [
+        "."
+    ],
+    "pythonVersion": "3.13",
+    "pythonPlatform": "Windows",
+    "typeCheckingMode": "standard",
+    "reportMissingImports": false,
+    "reportMissingTypeStubs": false
+}

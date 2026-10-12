@@ -6,5 +6,6 @@ from app.models.incident import Incident
 from app.models.maintenance import Maintenance
 from app.models.event import Event
 from app.models.device import Device
+from app.models.site import Site
 
-__all__ = ["Base", "User", "License", "AuditLog", "Incident", "Maintenance", "Event", "Device"]
+__all__ = ["Base", "User", "License", "AuditLog", "Incident", "Maintenance", "Event", "Device", "Site"]
