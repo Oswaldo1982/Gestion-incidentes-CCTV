@@ -14,6 +14,126 @@
     selectedCreateRole: 'Validador',
     copiedUser: false,
     copiedPass: false,
+    adminSigMode: 'draw',
+    hasAdminSig: {{ 'true' if current_user.signature_path else 'false' }},
+    adminSigData: '',
+    adminUploadedPreview: '',
+    adminUploadedFileName: '',
+    showAdminSigPad: {{ 'false' if current_user.signature_path else 'true' }},
+    isAdminDrawing: false,
+    adminLastX: 0,
+    adminLastY: 0,
+    adminStrokeCount: 0,
+
+    init() {
+        this.$watch('openProfileModal', (value) => {
+            if (value) {
+                setTimeout(() => this.initAdminCanvas(), 100);
+            }
+        });
+        if (this.openProfileModal) {
+            setTimeout(() => this.initAdminCanvas(), 100);
+        }
+    },
+    initAdminCanvas() {
+        this.$nextTick(() => {
+            const canvas = document.getElementById('adminSignatureCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#0F2942';
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        });
+    },
+    getAdminPos(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    },
+    startAdminDraw(e) {
+        const canvas = document.getElementById('adminSignatureCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        this.isAdminDrawing = true;
+        const pos = this.getAdminPos(e, canvas);
+        this.adminLastX = pos.x;
+        this.adminLastY = pos.y;
+        ctx.beginPath();
+        ctx.moveTo(this.adminLastX, this.adminLastY);
+    },
+    adminDrawing(e) {
+        if (!this.isAdminDrawing) return;
+        if (e.cancelable && e.touches) e.preventDefault();
+        const canvas = document.getElementById('adminSignatureCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const pos = this.getAdminPos(e, canvas);
+        ctx.beginPath();
+        ctx.moveTo(this.adminLastX, this.adminLastY);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        this.adminLastX = pos.x;
+        this.adminLastY = pos.y;
+        this.adminStrokeCount++;
+        if (this.adminStrokeCount > 4) {
+            this.adminSigData = canvas.toDataURL('image/png');
+            this.hasAdminSig = true;
+        }
+    },
+    stopAdminDraw() {
+        if (this.isAdminDrawing) {
+            this.isAdminDrawing = false;
+            const canvas = document.getElementById('adminSignatureCanvas');
+            if (canvas && this.adminStrokeCount > 4) {
+                this.adminSigData = canvas.toDataURL('image/png');
+                this.hasAdminSig = true;
+            }
+        }
+    },
+    clearAdminCanvas() {
+        const canvas = document.getElementById('adminSignatureCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        this.adminSigData = '';
+        this.adminStrokeCount = 0;
+        {% if not current_user.signature_path %}
+        this.hasAdminSig = false;
+        {% endif %}
+    },
+    handleAdminFileUpload(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Por favor selecciona un archivo de imagen válido (PNG, JPG, WEBP).');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            this.adminSigData = event.target.result;
+            this.adminUploadedPreview = event.target.result;
+            this.adminUploadedFileName = file.name;
+            this.hasAdminSig = true;
+        };
+        reader.readAsDataURL(file);
+    },
+    clearAdminUpload() {
+        this.adminSigData = '';
+        this.adminUploadedPreview = '';
+        this.adminUploadedFileName = '';
+        const input = document.getElementById('adminSigFileInput');
+        if (input) input.value = '';
+        {% if not current_user.signature_path %}
+        this.hasAdminSig = false;
+        {% endif %}
+    },
     async copyAll() {
         const text = 'SISTEMA CCTV - CREDENCIALES TEMPORALES (VIGENCIA 24 HORAS)\n' +
                      'Funcionario: {{ new_credentials.name if new_credentials else '' }}\n' +
@@ -680,14 +800,124 @@
                         </div>
                     </div>
 
+                    <!-- 6. Firma Digital del Administrador (Obligatoria: 2 Opciones) -->
+                    <div class="pt-2 border-t border-slate-200">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-semibold text-slate-700">Firma Digital del Administrador *</label>
+                            <span class="text-[10px]" :class="hasAdminSig ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'">
+                                <span x-show="hasAdminSig">✓ Firma Configurada</span>
+                                <span x-show="!hasAdminSig">⚠️ Firma Obligatoria</span>
+                            </span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mb-2">
+                            Firma oficial requerida para suscribir informes ejecutivos y actas de supervisión de CCTV.
+                        </p>
+
+                        <!-- Previsualización de Firma Actual si existe -->
+                        {% if current_user.signature_path %}
+                        <div x-show="!showAdminSigPad" class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3 mb-2">
+                            <div class="flex items-center gap-3">
+                                <img src="{{ current_user.signature_path }}" class="h-10 max-w-[130px] object-contain border border-slate-300 rounded p-1 bg-white shadow-sm" alt="Firma Actual">
+                                <div>
+                                    <span class="text-xs font-bold text-slate-800 block">Firma Digital Activa</span>
+                                    <span class="text-[10px] text-emerald-600 block">Registrada en plataforma</span>
+                                </div>
+                            </div>
+                            <button type="button" @click="showAdminSigPad = true; initAdminCanvas()"
+                                    class="px-2.5 py-1 text-xs text-purple-700 hover:bg-purple-50 font-bold rounded-lg border border-purple-200 transition">
+                                Cambiar Firma
+                            </button>
+                        </div>
+                        {% endif %}
+
+                        <!-- Contenedor para dibujar o subir firma -->
+                        <div x-show="showAdminSigPad" class="space-y-2">
+                            <!-- Selector de opción: Dibujar con mouse o Cargar Imagen -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" @click="adminSigMode = 'draw'; initAdminCanvas()"
+                                        :class="adminSigMode === 'draw' ? 'bg-purple-600 text-white font-bold border-purple-600 shadow-sm' : 'bg-slate-100 text-slate-600 hover:text-slate-900 border-slate-300'"
+                                        class="px-3 py-1.5 rounded-lg text-xs border flex items-center justify-center gap-1.5 transition">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                    </svg>
+                                    <span>Dibujar con Mouse</span>
+                                </button>
+                                <button type="button" @click="adminSigMode = 'upload'"
+                                        :class="adminSigMode === 'upload' ? 'bg-purple-600 text-white font-bold border-purple-600 shadow-sm' : 'bg-slate-100 text-slate-600 hover:text-slate-900 border-slate-300'"
+                                        class="px-3 py-1.5 rounded-lg text-xs border flex items-center justify-center gap-1.5 transition">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span>Cargar Imagen</span>
+                                </button>
+                            </div>
+
+                            <!-- Opción 1: Lienzo de Dibujo -->
+                            <div x-show="adminSigMode === 'draw'" class="space-y-1">
+                                <div class="relative bg-white rounded-xl border border-slate-300 overflow-hidden shadow-inner">
+                                    <canvas id="adminSignatureCanvas" width="460" height="110"
+                                            class="w-full h-24 block bg-white cursor-crosshair touch-none"
+                                            @mousedown="startAdminDraw($event)"
+                                            @mousemove="adminDrawing($event)"
+                                            @mouseup="stopAdminDraw()"
+                                            @mouseleave="stopAdminDraw()"
+                                            @touchstart="startAdminDraw($event)"
+                                            @touchmove="adminDrawing($event)"
+                                            @touchend="stopAdminDraw()"></canvas>
+                                    <div class="absolute bottom-1 right-1">
+                                        <button type="button" @click="clearAdminCanvas()"
+                                                class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded border border-slate-300 transition">
+                                            Limpiar
+                                        </button>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] text-slate-400 block">✍️ Dibuja con el mouse o trazo táctil sobre el recuadro blanco.</span>
+                            </div>
+
+                            <!-- Opción 2: Cargar Imagen -->
+                            <div x-show="adminSigMode === 'upload'" class="space-y-1">
+                                <input type="file" id="adminSigFileInput" accept="image/png,image/jpeg,image/webp" class="hidden"
+                                       @change="handleAdminFileUpload($event)">
+                                
+                                <div x-show="!adminUploadedPreview"
+                                     @click="document.getElementById('adminSigFileInput').click()"
+                                     class="border-2 border-dashed border-slate-300 hover:border-purple-500 bg-slate-50 rounded-xl p-3 text-center cursor-pointer transition">
+                                    <span class="text-xs font-semibold text-slate-700 block">Haz clic para seleccionar imagen de firma</span>
+                                    <span class="text-[10px] text-slate-400 block mt-0.5">PNG, JPG o WEBP con fondo blanco o transparente</span>
+                                </div>
+
+                                <div x-show="adminUploadedPreview" class="bg-white rounded-xl p-2 border border-slate-300 flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <img :src="adminUploadedPreview" class="h-9 max-w-[100px] object-contain border border-slate-200 rounded p-0.5 bg-white">
+                                        <span class="text-xs font-bold text-slate-800 truncate" x-text="adminUploadedFileName"></span>
+                                    </div>
+                                    <button type="button" @click="clearAdminUpload()" class="px-2 py-0.5 text-xs text-rose-600 hover:bg-rose-50 rounded font-bold border border-rose-200 transition">
+                                        Quitar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {% if current_user.signature_path %}
+                            <div class="text-right">
+                                <button type="button" @click="showAdminSigPad = false; adminSigData = ''" class="text-[10px] text-slate-500 hover:text-slate-700 underline">
+                                    Cancelar cambio y conservar firma actual
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Input oculto para enviar al backend -->
+                        <input type="hidden" name="signature_data" :value="adminSigData">
+                    </div>
+
                     <!-- Botones de Acción -->
                     <div class="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
                         <button type="button" @click="openProfileModal = false"
                                 class="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
                             Cancelar
                         </button>
-                        <button type="submit"
-                                class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition flex items-center gap-1.5">
+                        <button type="submit" :disabled="!hasAdminSig"
+                                class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-purple-600/20 transition flex items-center gap-1.5">
                             <span>💾 Guardar Cambios</span>
                         </button>
                     </div>

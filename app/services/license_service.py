@@ -41,8 +41,8 @@ def check_license_validity(db: Session, site_id: str | None = None) -> tuple[boo
     - Si se especifica site_id, evalúa el estado del sitio (período de gracia 24h, año 1/2/3).
     - Mantiene compatibilidad con el modelo de licencia legacy.
     """
-    if settings.DEV_MODE:
-        return True, "Modo desarrollador activo (DEV_MODE=True). Todas las restricciones están desactivadas."
+    if getattr(settings, "SUSPEND_SITE_LICENSING", True) or settings.DEV_MODE:
+        return True, "Licenciamiento multi-sede suspendido por el administrador."
 
     if site_id:
         status_info = get_site_license_status(db, site_id)

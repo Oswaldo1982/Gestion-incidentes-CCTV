@@ -3,12 +3,13 @@ from typing import Optional
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.models.base import Base
+from app.utils.timezone import get_local_now
 
 class Maintenance(Base):
     __tablename__ = "maintenances"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)                         # Preventivo, Correctivo
+    type: Mapped[str] = mapped_column(String(20), nullable=False)                         # Preventivo, Proactivo
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     scheduled_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
@@ -20,7 +21,7 @@ class Maintenance(Base):
     
     incident_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("incidents.id"), nullable=True)
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
 
     protocol_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     maintenance_type: Mapped[Optional[str]] = mapped_column(String(50), default="Preventivo Mensual", nullable=True)  # Inspección Rutinaria, Preventivo Mensual, Preventivo Trimestral, Preventivo Semestral, Preventivo Anual Integral
@@ -42,6 +43,12 @@ class Maintenance(Base):
     rejection_photo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     timer_reset_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Confiabilidad, Análisis de Causa Raíz (RCA) y Taxonomía de Activos (ISO 14224 / CMMS)
+    rca_cause_factor: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    rca_failure_mechanism: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    operating_condition: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    asset_component: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     incident = relationship("Incident")
     creator = relationship("User", foreign_keys=[created_by_id])
     completed_by = relationship("User", foreign_keys=[completed_by_id])
@@ -52,8 +59,45 @@ class Maintenance(Base):
     def code(self):
         if self.protocol_code:
             return self.protocol_code
-        year = self.created_at.year if self.created_at else datetime.datetime.utcnow().year
-        return f"MP-{year}-{self.id:04d}"
+        prefix = "CCTV"
+        if self.sede:
+            s = self.sede.lower()
+            if "agustin" in s or "agustín" in s:
+                prefix = "SAN"
+            elif "jose" in s or "josé" in s or "guaviare" in s:
+                prefix = "SJG"
+            elif "retorno" in s:
+                prefix = "RET"
+            elif "calamar" in s:
+                prefix = "CAL"
+        return f"MP-{prefix}-{self.id:04d}"
+
+    @property
+    def is_validated(self) -> bool:
+        return (
+            self.validation_status in ["Conforme", "Validado / Conforme", "Conforme / Validado"]
+            or "Validado" in (self.status or "")
+            or self.status in ["Validado / Conforme", "Conforme / Validado"]
+        )
+
+    @property
+    def is_pending_validation(self) -> bool:
+        return (
+            self.status == "Pendiente de Validación"
+            or (self.validation_status == "Pendiente" and not self.is_validated)
+        )
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.status == "Rechazado" or self.validation_status == "Rechazado"
+
+    @property
+    def is_in_progress(self) -> bool:
+        return self.status == "En Ejecución"
+
+    @property
+    def is_scheduled(self) -> bool:
+        return self.status == "Programado"
 
     @property
     def cycle_label(self):
@@ -71,7 +115,7 @@ class Maintenance(Base):
 
     @property
     def proactive_status(self):
-        now = datetime.datetime.utcnow()
+        now = get_local_now()
 
         if self.status in ["Conforme / Validado", "Validado / Conforme"]:
             val_name = self.validator.full_name or self.validator.username if self.validator else "Validador"

@@ -59,6 +59,8 @@ def ensure_database_schema(target_engine):
                     conn.execute(text("ALTER TABLE users ADD COLUMN temp_expires_at DATETIME"))
                 if "badge_number" not in columns:
                     conn.execute(text("ALTER TABLE users ADD COLUMN badge_number VARCHAR(30)"))
+                if "signature_path" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN signature_path VARCHAR"))
                 conn.commit()
 
             # Inspeccionar columnas de la tabla incidents
@@ -135,6 +137,14 @@ def ensure_database_schema(target_engine):
                     conn.execute(text("ALTER TABLE maintenances ADD COLUMN rejection_photo VARCHAR(255)"))
                 if "timer_reset_at" not in maint_cols:
                     conn.execute(text("ALTER TABLE maintenances ADD COLUMN timer_reset_at DATETIME"))
+                if "rca_cause_factor" not in maint_cols:
+                    conn.execute(text("ALTER TABLE maintenances ADD COLUMN rca_cause_factor VARCHAR(150)"))
+                if "rca_failure_mechanism" not in maint_cols:
+                    conn.execute(text("ALTER TABLE maintenances ADD COLUMN rca_failure_mechanism VARCHAR(150)"))
+                if "operating_condition" not in maint_cols:
+                    conn.execute(text("ALTER TABLE maintenances ADD COLUMN operating_condition VARCHAR(100)"))
+                if "asset_component" not in maint_cols:
+                    conn.execute(text("ALTER TABLE maintenances ADD COLUMN asset_component VARCHAR(100)"))
                 conn.commit()
 
             # Enforce single superadmin: migrate any secondary Admin accounts to operational roles

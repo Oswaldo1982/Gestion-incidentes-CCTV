@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import User, Device, Incident, Maintenance, Event, AuditLog, License
 from app.auth import get_password_hash
 from app.services.license_service import generate_dev_license
+from app.config import settings
 
 
 def seed_demo_data(db: Session):
@@ -18,6 +19,10 @@ def seed_demo_data(db: Session):
     Puebla la base de datos volátil en memoria con datos realistas para los 4 municipios
     y los 3 perfiles institucionales (Administrador, Supervisor de Contrato, Empresa de Mantenimiento).
     """
+    if not settings.DEMO_MODE:
+        print("[!] Protección de Seguridad: seed_demo_data ignorado para proteger la base de datos persistente.")
+        return
+
     print("[*] [Modo Demo] Inicializando entorno Sandbox volátil en memoria...")
 
     # 1. Limpieza de tablas
@@ -387,6 +392,9 @@ def seed_demo_data(db: Session):
     ]
     db.add_all(audit_data)
     db.commit()
+
+    from app.utils.signature import ensure_seed_signatures
+    ensure_seed_signatures(db)
 
     print("[+] [Modo Demo] Entorno Sandbox volátil en memoria generado exitosamente:")
     print("    - Municipios: 4 (San Agustín, San José del Guaviare, El Retorno, Calamar)")

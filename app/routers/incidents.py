@@ -6,6 +6,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.user import User
 from app.models.incident import Incident
+from app.models.device import Device
 from app.models.event import Event
 from fastapi.responses import Response
 from app.schemas.incident import IncidentCreate, IncidentResponse, IncidentUpdate, PaginatedIncidentResponse, IncidentValidate
@@ -13,6 +14,7 @@ from app.services.auth_service import get_current_user
 from app.services.license_service import verify_license_dependency
 from app.services.audit_service import create_audit_log
 from app.services.report_service import generate_validation_conformity_pdf
+from app.utils.timezone import get_local_now
 
 router = APIRouter(prefix="/api/incidents", tags=["Incidentes"])
 
@@ -32,7 +34,7 @@ def create_incident(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede registrar incidentes."
         )
-    year = datetime.datetime.utcnow().year
+    year = get_local_now().year
     count = db.query(Incident).filter(Incident.ticket_number.like(f"TKT-{year}-%")).count()
     ticket_number = f"TKT-{year}-{count + 1:04d}"
     while db.query(Incident).filter(Incident.ticket_number == ticket_number).first():
@@ -47,6 +49,25 @@ def create_incident(
     else:
         title = f"Mantenimiento Correctivo - {fault_type} - {location_detail}"
 
+    resolved_device_id = incident_in.device_id
+    if not resolved_device_id and location_detail:
+        candidate_dev = (
+            db.query(Device).filter(
+                Device.sede == incident_in.sede,
+                Device.location_detail.ilike(f"%{location_detail}%"),
+                Device.device_type.ilike("%cámara%")
+            ).first()
+            or db.query(Device).filter(
+                Device.sede == incident_in.sede,
+                Device.location_detail.ilike(f"%{location_detail}%")
+            ).first()
+            or db.query(Device).filter(
+                Device.location_detail.ilike(f"%{location_detail}%")
+            ).first()
+        )
+        if candidate_dev:
+            resolved_device_id = candidate_dev.id
+
     new_incident = Incident(
         ticket_number=ticket_number,
         title=title,
@@ -55,7 +76,7 @@ def create_incident(
         fault_type=fault_type,
         location_detail=location_detail,
         sede=incident_in.sede,
-        device_id=incident_in.device_id,
+        device_id=resolved_device_id,
         status="Abierto",
         created_by_id=current_user.id
     )
@@ -191,7 +212,7 @@ def update_incident(
             target_status = "Pendiente de Validación"
             incident.status = "Pendiente de Validación"
             incident.validation_status = "Pendiente"
-            incident.closed_at = datetime.datetime.utcnow()
+            incident.closed_at = get_local_now()
             incident.closed_by_id = current_user.id
             changes.append(f"status: {old_status} -> Pendiente de Validación")
             if incident_in.root_cause:
@@ -204,7 +225,7 @@ def update_incident(
             incident.status = target_status
             changes.append(f"status: {old_status} -> {target_status}")
             if target_status == "En Proceso" and not incident.attended_at:
-                incident.attended_at = datetime.datetime.utcnow()
+                incident.attended_at = get_local_now()
                 if not incident.assigned_to_id:
                     incident.assigned_to_id = current_user.id
         
@@ -301,7 +322,7 @@ def validate_incident(
             detail="Incidente no encontrado."
         )
 
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     if val_in.action == "approve":
         incident.status = "Validado / Conforme"
@@ -362,7 +383,7 @@ def validate_incident(
             incident_id=incident.id,
             user_id=current_user.id,
             event_type="INCIDENT_REJECTED",
-            description=f"Ticket {incident.ticket_code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {incident.validation_notes[:100]}"
+            description=f"Ticket {incident.ticket_code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {(incident.validation_notes or '')[:100]}"
         ))
 
         create_audit_log(

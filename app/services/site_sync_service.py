@@ -17,6 +17,7 @@ from app.models.device import Device
 from app.models.incident import Incident
 from app.models.maintenance import Maintenance
 from app.models.user import User
+from app.utils.timezone import get_local_now
 
 
 # Configuración canónica de las 4 Sedes Territoriales
@@ -88,39 +89,53 @@ def get_canonical_site_filter(model_cls, current_site: Dict[str, Any]):
 def find_matching_device_in_site(
     db: Session,
     ref_device: Optional[Device],
-    target_site_full_name: str
+    target_site_full_name: str,
+    location_detail: Optional[str] = None
 ) -> Optional[Device]:
     """
     Localiza en la sede destino el equipo equivalente al de referencia
     (por nombre, tipo de equipo o ubicación física en ese municipio).
     """
-    if not ref_device:
-        return None
+    if ref_device:
+        # 1. Búsqueda exacta por nombre y sede destino
+        match = db.query(Device).filter(
+            Device.sede == target_site_full_name,
+            Device.name == ref_device.name
+        ).first()
+        if match:
+            return match
 
-    # 1. Búsqueda exacta por nombre y sede destino
-    match = db.query(Device).filter(
-        Device.sede == target_site_full_name,
-        Device.name == ref_device.name
-    ).first()
-    if match:
-        return match
+        # 2. Búsqueda por ubicación y tipo
+        match = db.query(Device).filter(
+            Device.sede == target_site_full_name,
+            Device.location_detail == ref_device.location_detail,
+            Device.device_type == ref_device.device_type
+        ).first()
+        if match:
+            return match
 
-    # 2. Búsqueda por ubicación y tipo
-    match = db.query(Device).filter(
-        Device.sede == target_site_full_name,
-        Device.location_detail == ref_device.location_detail,
-        Device.device_type == ref_device.device_type
-    ).first()
-    if match:
-        return match
+        # 3. Búsqueda por tipo de equipo en la sede
+        match = db.query(Device).filter(
+            Device.sede == target_site_full_name,
+            Device.device_type == ref_device.device_type
+        ).first()
+        if match:
+            return match
 
-    # 3. Búsqueda por tipo de equipo en la sede
-    match = db.query(Device).filter(
-        Device.sede == target_site_full_name,
-        Device.device_type == ref_device.device_type
-    ).first()
-    if match:
-        return match
+    if location_detail:
+        match = db.query(Device).filter(
+            Device.sede == target_site_full_name,
+            Device.location_detail.ilike(f"%{location_detail}%"),
+            Device.device_type.ilike("%cámara%")
+        ).first()
+        if match:
+            return match
+        match = db.query(Device).filter(
+            Device.sede == target_site_full_name,
+            Device.location_detail.ilike(f"%{location_detail}%")
+        ).first()
+        if match:
+            return match
 
     # 4. Fallback al primer equipo disponible de esa sede
     return db.query(Device).filter(Device.sede == target_site_full_name).first()
@@ -189,7 +204,7 @@ def ensure_all_sites_synchronized(db: Session) -> Dict[str, Any]:
 
                 if not existing:
                     # Mapear dispositivo en la sede destino
-                    target_dev = find_matching_device_in_site(db, ref_inc.device, site_full)
+                    target_dev = find_matching_device_in_site(db, ref_inc.device, site_full, ref_inc.location_detail)
                     target_dev_id = target_dev.id if target_dev else None
 
                     # Clonar incidente adaptado a la sede
@@ -216,8 +231,8 @@ def ensure_all_sites_synchronized(db: Session) -> Dict[str, Any]:
                         validated_at=ref_inc.validated_at,
                         validation_status=ref_inc.validation_status,
                         validation_notes=ref_inc.validation_notes,
-                        created_at=ref_inc.created_at or datetime.datetime.utcnow(),
-                        updated_at=ref_inc.updated_at or datetime.datetime.utcnow()
+                        created_at=ref_inc.created_at or get_local_now(),
+                        updated_at=ref_inc.updated_at or get_local_now()
                     )
                     db.add(cloned_inc)
                     results["incidents_synced"] += 1
@@ -239,7 +254,7 @@ def ensure_all_sites_synchronized(db: Session) -> Dict[str, Any]:
                 ).first()
 
                 if not existing_m:
-                    target_dev = find_matching_device_in_site(db, ref_m.device, site_full)
+                    target_dev = find_matching_device_in_site(db, ref_m.device, site_full, ref_m.location_detail)
                     target_dev_id = target_dev.id if target_dev else None
 
                     cloned_maint = Maintenance(
@@ -268,7 +283,7 @@ def ensure_all_sites_synchronized(db: Session) -> Dict[str, Any]:
                         validated_at=ref_m.validated_at,
                         validation_status=ref_m.validation_status,
                         validation_notes=ref_m.validation_notes,
-                        created_at=ref_m.created_at or datetime.datetime.utcnow()
+                        created_at=ref_m.created_at or get_local_now()
                     )
                     db.add(cloned_maint)
                     results["maintenances_synced"] += 1

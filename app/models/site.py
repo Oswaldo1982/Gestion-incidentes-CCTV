@@ -1,31 +1,29 @@
 import datetime
 from typing import Optional, Dict, Any
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime
+from sqlalchemy import String, Integer, Boolean, DateTime
+from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
+from app.utils.timezone import get_local_now
 
 
-class SiteBase(SQLModel):
-    id: str = Field(primary_key=True, max_length=50, description="Identificador único (slug) de la sede, ej: san-agustin")
-    name: str = Field(max_length=100, description="Nombre de la sede, ej: San Agustín")
-    full_name: str = Field(max_length=150, description="Nombre completo territorial, ej: San Agustín (Huila)")
-    region: Optional[str] = Field(default="", max_length=100, description="Departamento o región")
-    badge: Optional[str] = Field(default="", max_length=100, description="Etiqueta distintiva del circuito")
-    description: Optional[str] = Field(default="", max_length=255, description="Descripción de cobertura territorial")
-    icon: Optional[str] = Field(default="🏛️", max_length=50, description="Icono o emoji representativo")
-    cameras_count: int = Field(default=0, description="Cantidad estimada o base de cámaras")
-    status: str = Field(default="Operativo", max_length=50, description="Estado operativo de la sede")
-    color: Optional[str] = Field(default="blue", max_length=50, description="Color identificador para la interfaz")
-    default_supervisor: Optional[str] = Field(default="", max_length=100, description="Usuario supervisor asignado por defecto")
-    is_active: bool = Field(default=True, description="Indica si la sede está activa en el sistema")
-
-
-class Site(SiteBase, table=True):
+class Site(Base):
     __tablename__ = "sites"
-    metadata = Base.metadata
 
-    created_at: Optional[datetime.datetime] = Field(default=None, sa_column=Column(DateTime, default=datetime.datetime.utcnow, nullable=False))
-    updated_at: Optional[datetime.datetime] = Field(default=None, sa_column=Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False))
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    region: Mapped[Optional[str]] = mapped_column(String(100), default="", nullable=True)
+    badge: Mapped[Optional[str]] = mapped_column(String(100), default="", nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255), default="", nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String(50), default="🏛️", nullable=True)
+    cameras_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="Operativo", nullable=False)
+    color: Mapped[Optional[str]] = mapped_column(String(50), default="blue", nullable=True)
+    default_supervisor: Mapped[Optional[str]] = mapped_column(String(100), default="", nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, onupdate=get_local_now, nullable=False)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -40,5 +38,7 @@ class Site(SiteBase, table=True):
             "status": self.status,
             "color": self.color,
             "default_supervisor": self.default_supervisor,
-            "is_active": self.is_active
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

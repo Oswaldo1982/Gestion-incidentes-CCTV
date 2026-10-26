@@ -98,6 +98,70 @@
                 }
             },
 
+            clearFilters() {
+                this.searchQuery = '';
+                this.selectedStatus = 'all';
+                this.selectedFault = 'all';
+                this.selectedPriority = 'all';
+                this.selectedPoint = 'all';
+            },
+
+            matchesRow(el) {
+                if (!el || !el.dataset) return true;
+                const ds = el.dataset;
+
+                // 1. Filtro de Estado
+                if (this.selectedStatus !== 'all') {
+                    const st = (ds.status || '').trim();
+                    const valSt = (ds.valStatus || '').trim();
+                    const isResolved = ds.resolved === 'true';
+
+                    if (this.selectedStatus === 'Cerrado') {
+                        if (!isResolved && st !== 'Cerrado' && st !== 'Resuelto') return false;
+                    } else if (this.selectedStatus === 'Abierto') {
+                        if (st !== 'Abierto') return false;
+                    } else if (this.selectedStatus === 'En Proceso') {
+                        if (st !== 'En Proceso') return false;
+                    } else if (this.selectedStatus === 'Pendiente de Validación') {
+                        if (!st.includes('Pendiente de Validación') && valSt !== 'Pendiente') return false;
+                    } else if (this.selectedStatus === 'Validado / Conforme') {
+                        if (!st.includes('Validado') && !st.includes('Conforme') && valSt !== 'Conforme') return false;
+                    } else if (this.selectedStatus === 'Rechazado') {
+                        if (st !== 'Rechazado' && valSt !== 'Rechazado') return false;
+                    } else {
+                        if (st.toLowerCase() !== this.selectedStatus.toLowerCase()) return false;
+                    }
+                }
+
+                // 2. Filtro de Tipo de Falla / Criticidad
+                if (this.selectedFault !== 'all') {
+                    const f = (ds.fault || '').trim().toLowerCase();
+                    if (f !== this.selectedFault.trim().toLowerCase()) return false;
+                }
+
+                // 3. Filtro de Prioridad
+                if (this.selectedPriority !== 'all') {
+                    const p = (ds.priority || '').trim().toLowerCase();
+                    if (p !== this.selectedPriority.trim().toLowerCase()) return false;
+                }
+
+                // 4. Filtro de Punto de Cámara / Sitio Físico
+                if (this.selectedPoint !== 'all') {
+                    const pt = (ds.point || '').trim().toLowerCase();
+                    const filterPt = this.selectedPoint.trim().toLowerCase();
+                    if (pt !== filterPt && !pt.includes(filterPt) && !filterPt.includes(pt)) return false;
+                }
+
+                // 5. Búsqueda de Texto (Serial, Título, Falla, Sitio, Diagnóstico, etc.)
+                if (this.searchQuery && this.searchQuery.trim() !== '') {
+                    const tokens = this.searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                    const hay = (ds.search || '').toLowerCase();
+                    if (!tokens.every(t => hay.includes(t))) return false;
+                }
+
+                return true;
+            },
+
             init() {
                 this.$nextTick(() => {
                     this.updateDeviceOptions();
@@ -148,60 +212,143 @@
         {% endif %}
     </div>
 
-    <!-- AI Early Warning SLA & KPI Dashboard -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <!-- Falla Crítica / Urgentes -->
-        <div
-            class="bg-gradient-to-br from-rose-50 to-white p-4 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-                <p class="text-xs text-rose-700 font-bold uppercase tracking-wider">Fallas Críticas</p>
-                <span class="text-rose-500 text-base">🚨</span>
+    <!-- ═════ 1. MÉTRICAS DE LA PÁGINA ACTUAL ═════ -->
+    <div class="space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-black">1</span>
+                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>📄</span> Métricas de la Página Actual
+                </h3>
+                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    Página {{ page }} de {{ total_pages }}
+                </span>
             </div>
-            <p class="text-2xl font-black text-rose-700 mt-1">
-                {{ incidents | selectattr('fault_type', 'equalto', 'Falla Crítica') | selectattr('status', 'ne',
-                'Cerrado') | list | length }}
+            <p class="text-[11px] font-medium text-slate-500">
+                Mostrando {{ incidents|length }} de {{ total_records }} registros totales
             </p>
-            <p class="text-[10px] text-rose-600 font-medium mt-0.5">SLA Máx: 4 horas</p>
         </div>
 
-        <!-- Inactivos / Alerta Media -->
-        <div
-            class="bg-gradient-to-br from-amber-50 to-white p-4 rounded-xl border border-amber-200 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-                <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Dispositivos Inactivos</p>
-                <span class="text-amber-500 text-base">⚠️</span>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <!-- Falla Crítica en página actual -->
+            <div class="bg-gradient-to-br from-rose-50 to-white p-4 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-rose-700 font-bold uppercase tracking-wider">Fallas Críticas</p>
+                    <span class="text-rose-500 text-base">🚨</span>
+                </div>
+                <p class="text-2xl font-black text-rose-700 mt-1">
+                    {{ incidents | selectattr('fault_type', 'equalto', 'Falla Crítica') | list | length }}
+                </p>
+                <p class="text-[10px] text-rose-600 font-medium mt-0.5">En esta pág. ({{ incidents | selectattr('fault_type', 'equalto', 'Falla Crítica') | rejectattr('is_resolved') | list | length }} activas / SLA 4h)</p>
             </div>
-            <p class="text-2xl font-black text-amber-700 mt-1">
-                {{ incidents | selectattr('fault_type', 'equalto', 'Inactivo') | selectattr('status', 'ne', 'Cerrado') |
-                list | length }}
+
+            <!-- Inactivos en página actual -->
+            <div class="bg-gradient-to-br from-amber-50 to-white p-4 rounded-xl border border-amber-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Dispositivos Inactivos</p>
+                    <span class="text-amber-500 text-base">⚠️</span>
+                </div>
+                <p class="text-2xl font-black text-amber-700 mt-1">
+                    {{ incidents | selectattr('fault_type', 'equalto', 'Inactivo') | list | length }}
+                </p>
+                <p class="text-[10px] text-amber-600 font-medium mt-0.5">En esta pág. ({{ incidents | selectattr('fault_type', 'equalto', 'Inactivo') | rejectattr('is_resolved') | list | length }} activas / SLA 12h)</p>
+            </div>
+
+            <!-- En Proceso en página actual -->
+            <div class="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-blue-700 font-bold uppercase tracking-wider">En Proceso / Atención</p>
+                    <span class="text-blue-500 text-base">🔧</span>
+                </div>
+                <p class="text-2xl font-black text-blue-700 mt-1">
+                    {{ incidents | selectattr('status', 'equalto', 'En Proceso') | list | length }}
+                </p>
+                <p class="text-[10px] text-blue-600 font-medium mt-0.5">En esta pág. con técnico asignado</p>
+            </div>
+
+            <!-- Cerrados / Solucionados en página actual -->
+            <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Cerrados / Solucionados</p>
+                    <span class="text-emerald-500 text-base">✅</span>
+                </div>
+                <p class="text-2xl font-black text-emerald-700 mt-1">
+                    {{ incidents | selectattr('is_resolved') | list | length }}
+                </p>
+                <p class="text-[10px] text-emerald-600 font-medium mt-0.5">En esta pág. resueltos formalmente</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═════ 2. MÉTRICAS GENERALES (TODOS LOS DATOS REGISTRADOS HASTA EL MOMENTO) ═════ -->
+    <div class="space-y-2 pt-1">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
+            <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-900 text-white text-[11px] font-black">2</span>
+                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>🌐</span> Métricas Generales (Todos los datos registrados hasta el momento)
+                </h3>
+                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    {{ current_site.name if current_site else 'Sede Activa' }}
+                </span>
+            </div>
+            <p class="text-[11px] font-bold text-indigo-700">
+                Total acumulado histórico: {{ site_kpis.total_records if site_kpis else total_records }} incidentes
             </p>
-            <p class="text-[10px] text-amber-600 font-medium mt-0.5">SLA Máx: 12 horas</p>
         </div>
 
-        <!-- En Atención / Proceso -->
-        <div
-            class="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-                <p class="text-xs text-blue-700 font-bold uppercase tracking-wider">En Proceso / Atención</p>
-                <span class="text-blue-500 text-base">🔧</span>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <!-- Fallas Críticas Totales Generales -->
+            <div class="bg-gradient-to-br from-rose-50/70 via-white to-white p-4 rounded-xl border border-rose-300 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-rose-800 font-bold uppercase tracking-wider">Fallas Críticas (General)</p>
+                    <span class="p-1 rounded-md bg-rose-100 text-rose-700 text-xs font-bold">🚨 Total</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span class="text-2xl font-black text-rose-700">{{ site_kpis.critical_total if site_kpis else 0 }}</span>
+                    <span class="text-[11px] text-rose-600 font-bold">({{ site_kpis.critical_open if site_kpis else 0 }} activas)</span>
+                </div>
+                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de eventos críticos registrados</p>
             </div>
-            <p class="text-2xl font-black text-blue-700 mt-1">
-                {{ incidents | selectattr('status', 'equalto', 'En Proceso') | list | length }}
-            </p>
-            <p class="text-[10px] text-blue-600 font-medium mt-0.5">Con técnico asignado</p>
-        </div>
 
-        <!-- Cerrados / Resueltos -->
-        <div
-            class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
-            <div class="flex items-center justify-between">
-                <p class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Cerrados / Solucionados</p>
-                <span class="text-emerald-500 text-base">✅</span>
+            <!-- Inactivos Totales Generales -->
+            <div class="bg-gradient-to-br from-amber-50/70 via-white to-white p-4 rounded-xl border border-amber-300 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-amber-800 font-bold uppercase tracking-wider">Dispositivos Inactivos (General)</p>
+                    <span class="p-1 rounded-md bg-amber-100 text-amber-700 text-xs font-bold">⚠️ Total</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span class="text-2xl font-black text-amber-700">{{ site_kpis.inactive_total if site_kpis else 0 }}</span>
+                    <span class="text-[11px] text-amber-600 font-bold">({{ site_kpis.inactive_open if site_kpis else 0 }} activos)</span>
+                </div>
+                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de caídas/inactivos registrados</p>
             </div>
-            <p class="text-2xl font-black text-emerald-700 mt-1">
-                {{ incidents | selectattr('status', 'equalto', 'Cerrado') | list | length }}
-            </p>
-            <p class="text-[10px] text-emerald-600 font-medium mt-0.5">Con causa raíz y solución</p>
+
+            <!-- En Proceso Totales Generales -->
+            <div class="bg-gradient-to-br from-blue-50/70 via-white to-white p-4 rounded-xl border border-blue-300 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-blue-800 font-bold uppercase tracking-wider">En Proceso / Atención (General)</p>
+                    <span class="p-1 rounded-md bg-blue-100 text-blue-700 text-xs font-bold">🔧 Total</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span class="text-2xl font-black text-blue-700">{{ site_kpis.in_process if site_kpis else 0 }}</span>
+                    <span class="text-[11px] text-blue-700 font-bold">en intervención</span>
+                </div>
+                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Con cuadrilla técnica atendiendo</p>
+            </div>
+
+            <!-- Cerrados / Solucionados Totales Generales -->
+            <div class="bg-gradient-to-br from-emerald-50/70 via-white to-white p-4 rounded-xl border border-emerald-300 shadow-sm relative overflow-hidden">
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-emerald-800 font-bold uppercase tracking-wider">Cerrados / Solucionados (General)</p>
+                    <span class="p-1 rounded-md bg-emerald-100 text-emerald-700 text-xs font-bold">✅ Total</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span class="text-2xl font-black text-emerald-700">{{ site_kpis.closed_total if site_kpis else 0 }}</span>
+                    <span class="text-[11px] text-emerald-700 font-bold">de {{ site_kpis.total_records if site_kpis else total_records }}</span>
+                </div>
+                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de eventos 100% resueltos formalmente</p>
+            </div>
         </div>
     </div>
 
@@ -213,23 +360,30 @@
         <div class="relative flex-1">
             <input type="text" x-model="searchQuery"
                 placeholder="Buscar por serial de ticket (TKT-...), título, falla o sitio físico..."
-                class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                class="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor"
                 viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
+            <button type="button" x-show="searchQuery" @click="searchQuery = ''"
+                class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 transition" title="Borrar búsqueda">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
         </div>
 
         <!-- Filter Selects -->
         <div class="flex flex-wrap items-center gap-2">
             <!-- Filter Estado -->
             <select x-model="selectedStatus"
-                class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
                 <option value="all">Todos los Estados</option>
                 <option value="Abierto">Abierto</option>
                 <option value="En Proceso">En Proceso</option>
-                <option value="Cerrado">Cerrado</option>
+                <option value="Pendiente de Validación">🛡️ Por Validar (Técnica Policial)</option>
+                <option value="Validado / Conforme">🎖️ Validado OK</option>
+                <option value="Rechazado">❌ Rechazado</option>
+                <option value="Cerrado">Cerrado / Resuelto</option>
             </select>
 
             <!-- Filter Tipo de Falla / Criticidad -->
@@ -246,20 +400,29 @@
             <select x-model="selectedPriority"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todas las Prioridades</option>
+                <option value="Crítica">Crítica</option>
                 <option value="Alta">Alta</option>
                 <option value="Media">Media</option>
                 <option value="Baja">Baja</option>
-                <option value="Crítica">Crítica</option>
             </select>
 
-            <!-- Filter Sitio Físico -->
+            <!-- Filter Punto de Cámara -->
             <select x-model="selectedPoint"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">Todos los Sitios Físicos</option>
+                <option value="all">📍 Todos los Puntos de Cámara</option>
                 {% for p in physical_sites %}
                 <option value="{{ p }}">{{ p }}</option>
                 {% endfor %}
             </select>
+
+            <!-- Botón Limpiar Filtros -->
+            <button type="button" 
+                x-show="searchQuery || selectedStatus !== 'all' || selectedFault !== 'all' || selectedPriority !== 'all' || selectedPoint !== 'all'"
+                @click="clearFilters()"
+                class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-300 shadow-2xs">
+                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>Limpiar</span>
+            </button>
         </div>
     </div>
 
@@ -271,7 +434,7 @@
                     class="bg-slate-100/80 text-slate-600 font-bold uppercase tracking-wider border-b border-slate-200">
                     <tr>
                         <th class="px-5 py-3.5">Ticket & Criticidad</th>
-                        <th class="px-5 py-3.5">Detalle Correctivo & Sitio Físico</th>
+                        <th class="px-5 py-3.5">Detalle Correctivo & Punto de Cámara</th>
                         <th class="px-5 py-3.5">Tiempo & Alerta SLA (IA)</th>
                         <th class="px-5 py-3.5">Estado & Trazabilidad</th>
                         <th class="px-5 py-3.5 text-center">Evidencias</th>
@@ -281,15 +444,33 @@
                 <tbody class="divide-y divide-slate-200 text-slate-700">
                     {% for inc in incidents %}
                     {% set sla = inc.sla_info %}
-                    <tr class="hover:bg-slate-50/90 transition {% if inc.fault_type == 'Falla Crítica' and inc.status != 'Cerrado' %}bg-rose-50/20{% endif %}"
-                        x-show="(selectedStatus === 'all' || '{{ inc.status }}' === selectedStatus) &&
-                                (selectedFault === 'all' || '{{ inc.fault_type or '' }}' === selectedFault) &&
-                                (selectedPriority === 'all' || '{{ inc.priority }}' === selectedPriority) &&
-                                (selectedPoint === 'all' || '{{ inc.location_detail or '' }}' === selectedPoint) &&
-                                ('{{ inc.ticket_code|lower }}'.includes(searchQuery.toLowerCase()) || 
-                                 '{{ inc.title|lower }}'.includes(searchQuery.toLowerCase()) || 
-                                 '{{ inc.description|lower }}'.includes(searchQuery.toLowerCase()) || 
-                                 '{{ inc.location_detail|lower if inc.location_detail else '' }}'.includes(searchQuery.toLowerCase()))">
+                    <tr class="hover:bg-slate-50/90 transition {% if inc.fault_type == 'Falla Crítica' and not inc.is_resolved %}bg-rose-50/20{% endif %}"
+                        x-show="matchesRow($el)"
+                        data-code="{{ inc.ticket_code|e }}"
+                        data-status="{{ inc.status|e }}"
+                        data-val-status="{{ inc.validation_status|e if inc.validation_status else '' }}"
+                        data-resolved="{{ 'true' if inc.is_resolved else 'false' }}"
+                        data-fault="{{ inc.fault_type|e if inc.fault_type else '' }}"
+                        data-priority="{{ inc.priority|e }}"
+                        data-point="{{ inc.location_detail|e if inc.location_detail else '' }}"
+                        data-search="{{ (
+                            (inc.ticket_code or '') ~ ' ' ~ 
+                            (inc.title or '') ~ ' ' ~ 
+                            (inc.description or '') ~ ' ' ~ 
+                            (inc.location_detail or '') ~ ' ' ~ 
+                            (inc.sede or '') ~ ' ' ~ 
+                            (inc.fault_type or '') ~ ' ' ~ 
+                            (inc.priority or '') ~ ' ' ~ 
+                            (inc.status or '') ~ ' ' ~ 
+                            (inc.device.name if inc.device else '') ~ ' ' ~ 
+                            (inc.device.device_type if inc.device else '') ~ ' ' ~ 
+                            (inc.device.brand if inc.device and inc.device.brand else '') ~ ' ' ~ 
+                            (inc.device.serial_number if inc.device and inc.device.serial_number else '') ~ ' ' ~ 
+                            (inc.device.ip_address if inc.device and inc.device.ip_address else '') ~ ' ' ~ 
+                            (inc.creator.full_name if inc.creator and inc.creator.full_name else (inc.creator.username if inc.creator else '')) ~ ' ' ~ 
+                            (inc.closed_by.full_name if inc.closed_by and inc.closed_by.full_name else (inc.closed_by.username if inc.closed_by else '')) ~ ' ' ~ 
+                            (inc.validator.full_name if inc.validator and inc.validator.full_name else (inc.validator.username if inc.validator else ''))
+                        )|lower|e }}">
 
                         <!-- Ticket & Criticidad -->
                         <td class="px-5 py-4 align-top w-48">
@@ -300,7 +481,27 @@
                                 </span>
 
                                 <div>
-                                    {% if inc.fault_type == 'Falla Crítica' %}
+                                    {% if inc.is_resolved %}
+                                    <div class="space-y-1">
+                                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                            {{ inc.fault_type or 'Falla Resuelta' }}
+                                        </span>
+                                        <div>
+                                            {% if inc.is_overtime %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                Resuelto SLA
+                                            </span>
+                                            {% else %}
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                                Resuelto
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% elif inc.fault_type == 'Falla Crítica' %}
                                     <span
                                         class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">
                                         <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
@@ -351,8 +552,8 @@
 
                                 <div class="flex flex-wrap items-center gap-1.5 pt-1">
                                     <span
-                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                                        📍 {{ inc.location_detail if inc.location_detail else 'Sitio General' }}
+                                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 shadow-xs">
+                                        <span class="text-amber-600">📍 Punto de Cámara:</span> {{ inc.location_detail if inc.location_detail else 'Estación de Policía' }}
                                     </span>
 
                                     {% if inc.device %}
@@ -377,17 +578,38 @@
                                     <span>{{ inc.elapsed_text }}</span>
                                 </div>
 
-                                <!-- SLA Early Warning Badge -->
+                                <!-- SLA Warning / Resolution Badge -->
                                 <div>
                                     <span
                                         class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold border {{ sla.badge_bg }} {{ sla.badge_text }} {{ sla.badge_border }}">
-                                        <span class="w-1.5 h-1.5 rounded-full {{ sla.dot_color }}"></span>
+                                        <span class="w-2 h-2 rounded-full {{ sla.dot_color }}"></span>
                                         {{ sla.label }}
                                     </span>
-                                    <p class="text-[10px] text-slate-500 mt-0.5">
+
+                                    {% if inc.is_resolved %}
+                                    <div class="mt-1">
+                                        {% if inc.is_overtime %}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            Resuelto SLA
+                                        </span>
+                                        {% else %}
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                            Resuelto
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+
+                                    <p class="text-[10px] text-slate-500 mt-1">
                                         {{ sla.detail }} (Meta SLA: {{ inc.sla_target_hours }}h)
                                     </p>
-                                            <!-- Estado & Trazabilidad -->
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Estado & Trazabilidad -->
                         <td class="px-5 py-4 align-top w-52">
                             <div class="space-y-1.5">
                                 <!-- Status Badge -->
@@ -404,7 +626,7 @@
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
                                         <span class="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span> 🛡️ Por Validar
                                     </span>
-                                    {% elif inc.status in ['Validado / Conforme', 'Conforme / Validado'] %}
+                                    {% elif inc.status in ['Validado / Conforme', 'Conforme / Validado'] or inc.validation_status == 'Conforme' %}
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                                         <span class="w-2 h-2 rounded-full bg-emerald-600"></span> 🎖️ Validado OK
                                     </span>
@@ -412,9 +634,10 @@
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
                                         <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span> ❌ Rechazado
                                     </span>
-                                    {% elif inc.status == 'Cerrado' %}
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Cerrado
+                                    {% elif inc.is_resolved %}
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black {% if inc.is_overtime %}bg-amber-50 text-amber-900 border border-amber-300{% else %}bg-emerald-100 text-emerald-800 border border-emerald-300{% endif %}">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                        {% if inc.is_overtime %}⚠️ Resuelto SLA{% else %}✅ Resuelto{% endif %}
                                     </span>
                                     {% else %}
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
@@ -433,7 +656,7 @@
                                     </p>
                                     {% endif %}
 
-                                    {% if inc.validator %}
+                                    {% if inc.is_resolved and inc.validator %}
                                     <p class="text-purple-800 font-semibold pt-0.5">
                                         Validó: <strong>{{ inc.validator.full_name or inc.validator.username }}</strong>
                                         {% if inc.validator.badge_number %}<span class="text-[9px] text-purple-600 font-mono">(Placa: {{ inc.validator.badge_number }})</span>{% endif %}
@@ -480,8 +703,10 @@
                         <!-- Gestión / Acciones -->
                         <td class="px-5 py-4 align-top text-right w-48">
                             <div class="flex flex-col items-end gap-1.5">
-                                {% if inc.status in ['Pendiente de Validación', 'Pendiente de Validación Policial'] %}
-                                    {% if current_user.role == 'Validador' %}
+                                {% set s_norm = (inc.status or '')|lower|trim %}
+                                {% set u_role = (current_user.role or '')|lower|trim %}
+                                {% if s_norm in ['pendiente de validación', 'pendiente de validacion', 'pendiente de validación policial', 'pendiente de validacion policial'] %}
+                                    {% if u_role in ['validador', 'validator'] %}
                                     <!-- Botón Exclusivo para la Policía / Validador -->
                                     <button @click="openValidateModal({
                                                 id: {{ inc.id }},
@@ -504,10 +729,10 @@
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         Revisar y Validar
                                     </button>
-                                    {% elif current_user.role in ['Admin', 'Supervisor'] %}
-                                    <!-- Botón marcado en gris para el Administrador / Supervisor indicando que no pueden revisar ni validar -->
+                                    {% elif u_role in ['admin', 'administrador', 'supervisor'] %}
+                                    <!-- Botón marcado en gris para el Administrador / Supervisor indicando que la validación es exclusiva de Policía Nacional -->
                                     <button disabled
-                                            title="Revisión y validación técnica exclusiva de Policía Nacional (Rol: Validador). El rol {{ current_user.role }} no puede dictaminar validaciones."
+                                            title="Revisión y validación técnica exclusiva de Policía Nacional (Rol: Validador). El rol {{ current_user.role }} tiene perfil de supervisión/administración."
                                             class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center gap-1.5">
                                         <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                         <span>Revisar y Validar</span>
@@ -519,76 +744,103 @@
                                         <span>En Validación (Bloqueado)</span>
                                     </div>
                                     {% endif %}
-                                {% elif inc.status in ['Validado / Conforme', 'Conforme / Validado'] %}
-                                    {% if current_user.role in ['Admin', 'Validador', 'Supervisor'] %}
-                                    <!-- Descarga Oficial de Acta Ejecutiva PDF -->
-                                    <a href="/incidents/{{ inc.id }}/certificate.pdf" target="_blank"
-                                       class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition flex items-center gap-1 shadow-2xs"
-                                       title="Descargar Acta Oficial de Validación Policial en PDF">
-                                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                        Acta Oficial PDF
-                                    </a>
-                                    {% endif %}
-                                {% elif inc.status in ['Abierto', 'En Proceso', 'Rechazado'] %}
-                                    {% if inc.status == 'Abierto' and current_user.role in ['Admin', 'Empresa de Mantenimiento', 'Operario'] %}
+
+                                {% elif s_norm in ['abierto', 'en proceso', 'en_proceso', 'en atención', 'en atencion', 'rechazado'] %}
+                                    {% if s_norm == 'abierto' and u_role in ['admin', 'administrador', 'empresa de mantenimiento', 'mantenimiento', 'operario'] %}
                                     <form action="/incidents/{{ inc.id }}/status" method="POST" class="inline">
                                         <input type="hidden" name="status" value="En Proceso">
                                         <button type="submit"
-                                                class="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold transition flex items-center gap-1">
+                                                class="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold transition flex items-center gap-1 shadow-2xs">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
                                             Atender
                                         </button>
                                     </form>
                                     {% endif %}
 
-                                    {% if current_user.role in ['Admin', 'Empresa de Mantenimiento', 'Operario'] %}
+                                    {% if u_role in ['admin', 'administrador', 'empresa de mantenimiento', 'mantenimiento', 'operario'] %}
                                     <!-- Botón Finalizar Trabajo y Remitir a Validación Policial -->
                                     <button @click="closeModal = { id: {{ inc.id }}, ticket: '{{ inc.ticket_code }}', title: '{{ inc.title|replace('\'', '\\\'') }}' }"
                                             class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition flex items-center gap-1">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                         Finalizar y Remitir
                                     </button>
-                                    {% endif %}
-
-                                    {% if current_user.role == 'Supervisor' %}
+                                    {% elif u_role == 'supervisor' %}
                                     <button disabled
                                             title="Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría. No puede atender ni cerrar tickets."
                                             class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center gap-1 shadow-none">
                                         <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                         <span>Solo Lectura</span>
                                     </button>
+                                    {% elif u_role in ['validador', 'validator'] %}
+                                    <div class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold" title="En intervención técnica por el personal de mantenimiento. La validación policial se habilitará una vez el técnico finalice y remita el ticket.">
+                                        <svg class="w-3.5 h-3.5 text-blue-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                        <span>Intervención Técnica</span>
+                                    </div>
+                                    {% else %}
+                                    <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-semibold">
+                                        <span>En Proceso</span>
+                                    </div>
                                     {% endif %}
+                                {% elif s_norm in ['cerrado', 'validado / conforme', 'conforme / validado', 'resuelto'] %}
+                                    <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                                        <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        <span>Validado Oficial</span>
+                                    </div>
                                 {% endif %}
 
                                 <!-- Botón Ver Trazabilidad Digital -->
                                 <button @click="traceModal = {
+                                            id: {{ inc.id }},
                                             ticket: '{{ inc.ticket_code }}',
                                             title: '{{ inc.title|replace('\'', '\\\'') }}',
                                             description: '{{ inc.description|replace('\'', '\\\'')|replace('\n', ' ') }}',
                                             fault_type: '{{ inc.fault_type }}',
                                             priority: '{{ inc.priority }}',
-                                            location: '{{ inc.location_detail }}',
+                                            location: '{{ inc.location_detail if inc.location_detail else 'Estación de Policía' }}',
                                             device: '{{ inc.device.name if inc.device else 'General' }}',
+                                            device_ip: '{{ inc.device.ip_address if inc.device else '' }}',
                                             created_by: '{{ inc.creator.full_name or inc.creator.username if inc.creator else 'Sistema' }}',
                                             created_at: '{{ inc.created_at.strftime('%d/%m/%Y %H:%M') }}',
                                             attended_at: '{{ inc.attended_at.strftime('%d/%m/%Y %H:%M') if inc.attended_at else 'Inmediato' }}',
-                                            closed_by: '{{ inc.closed_by.full_name or inc.closed_by.username if inc.closed_by else 'Técnico' }}',
-                                            closed_at: '{{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'N/A' }}',
+                                            closed_by: '{{ (inc.closed_by.full_name or inc.closed_by.username) if inc.closed_by else ('Técnico de Mantenimiento' if inc.is_technically_closed else 'Pendiente de Cierre') }}',
+                                            closed_at: '{{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'Pendiente' }}',
                                             elapsed: '{{ inc.elapsed_text }}',
-                                            root_cause: '{{ (inc.root_cause or 'Sin registrar')|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                            solution: '{{ (inc.solution or 'Sin registrar')|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                            validator: '{{ inc.validator.full_name or inc.validator.username if inc.validator else 'Pendiente' }}',
-                                            validator_badge: '{{ inc.validator.badge_number or '' if inc.validator else '' }}',
-                                            validated_at: '{{ inc.validated_at.strftime('%d/%m/%Y %H:%M') if inc.validated_at else 'Pendiente' }}',
-                                            validation_notes: '{{ (inc.validation_notes or '')|replace('\'', '\\\'')|replace('\n', ' ') }}',
+                                            root_cause: '{{ (inc.root_cause or 'Sin registrar')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ') }}',
+                                            solution: '{{ (inc.solution or 'Sin registrar')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ') }}',
+                                            status: '{{ inc.status }}',
+                                            validation_status: '{{ inc.validation_status or '' }}',
+                                            is_technically_closed: {{ 'true' if inc.is_technically_closed else 'false' }},
+                                            is_validated: {{ 'true' if inc.is_validated else 'false' }},
+                                            is_resolved: {{ 'true' if inc.is_resolved else 'false' }},
+                                            is_rejected: {{ 'true' if (inc.status == 'Rechazado' or inc.validation_status == 'Rechazado') else 'false' }},
+                                            is_overtime: {{ 'true' if inc.is_overtime else 'false' }},
+                                            resolution_label: '{{ inc.resolution_label }}',
+                                            validator: '{{ ((inc.validator.full_name or inc.validator.username) if inc.validator else '') if inc.is_validated else '' }}',
+                                            validator_badge: '{{ (inc.validator.badge_number or '') if (inc.is_validated and inc.validator) else '' }}',
+                                            validator_document: '{{ (inc.validator.document_id or '') if (inc.is_validated and inc.validator) else '' }}',
+                                            validator_role: '{{ (inc.validator.role or 'Validador') if inc.is_validated else '' }}',
+                                            validator_rank: '{{ 'Oficial Validador de Seguridad y Convivencia Policial (CCTV)' if inc.is_validated else '' }}',
+                                            validator_unit: '{{ 'Policía Nacional de Colombia - Estación de Policía - Centro de Monitoreo CCTV' if inc.is_validated else '' }}',
+                                            validated_at: '{{ (inc.validated_at.strftime('%d/%m/%Y %H:%M') if inc.validated_at else '') if inc.is_validated else '' }}',
+                                            validation_notes: '{{ ((inc.validation_notes or '')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ')) if inc.is_validated else '' }}',
                                             initial_img: '{{ inc.image_path or '' }}',
                                             closing_img: '{{ inc.closing_image_path or '' }}',
                                             rejection_img: '{{ inc.rejection_photo or '' }}'
                                         }"
-                                        class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-semibold transition flex items-center gap-1">
+                                        class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-2xs">
                                     <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                    Trazabilidad
+                                    <span>Trazabilidad</span>
                                 </button>
+
+                                {% if inc.is_validated %}
+                                <!-- Acta Oficial PDF con todos los datos técnicos (DEBAJO DE LA TRAZABILIDAD - SOLO VISIBLE TRAS VALIDACIÓN) -->
+                                <a href="/incidents/{{ inc.id }}/certificate.pdf" target="_blank"
+                                   class="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition shadow-xs"
+                                   title="Descargar Acta Oficial de Conformidad y Validación Técnica Policial en PDF con todos los datos técnicos">
+                                    <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    <span>Acta Oficial PDF</span>
+                                </a>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -1019,19 +1271,25 @@
 
                 <div class="mt-4 space-y-4 text-xs">
                     <!-- Resumen del Ticket -->
-                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
                         <p class="text-sm font-bold text-slate-900" x-text="traceModal?.title"></p>
                         <p class="text-slate-600" x-text="traceModal?.description"></p>
-                        <div class="flex flex-wrap gap-2 pt-1 text-[11px]">
-                            <span
-                                class="px-2 py-0.5 rounded bg-white border border-slate-200 font-semibold text-slate-700"
-                                x-text="'📍 ' + traceModal?.location"></span>
-                            <span
-                                class="px-2 py-0.5 rounded bg-white border border-slate-200 font-semibold text-slate-700"
-                                x-text="'📹 ' + traceModal?.device"></span>
-                            <span
-                                class="px-2 py-0.5 rounded bg-white border border-slate-200 font-semibold text-slate-700"
-                                x-text="'Criticidad: ' + traceModal?.fault_type"></span>
+                        
+                        <!-- Tarjeta Destacada: Punto de Cámara y Equipo -->
+                        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📍</span>
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-amber-800">Punto de Cámara</p>
+                                    <p class="text-xs sm:text-sm font-black text-amber-950" x-text="traceModal?.location || 'Estación de Policía'"></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-xs font-bold text-slate-800 shadow-2xs"
+                                      x-text="'📹 ' + (traceModal?.device || 'CCTV')"></span>
+                                <span class="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-xs font-bold text-slate-700 shadow-2xs"
+                                      x-text="'Criticidad: ' + traceModal?.fault_type"></span>
+                            </div>
                         </div>
                     </div>
 
@@ -1045,42 +1303,21 @@
                         </div>
 
                         <!-- Cierre y Solución -->
-                        <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1">
-                            <p class="text-[10px] font-bold uppercase text-emerald-700">2. Cierre & Solución Técnica</p>
-                            <p class="font-bold text-emerald-900" x-text="traceModal?.closed_by"></p>
-                            <p class="text-[11px] text-emerald-700" x-text="traceModal?.closed_at"></p>
-                            <p class="text-[10px] font-semibold text-emerald-800 pt-0.5"
-                                x-text="'Tiempo Total: ' + traceModal?.elapsed"></p>
+                        <div class="p-3 rounded-xl border space-y-1"
+                             :class="traceModal?.is_technically_closed ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'">
+                            <p class="text-[10px] font-bold uppercase"
+                               :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-400'">2. Cierre & Solución Técnica</p>
+                            <p class="font-bold"
+                               :class="traceModal?.is_technically_closed ? 'text-emerald-900' : 'text-slate-600'"
+                               x-text="traceModal?.is_technically_closed ? (traceModal?.closed_by || 'Técnico de Mantenimiento') : 'Pendiente de Cierre'"></p>
+                            <p class="text-[11px]"
+                               :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-500'"
+                               x-text="traceModal?.is_technically_closed ? traceModal?.closed_at : 'En atención operativa'"></p>
+                            <p class="text-[10px] font-semibold"
+                               :class="traceModal?.is_technically_closed ? 'text-emerald-800' : 'text-slate-500'"
+                               x-text="(traceModal?.is_technically_closed ? 'Tiempo Total: ' : 'Tiempo Transcurrido: ') + traceModal?.elapsed"></p>
                         </div>
                     </div>
-
-                    <!-- Validación Policial (Paso 3 de Trazabilidad) -->
-                    <template x-if="traceModal?.validator && traceModal?.validator !== 'Pendiente'">
-                        <div class="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 space-y-1.5">
-                            <div class="flex items-center justify-between">
-                                <p class="text-[11px] font-black uppercase text-purple-900 flex items-center gap-1.5">
-                                    <span>🛡️</span> 3. Dictamen de Validación Policial
-                                </p>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-black"
-                                      :class="traceModal?.validation_notes && !traceModal?.validator_badge ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'">
-                                    Certificado
-                                </span>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                <p class="text-slate-700">Validador: <strong class="text-purple-950" x-text="traceModal?.validator"></strong>
-                                    <template x-if="traceModal?.validator_badge">
-                                        <span class="text-purple-700 font-mono font-bold" x-text="'(Placa: ' + traceModal?.validator_badge + ')'"></span>
-                                    </template>
-                                </p>
-                                <p class="text-slate-500 sm:text-right" x-text="'Fecha: ' + traceModal?.validated_at"></p>
-                            </div>
-                            <template x-if="traceModal?.validation_notes">
-                                <p class="text-xs text-slate-700 bg-white p-2 rounded-lg border border-purple-100 italic" x-text="'Observaciones: ' + traceModal?.validation_notes"></p>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- Diagnóstico y Solución -->
                     <div class="space-y-3">
                         <div class="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200">
                             <p class="font-bold text-amber-900 text-xs flex items-center gap-1.5">
@@ -1099,7 +1336,7 @@
 
                     <!-- Evidencias Comparativas -->
                     <div class="space-y-1.5" x-show="traceModal?.initial_img || traceModal?.closing_img || traceModal?.rejection_img">
-                        <p class="font-bold text-slate-800 text-xs">Evidencias Fotográficas:</p>
+                        <p class="font-bold text-slate-800 text-xs">Evidencias Fotográficas Registradas:</p>
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             <template x-if="traceModal?.initial_img">
                                 <div class="space-y-1">
@@ -1127,9 +1364,188 @@
                             </template>
                         </div>
                     </div>
+
+                    <!-- AL FINAL EN LA TRAZABILIDAD: DATOS TÉCNICOS DE QUIEN REALIZÓ LA VALIDACIÓN POLICIAL (SOLO SI EL EVENTO FUE VALIDADO/CONFORME) -->
+                    <div class="p-4 rounded-2xl border-2 shadow-xs space-y-3 transition"
+                         :class="traceModal?.is_validated ? 'bg-gradient-to-br from-purple-50 via-indigo-50 to-emerald-50 border-purple-200/80' : (traceModal?.status === 'Pendiente de Validación' ? 'bg-amber-50/80 border-amber-200' : 'bg-slate-50/80 border-slate-200')">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pb-2"
+                             :class="traceModal?.is_validated ? 'border-b border-purple-200/60' : (traceModal?.status === 'Pendiente de Validación' ? 'border-b border-amber-200/60' : 'border-b border-slate-200')">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-base shadow-sm"
+                                     :class="traceModal?.is_validated ? 'bg-purple-700' : (traceModal?.status === 'Pendiente de Validación' ? 'bg-amber-600' : 'bg-slate-500')">
+                                    🛡️
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-wider"
+                                              :class="traceModal?.is_validated ? 'bg-purple-900 text-purple-100' : (traceModal?.status === 'Pendiente de Validación' ? 'bg-amber-900 text-amber-100' : 'bg-slate-700 text-slate-100')">
+                                            Paso 3 • Validación Técnica Policial
+                                        </span>
+                                        <template x-if="traceModal?.is_validated">
+                                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                🎖️ Dictamen Conforme Aprobado
+                                            </span>
+                                        </template>
+                                        <template x-if="!traceModal?.is_validated && traceModal?.status === 'Pendiente de Validación'">
+                                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                                                ⏳ En Espera de Validación Policial
+                                            </span>
+                                        </template>
+                                        <template x-if="!traceModal?.is_validated && traceModal?.status !== 'Pendiente de Validación' && !traceModal?.is_rejected">
+                                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                                                🔧 Intervención Técnica en Curso
+                                            </span>
+                                        </template>
+                                        <template x-if="traceModal?.is_rejected">
+                                            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                                                ❌ Dictamen No Conforme / Rechazado
+                                            </span>
+                                        </template>
+                                    </div>
+                                    <h4 class="text-xs sm:text-sm font-black text-slate-900 mt-0.5"
+                                        x-text="traceModal?.is_validated ? 'Certificación y Datos Técnicos del Validador Policial' : (traceModal?.status === 'Pendiente de Validación' ? 'En Espera de Dictamen de Validación Policial' : 'Validación Policial y Dictamen Técnico')"></h4>
+                                    <p class="text-[11px] text-slate-600"
+                                       x-text="traceModal?.is_validated ? 'Registro oficial inmutable expedido por la Estación de Policía de la jurisdicción.' : (traceModal?.status === 'Pendiente de Validación' ? 'La orden de trabajo fue finalizada y remitida por el equipo técnico. En espera de revisión y dictamen oficial de la Policía Nacional.' : 'La validación oficial se habilitará cuando el equipo técnico finalice y remita el trabajo.')"></p>
+                                </div>
+                            </div>
+                            
+                            <template x-if="traceModal?.is_validated">
+                                <a :href="'/incidents/' + traceModal?.id + '/certificate.pdf'" target="_blank"
+                                   class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md shadow-emerald-600/25 transition active:scale-95 shrink-0">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    <span>Acta Oficial PDF</span>
+                                </a>
+                            </template>
+                        </div>
+
+                        <!-- CASO 1: CUANDO EL EVENTO HA SIDO VALIDADO / CONFORME -> MOSTRAR DATOS TÉCNICOS DEL VALIDADOR POLICIAL -->
+                        <template x-if="traceModal?.is_validated">
+                            <div class="space-y-3">
+                                <!-- FICHA TÉCNICA DEL OFICIAL VALIDADOR POLICIAL -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                                    <!-- Oficial Validador -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Oficial Validador:</span>
+                                        <strong class="text-slate-900 font-black block text-xs truncate" x-text="traceModal?.validator || 'Oficial Validador Policial'"></strong>
+                                        <span class="text-[10px] text-purple-700 font-semibold block truncate" x-text="traceModal?.validator_rank || 'Oficial Validador de Seguridad y Convivencia Policial (CCTV)'"></span>
+                                    </div>
+
+                                    <!-- Placa Policial y Cédula -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Placa Policial & C.C.:</span>
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-black bg-purple-100 text-purple-900 border border-purple-300"
+                                                  x-text="traceModal?.validator_badge ? ('Placa #' + traceModal?.validator_badge) : 'Placa Policial'"></span>
+                                            <span class="text-[10px] text-slate-600 font-mono"
+                                                  x-text="traceModal?.validator_document ? ('C.C. ' + traceModal?.validator_document) : 'C.C. Registrada'"></span>
+                                        </div>
+                                        <span class="text-[10px] text-slate-500 block truncate" x-text="'Rol: ' + (traceModal?.validator_role || 'Validador Policial')"></span>
+                                    </div>
+
+                                    <!-- Unidad Policial -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Unidad Policial:</span>
+                                        <strong class="text-slate-800 text-[11px] block truncate" x-text="traceModal?.validator_unit || 'Policía Nacional de Colombia - Estación de Policía - Centro de Monitoreo CCTV'"></strong>
+                                        <span class="text-[10px] text-slate-500 block truncate" x-text="'Jurisdicción: ' + (traceModal?.location || 'Sede Municipal')"></span>
+                                    </div>
+
+                                    <!-- Fecha y Hora Dictamen -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Fecha y Hora de Validación:</span>
+                                        <strong class="text-emerald-800 text-xs font-bold block" x-text="traceModal?.validated_at || 'Certificado'"></strong>
+                                        <span class="text-[10px] text-emerald-600 font-semibold block">Sello de Tiempo Certificado</span>
+                                    </div>
+
+                                    <!-- Dictamen Institucional -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Dictamen Policial:</span>
+                                        <strong class="text-emerald-700 text-xs font-black block">Visto Bueno Conforme</strong>
+                                        <span class="text-[10px] text-slate-500 block truncate" x-text="traceModal?.resolution_label || 'Validado'"></span>
+                                    </div>
+
+                                    <!-- Código de Acta Digital -->
+                                    <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Código Inmutable de Acta:</span>
+                                        <span class="text-xs font-mono font-black text-indigo-700 block truncate" x-text="'ACTA-VAL-' + traceModal?.ticket"></span>
+                                        <span class="text-[10px] text-indigo-500 block">Firma Digital Registrada</span>
+                                    </div>
+                                </div>
+
+                                <!-- Observaciones Técnicas Policiales -->
+                                <div class="bg-white/90 p-3 rounded-xl border border-purple-100 space-y-1">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-[10px] font-bold uppercase tracking-wider text-purple-900">Observaciones Técnicas del Dictamen Policial:</p>
+                                        <span class="text-[10px] font-mono text-purple-600">Revisión en Sitio & CCTV</span>
+                                    </div>
+                                    <p class="text-xs text-slate-700 italic leading-relaxed" x-text="traceModal?.validation_notes || 'Trabajo correctivo revisado, verificado y validado formalmente conforme a los estándares técnicos y evidencias fotográficas.'"></p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- CASO 2: CUANDO EL EVENTO ESTÁ PENDIENTE DE VALIDACIÓN -> EN ESPERA DE REVISIÓN POLICIAL -->
+                        <template x-if="!traceModal?.is_validated && traceModal?.status === 'Pendiente de Validación'">
+                            <div class="p-4 rounded-xl bg-amber-50/90 border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                                    ⏳
+                                </div>
+                                <div class="space-y-1">
+                                    <h5 class="text-xs font-black text-amber-950 uppercase tracking-wide">Ticket Remitido • En Espera de Validación Policial</h5>
+                                    <p class="text-xs text-amber-900 leading-relaxed">
+                                        La orden de trabajo fue finalizada por el contratista/técnico y remitida formalmente. El ticket se encuentra actualmente en espera de revisión técnica y dictamen oficial por parte del personal validador de la Policía Nacional.
+                                    </p>
+                                    <p class="text-[11px] font-semibold text-amber-800 pt-0.5">
+                                        🛡️ Los datos técnicos del validador y el Acta Oficial en PDF se certificarán y publicarán una vez la Policía Nacional valide la conformidad del servicio.
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- CASO 3: CUANDO EL EVENTO ESTÁ EN ATENCIÓN / ABIERTO -->
+                        <template x-if="!traceModal?.is_validated && traceModal?.status !== 'Pendiente de Validación' && !traceModal?.is_rejected">
+                            <div class="p-4 rounded-xl bg-slate-100 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-slate-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                                    🔧
+                                </div>
+                                <div class="space-y-0.5">
+                                    <h5 class="text-xs font-black text-slate-800 uppercase tracking-wide">Intervención Técnica en Curso</h5>
+                                    <p class="text-xs text-slate-600 leading-relaxed">
+                                        Este evento se encuentra abierto o en atención operativa y aún no ha sido finalizado ni remitido por el personal técnico. La validación policial se habilitará automáticamente cuando el ticket sea finalizado y remitido.
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- CASO 4: CUANDO EL EVENTO FUE RECHAZADO -->
+                        <template x-if="traceModal?.is_rejected">
+                            <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                                    ❌
+                                </div>
+                                <div class="space-y-1">
+                                    <h5 class="text-xs font-black text-rose-950 uppercase tracking-wide">Dictamen Policial: No Conforme (Rechazado)</h5>
+                                    <p class="text-xs text-rose-800 leading-relaxed">
+                                        El ticket fue devuelto al contratista con observaciones para subsanación técnica inmediata.
+                                    </p>
+                                    <div class="p-2.5 bg-white/80 rounded-lg border border-rose-200 mt-1">
+                                        <p class="text-[10px] font-bold uppercase text-rose-700">Observaciones del Rechazo:</p>
+                                        <p class="text-xs text-slate-800 italic" x-text="traceModal?.validation_notes || 'Sin observaciones registradas'"></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
 
-                <div class="mt-5 pt-3 border-t border-slate-200 flex justify-end">
+                <div class="mt-5 pt-3 border-t border-slate-200 flex items-center justify-between">
+                    <div>
+                        <template x-if="traceModal?.is_validated">
+                            <a :href="'/incidents/' + traceModal?.id + '/certificate.pdf'" target="_blank"
+                               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition shadow-xs">
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                <span>Ver Acta Oficial en PDF</span>
+                            </a>
+                        </template>
+                    </div>
                     <button type="button" @click="traceModal = null"
                         class="px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition">
                         Cerrar Hoja de Trazabilidad

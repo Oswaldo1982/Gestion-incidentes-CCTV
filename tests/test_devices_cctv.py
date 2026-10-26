@@ -143,3 +143,41 @@ def test_delete_device_web_unlinking(client, db, admin_user, sample_device):
     db.refresh(maint)
     assert inc.device_id is None
     assert maint.device_id is None
+
+
+def test_validador_cannot_create_device_web(client, db, validador_user, active_license):
+    """Regla de Seguridad: El rol Validador no puede registrar nuevos equipos en CCTV."""
+    token = create_access_token({"sub": validador_user.username})
+    client.cookies.set("access_token", f"Bearer {token}")
+    client.cookies.set("active_site", "san-agustin")
+
+    form_data = {
+        "name": 'Cámara Domo Validador Test',
+        "device_type": "Cámara Domo",
+        "location_detail": 'Cam 1 "Terminal"',
+        "brand": "Dahua",
+        "model": "DH-TEST",
+        "serial_number": "VAL-DOMO-001122",
+        "ip_address": "192.168.10.99",
+        "sede": "San Agustín (Huila)"
+    }
+    response = client.post("/devices", data=form_data, follow_redirects=False)
+    assert response.status_code == status.HTTP_303_SEE_OTHER
+    assert "error=" in response.headers["location"]
+    assert "Validador" in response.headers["location"]
+
+    # Verificar que NO se creó el equipo en la base de datos
+    dev = db.query(Device).filter(Device.serial_number == "VAL-DOMO-001122").first()
+    assert dev is None
+
+
+def test_validador_devices_view_button_disabled(client, validador_user, active_license):
+    """UI: En la vista de inventario, el botón Registrar Equipo aparece deshabilitado para el Validador."""
+    token = create_access_token({"sub": validador_user.username})
+    client.cookies.set("access_token", f"Bearer {token}")
+    client.cookies.set("active_site", "san-agustin")
+
+    response = client.get("/devices")
+    assert response.status_code == status.HTTP_200_OK
+    assert "Acceso restringido: El rol Validador" in response.text
+

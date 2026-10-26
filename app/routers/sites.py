@@ -9,6 +9,7 @@ from app.models.site import Site
 from app.schemas.site import SiteCreate, SiteUpdate, SiteResponse, SiteListResponse
 from app.services.auth_service import RoleChecker, get_current_user
 from app.services.audit_service import create_audit_log
+from app.utils.timezone import get_local_now
 
 router = APIRouter(prefix="/api/sites", tags=["Gestión de Sedes Territoriales"])
 
@@ -78,8 +79,8 @@ def create_site(
         color=site_in.color or "blue",
         default_supervisor=site_in.default_supervisor.strip() if site_in.default_supervisor else "",
         is_active=site_in.is_active if site_in.is_active is not None else True,
-        created_at=datetime.datetime.utcnow(),
-        updated_at=datetime.datetime.utcnow()
+        created_at=get_local_now(),
+        updated_at=get_local_now()
     )
     db.add(new_site)
     db.commit()
@@ -119,7 +120,7 @@ def update_site(
             val = val.strip()
         setattr(site, field, val)
 
-    site.updated_at = datetime.datetime.utcnow()
+    site.updated_at = get_local_now()
     db.commit()
     db.refresh(site)
 
@@ -152,7 +153,7 @@ def deactivate_site(
 
     site.is_active = False
     site.status = "Inactivo"
-    site.updated_at = datetime.datetime.utcnow()
+    site.updated_at = get_local_now()
     db.commit()
     db.refresh(site)
 
@@ -185,7 +186,7 @@ def activate_site(
 
     site.is_active = True
     site.status = "Operativo"
-    site.updated_at = datetime.datetime.utcnow()
+    site.updated_at = get_local_now()
     db.commit()
     db.refresh(site)
 

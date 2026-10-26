@@ -103,7 +103,7 @@ def get_current_user(
         raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        sub: str = payload.get("sub")
+        sub: Optional[str] = payload.get("sub")
         if sub is None:
             raise credentials_exception
     except JWTError:
@@ -132,7 +132,7 @@ def get_current_user_optional(
         return None
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        sub: str = payload.get("sub")
+        sub: Optional[str] = payload.get("sub")
         if not sub:
             return None
         user = db.query(User).filter(

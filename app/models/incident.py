@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.models.base import Base
+from app.utils.timezone import get_local_now
 
 class Incident(Base):
     __tablename__ = "incidents"
@@ -19,8 +20,8 @@ class Incident(Base):
     created_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     assigned_to_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, onupdate=get_local_now, nullable=False)
 
     ticket_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     fault_type: Mapped[Optional[str]] = mapped_column(String(50), default="Falla Menor", nullable=True)  # Falla Crítica, Falla Menor, Inactivo, Cambio
@@ -50,7 +51,7 @@ class Incident(Base):
     def ticket_code(self):
         if self.ticket_number:
             return self.ticket_number
-        year = self.created_at.year if self.created_at else datetime.datetime.utcnow().year
+        year = self.created_at.year if self.created_at else get_local_now().year
         return f"TKT-{year}-{self.id:04d}"
 
     @ticket_code.setter
@@ -65,21 +66,64 @@ class Incident(Base):
             "Falla Menor": 24,
             "Cambio": 48
         }
-        return mapping.get(self.fault_type, 24)
+        return mapping.get(self.fault_type or "Falla Menor", 24)
+
+    @property
+    def is_technically_closed(self) -> bool:
+        """Indica si el equipo técnico completó la intervención y remitió la orden."""
+        return self.closed_at is not None or self.root_cause is not None
+
+    @property
+    def is_validated(self) -> bool:
+        """Determina si el incidente ya ha recibido visto bueno y certificación formal del Validador."""
+        if self.status in ["Pendiente de Validación", "Pendiente de Validación Policial", "Rechazado", "Abierto", "En Proceso"]:
+            return False
+        return (
+            self.status in ["Validado / Conforme", "Conforme / Validado"]
+            or self.validation_status == "Conforme"
+            or (self.validator_id is not None and self.validated_at is not None)
+        )
+
+    @property
+    def is_resolved(self) -> bool:
+        """Determina si un incidente ya ha sido resuelto y cerrado formalmente (incluyendo validación)."""
+        if self.status in ["Pendiente de Validación", "Pendiente de Validación Policial", "Rechazado", "Abierto", "En Proceso"]:
+            return False
+        return (
+            self.status in ["Cerrado", "Resuelto", "Validado / Conforme", "Conforme / Validado"]
+            or self.validation_status == "Conforme"
+            or (self.closed_at is not None and self.validator_id is not None)
+        )
+
+    @property
+    def is_overtime(self) -> bool:
+        """Determina si el ticket fue resuelto en extra tiempo (superando la meta SLA)."""
+        target_h = self.sla_target_hours
+        now = get_local_now()
+        start_time = self.timer_reset_at or self.created_at or now
+        end_time = self.validated_at or self.closed_at or self.updated_at or now
+        elapsed_h = max(0.0, (end_time - start_time).total_seconds() / 3600.0)
+        return elapsed_h > target_h
+
+    @property
+    def resolution_label(self) -> str:
+        """Etiqueta oficial de resolución: 'Resuelto SLA' si fue en extra tiempo, o 'Resuelto'."""
+        if not self.is_resolved:
+            return ""
+        return "Resuelto SLA" if self.is_overtime else "Resuelto"
 
     @property
     def elapsed_text(self):
-        now = datetime.datetime.utcnow()
-        is_finished = self.status in ["Cerrado", "Validado / Conforme", "Conforme / Validado"]
-        ref_time = self.validated_at or self.closed_at if (is_finished and (self.validated_at or self.closed_at)) else now
+        now = get_local_now()
+        ref_time = self.validated_at or self.closed_at or self.updated_at if (self.is_resolved and (self.validated_at or self.closed_at or self.updated_at)) else now
         start_time = self.timer_reset_at or self.created_at or now
         delta = ref_time - start_time
         total_seconds = max(0, int(delta.total_seconds()))
         hours = total_seconds // 3600
         minutes = (total_seconds % 3600) // 60
 
-        if is_finished:
-            status_label = "Validado" if ("Validado" in self.status or "Conforme" in self.status) else "Cerrado"
+        if self.is_resolved:
+            status_label = self.resolution_label
             if hours > 24:
                 days = hours // 24
                 rem_hours = hours % 24
@@ -88,6 +132,18 @@ class Incident(Base):
                 return f"{status_label} en {hours}h {minutes}m"
             else:
                 return f"{status_label} en {minutes}m"
+        elif self.status in ["Pendiente de Validación", "Pendiente de Validación Policial"]:
+            tech_time = self.closed_at or self.updated_at or now
+            tech_delta = tech_time - start_time
+            tech_sec = max(0, int(tech_delta.total_seconds()))
+            t_h = tech_sec // 3600
+            t_m = (tech_sec % 3600) // 60
+            if t_h > 24:
+                return f"Finalizado en {t_h//24}d {t_h%24}h (Por Validar)"
+            elif t_h > 0:
+                return f"Finalizado en {t_h}h {t_m}m (Por Validar)"
+            else:
+                return f"Finalizado en {t_m}m (Por Validar)"
         else:
             if hours > 24:
                 days = hours // 24
@@ -101,25 +157,49 @@ class Incident(Base):
     @property
     def sla_info(self):
         target_h = self.sla_target_hours
-        now = datetime.datetime.utcnow()
+        now = get_local_now()
         start_time = self.timer_reset_at or self.created_at or now
 
-        if self.status in ["Validado / Conforme", "Conforme / Validado"]:
-            val_name = self.validator.full_name or self.validator.username if self.validator else "Validador"
-            val_badge = f" (Placa #{self.validator.badge_number})" if self.validator and self.validator.badge_number else ""
-            end_time = self.validated_at or self.closed_at or now
-            elapsed_h = (end_time - start_time).total_seconds() / 3600.0
-            return {
-                "status": "validated",
-                "badge_bg": "bg-emerald-100",
-                "badge_text": "text-emerald-800",
-                "badge_border": "border-emerald-300",
-                "dot_color": "bg-emerald-500",
-                "label": "Validado / Conforme",
-                "detail": f"Certificado por {val_name}{val_badge} ({elapsed_h:.1f}h)"
-            }
+        # 1. Caso RESUELTO / CERRADO / VALIDADO
+        if self.is_resolved:
+            end_time = self.validated_at or self.closed_at or self.updated_at or now
+            delta = end_time - start_time
+            elapsed_h = max(0.0, delta.total_seconds() / 3600.0)
+            is_late = elapsed_h > target_h
 
-        if self.status == "Pendiente de Validación":
+            val_name = self.validator.full_name or self.validator.username if self.validator else "Oficial Validador"
+            val_badge = f" (Placa #{self.validator.badge_number})" if self.validator and self.validator.badge_number else ""
+
+            if not is_late:
+                return {
+                    "status": "closed_on_time",
+                    "badge_bg": "bg-emerald-100",
+                    "badge_text": "text-emerald-800",
+                    "badge_border": "border-emerald-300",
+                    "dot_color": "bg-emerald-500",
+                    "label": "Resuelto",
+                    "sub_label": "Resuelto",
+                    "is_resolved": True,
+                    "is_overtime": False,
+                    "detail": f"Cumplido en {elapsed_h:.1f}h (Meta SLA: {target_h}h)"
+                }
+            else:
+                exceeded = elapsed_h - target_h
+                return {
+                    "status": "closed_late",
+                    "badge_bg": "bg-emerald-50",
+                    "badge_text": "text-emerald-900",
+                    "badge_border": "border-emerald-400",
+                    "dot_color": "bg-emerald-500",
+                    "label": "Resuelto SLA",
+                    "sub_label": "Resuelto SLA",
+                    "is_resolved": True,
+                    "is_overtime": True,
+                    "detail": f"Resuelto con +{exceeded:.1f}h en tiempo extra (Meta SLA: {target_h}h)"
+                }
+
+        # 2. Pendiente de Validación Policial
+        if self.status in ["Pendiente de Validación", "Pendiente de Validación Policial"]:
             return {
                 "status": "pending_validation",
                 "badge_bg": "bg-purple-100",
@@ -127,9 +207,13 @@ class Incident(Base):
                 "badge_border": "border-purple-300 animate-pulse",
                 "dot_color": "bg-purple-600 animate-ping",
                 "label": "Pendiente de Validación",
+                "sub_label": "Por Validar",
+                "is_resolved": False,
+                "is_overtime": False,
                 "detail": "Esperando dictamen técnico de la Estación de Policía"
             }
 
+        # 3. Rechazado
         if self.status == "Rechazado":
             return {
                 "status": "rejected",
@@ -138,36 +222,14 @@ class Incident(Base):
                 "badge_border": "border-rose-300",
                 "dot_color": "bg-rose-600",
                 "label": "Rechazado con Observaciones",
+                "sub_label": "Rechazado",
+                "is_resolved": False,
+                "is_overtime": False,
                 "detail": "Devuelto a técnico con tiempo cero para subsanación"
             }
 
-        if self.status == "Cerrado":
-            end_time = self.closed_at or self.updated_at or now
-            elapsed_h = (end_time - start_time).total_seconds() / 3600.0
-            if elapsed_h <= target_h:
-                return {
-                    "status": "closed_on_time",
-                    "badge_bg": "bg-emerald-100",
-                    "badge_text": "text-emerald-800",
-                    "badge_border": "border-emerald-300",
-                    "dot_color": "bg-emerald-500",
-                    "label": "Cumplido a Tiempo",
-                    "detail": f"Resuelto en {elapsed_h:.1f}h (Meta: {target_h}h)"
-                }
-            else:
-                exceeded = elapsed_h - target_h
-                return {
-                    "status": "closed_late",
-                    "badge_bg": "bg-slate-100",
-                    "badge_text": "text-slate-700",
-                    "badge_border": "border-slate-300",
-                    "dot_color": "bg-slate-500",
-                    "label": "Cerrado Fuera de Meta",
-                    "detail": f"+{exceeded:.1f}h sobre SLA"
-                }
-
-        # Abierto o En Proceso
-        elapsed_h = (now - start_time).total_seconds() / 3600.0
+        # 4. Abierto o En Proceso
+        elapsed_h = max(0.0, (now - start_time).total_seconds() / 3600.0)
         remaining_h = target_h - elapsed_h
 
         if elapsed_h >= target_h:
@@ -179,6 +241,9 @@ class Incident(Base):
                 "badge_border": "border-rose-300 animate-pulse",
                 "dot_color": "bg-rose-600 animate-ping",
                 "label": "Plazo Vencido (Alerta SLA)",
+                "sub_label": "Alerta SLA",
+                "is_resolved": False,
+                "is_overtime": True,
                 "detail": f"Vencido por {int(overdue_h)}h {int((overdue_h%1)*60)}m"
             }
         elif elapsed_h >= target_h * 0.70:
@@ -189,6 +254,9 @@ class Incident(Base):
                 "badge_border": "border-amber-300",
                 "dot_color": "bg-amber-500",
                 "label": "Riesgo Inminente",
+                "sub_label": "Alerta",
+                "is_resolved": False,
+                "is_overtime": False,
                 "detail": f"Restan {int(remaining_h)}h {int((remaining_h%1)*60)}m"
             }
         else:
@@ -199,6 +267,9 @@ class Incident(Base):
                 "badge_border": "border-sky-200",
                 "dot_color": "bg-sky-500",
                 "label": "En Tiempo Óptimo",
+                "sub_label": "Óptimo",
+                "is_resolved": False,
+                "is_overtime": False,
                 "detail": f"Restan {int(remaining_h)}h {int((remaining_h%1)*60)}m"
             }
 

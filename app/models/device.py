@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import Integer, String, DateTime
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.models.base import Base
+from app.utils.timezone import get_local_now
 
 
 class Device(Base):
@@ -19,7 +20,7 @@ class Device(Base):
     sede: Mapped[str] = mapped_column(String(100), nullable=False)        # San Agustín, Huila (Sede Principal), Sede 2, etc.
     location_detail: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="Operativo", nullable=False) # Operativo, Alerta Menor, En Falla, Mantenimiento, Inactivo
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
 
     # Relaciones
     incidents = relationship("Incident", back_populates="device")

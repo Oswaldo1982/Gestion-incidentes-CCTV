@@ -2,6 +2,7 @@ import datetime
 from sqlalchemy import Integer, String, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
+from app.utils.timezone import get_local_now
 
 class License(Base):
     """Modelo legacy para compatibilidad retroactiva con tests unitarios existentes."""
@@ -10,7 +11,7 @@ class License(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     license_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    activated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    activated_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
 
     def __repr__(self):
         return f"<License id={self.id} is_active={self.is_active}>"
@@ -34,7 +35,7 @@ class SiteLicenseKey(Base):
     is_activated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     activated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
 
     def __repr__(self):
         return f"<SiteLicenseKey site={self.site_id} year={self.year} activated={self.is_activated}>"
@@ -60,8 +61,8 @@ class SiteActivationState(Base):
     last_activated_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime,
-        default=datetime.datetime.utcnow,
-        onupdate=datetime.datetime.utcnow,
+        default=get_local_now,
+        onupdate=get_local_now,
         nullable=False
     )
 

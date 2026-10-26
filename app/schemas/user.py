@@ -10,6 +10,7 @@ class UserBase(BaseModel):
     assigned_site: Optional[str] = None
     role: Literal["Admin", "Validador", "Supervisor", "Empresa de Mantenimiento", "Operario", "Responsable"] = "Empresa de Mantenimiento"
     badge_number: Optional[str] = None
+    signature_path: Optional[str] = None
     is_active: bool = True
     must_change_password: bool = False
     temp_expires_at: Optional[datetime] = None
@@ -34,6 +35,7 @@ class UserUpdate(BaseModel):
     assigned_site: Optional[str] = None
     role: Optional[Literal["Admin", "Validador", "Supervisor", "Empresa de Mantenimiento", "Operario", "Responsable"]] = None
     badge_number: Optional[str] = None
+    signature_path: Optional[str] = None
     is_active: Optional[bool] = None
     must_change_password: Optional[bool] = None
     temp_expires_at: Optional[datetime] = None
@@ -48,6 +50,7 @@ class UserResponse(BaseModel):
     assigned_site: Optional[str] = None
     role: str
     badge_number: Optional[str] = None
+    signature_path: Optional[str] = None
     is_active: bool
     must_change_password: bool = False
     temp_expires_at: Optional[datetime] = None

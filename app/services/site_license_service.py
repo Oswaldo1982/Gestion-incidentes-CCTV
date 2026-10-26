@@ -20,6 +20,7 @@ from app.config import settings
 from app.models.license import SiteLicenseKey, SiteActivationState
 from app.models.audit import AuditLog
 from app.utils.security import get_password_hash, verify_password
+from app.utils.timezone import get_local_now
 
 # Sedes Oficiales del Sistema de Gestión CCTV
 OFFICIAL_SITES: List[Dict[str, str]] = [
@@ -331,9 +332,9 @@ def load_or_create_developer_vault() -> Dict[str, Any]:
             print(f"[!] Error al leer almacén existente de licencias: {e}")
 
     # Generar nuevo almacén con 12 contraseñas independientes
-    now_utc = datetime.datetime.utcnow()
+    now_local = get_local_now()
     vault_data = {
-        "created_at": now_utc.isoformat(),
+        "created_at": now_local.isoformat(),
         "total_keys": 12,
         "sites": {}
     }
@@ -374,7 +375,7 @@ def generate_all_12_license_pdfs() -> List[str]:
     Retorna la lista de rutas generadas.
     """
     vault = load_or_create_developer_vault()
-    emission_date = datetime.datetime.fromisoformat(vault.get("created_at", datetime.datetime.utcnow().isoformat()))
+    emission_date = datetime.datetime.fromisoformat(vault.get("created_at", get_local_now().isoformat()))
     created_paths = []
 
     for site_id, site_data in vault["sites"].items():
@@ -484,23 +485,23 @@ def record_site_first_access(db: Session, site_id: str) -> datetime.datetime:
     Inicia la cuenta regresiva del período de gracia de 24 horas.
     """
     state = db.query(SiteActivationState).filter(SiteActivationState.site_id == site_id).first()
-    now_utc = datetime.datetime.utcnow()
+    now_local = get_local_now()
 
     if not state:
         state = SiteActivationState(
             site_id=site_id,
-            first_access_at=now_utc,
+            first_access_at=now_local,
             current_year=1,
             status="GRACE_PERIOD"
         )
         db.add(state)
         db.commit()
-        return now_utc
+        return now_local
 
     if not state.first_access_at:
-        state.first_access_at = now_utc
+        state.first_access_at = now_local
         db.commit()
-        return now_utc
+        return now_local
 
     return state.first_access_at
 
@@ -513,24 +514,24 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
     - Bloqueo y solicitud de contraseña de Año 1 tras las 24h.
     - Vigencia de 365 días por año y renovación para Año 2 y Año 3.
     """
-    # 1. Modo Desarrollador (Bypass Total)
-    if settings.DEV_MODE:
+    # 1. Modo Desarrollador o Licenciamiento Suspendido (Bypass Total y Permanente)
+    if getattr(settings, "SUSPEND_SITE_LICENSING", True) or settings.DEV_MODE:
         return {
             "site_id": site_id,
             "is_allowed": True,
-            "status": "DEV_BYPASS",
-            "message": "🛠️ Modo Desarrollador activo (DEV_MODE=True): Restricciones y temporizadores desactivados.",
+            "status": "SUSPENDED_BY_ADMIN",
+            "message": "🟢 Licenciamiento multi-sede suspendido: acceso libre total en todos los municipios.",
             "current_year": 1,
             "required_year": None,
-            "hours_remaining_grace": 24.0,
-            "days_remaining_active": 365,
+            "hours_remaining_grace": 9999.0,
+            "days_remaining_active": 9999,
             "first_access_at": None,
             "active_until": None,
-            "is_dev_mode": True,
+            "is_dev_mode": False,
             "years_status": [
-                {"year": 1, "is_activated": True, "badge": "Bypass Dev"},
-                {"year": 2, "is_activated": True, "badge": "Bypass Dev"},
-                {"year": 3, "is_activated": True, "badge": "Bypass Dev"}
+                {"year": 1, "is_activated": True, "badge": "Activo"},
+                {"year": 2, "is_activated": True, "badge": "Activo"},
+                {"year": 3, "is_activated": True, "badge": "Activo"}
             ]
         }
 
@@ -541,7 +542,7 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
     site_name = site_obj["name"]
 
     state = db.query(SiteActivationState).filter(SiteActivationState.site_id == clean_id).first()
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     # Si no tiene estado previo, crearlo
     if not state:
@@ -764,7 +765,7 @@ def activate_site_year_license(
     site_name = site_obj["name"]
 
     state = db.query(SiteActivationState).filter(SiteActivationState.site_id == clean_id).first()
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     if not state:
         state = SiteActivationState(site_id=clean_id, first_access_at=now, current_year=1, status="GRACE_PERIOD")
@@ -803,13 +804,15 @@ def activate_site_year_license(
         if state.failed_attempts >= 5:
             state.lockout_until = now + datetime.timedelta(minutes=15)
             db.commit()
-            AuditLog.create(
-                db=db,
-                user_id=user_id_audit,
-                username=username_audit,
-                action="SITE_LICENSE_LOCKOUT",
-                details={"site_id": clean_id, "year": target_year, "failed_attempts": state.failed_attempts}
-            ) if hasattr(AuditLog, 'create') else None
+            create_fn = getattr(AuditLog, 'create', None)
+            if callable(create_fn):
+                create_fn(
+                    db=db,
+                    user_id=user_id_audit,
+                    username=username_audit,
+                    action="SITE_LICENSE_LOCKOUT",
+                    details={"site_id": clean_id, "year": target_year, "failed_attempts": state.failed_attempts}
+                )
             return False, "Contraseña incorrecta. Se ha activado un bloqueo de seguridad de 15 minutos por reiterados intentos.", {}
 
         db.commit()

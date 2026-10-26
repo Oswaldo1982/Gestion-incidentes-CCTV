@@ -32,6 +32,7 @@ from app.models.event import Event
 from app.models.license import License
 from app.models.site import Site
 from app.auth import get_password_hash, authenticate_user, create_access_token, get_current_user_optional, verify_password, is_password_already_in_use
+from app.utils.timezone import get_local_now
 from app.services.license_service import check_license_validity, get_active_license_payload, activate_license, verify_user_limit
 from app.services.audit_service import create_audit_log
 from app.services.email_service import send_temporary_password_email
@@ -340,7 +341,7 @@ def check_site_access_or_redirect(
       - Si no es Administrador: redirige a /select-site?error={mensaje}.
     - Si el sitio está en período de gracia (24h) o activo: retorna None (acceso permitido).
     """
-    if settings.DEV_MODE:
+    if getattr(settings, "SUSPEND_SITE_LICENSING", True) or settings.DEV_MODE:
         return None
 
     site_id = current_site.get("id", "san-agustin")
@@ -442,10 +443,8 @@ async def lifespan(app: FastAPI):
             else:
                 print(f"[*] Usuario Administrador ya configurado: {admin_exists.username}")
 
-            # 2.1 Sembrar usuario Validador inicial si no existe
-            validador_exists = db.query(User).filter(
-                (User.username == "validador") | (User.email == "validador.cctv@seguridad-cctv.gov.co")
-            ).first()
+            # 2.1 Sembrar usuario Validador inicial si no existe ninguno en el sistema
+            validador_exists = db.query(User).filter(User.role == "Validador").first()
             if not validador_exists:
                 default_validador = User(
                     username="validador",
@@ -463,15 +462,10 @@ async def lifespan(app: FastAPI):
                 db.commit()
                 print("[*] Usuario Validador inicial creado con éxito: validador (Placa #109845)")
             else:
-                if not validador_exists.badge_number:
-                    validador_exists.badge_number = "109845"
-                    db.commit()
-                print(f"[*] Usuario Validador disponible: {validador_exists.username} (Placa #{validador_exists.badge_number})")
+                print(f"[*] Usuario Validador disponible: {validador_exists.username} (Placa #{validador_exists.badge_number or 'N/A'})")
 
-            # 2.2 Sembrar usuario Supervisor inicial si no existe
-            supervisor_exists = db.query(User).filter(
-                (User.username == "supervisor_sanagustin") | (User.username == "supervisor")
-            ).first()
+            # 2.2 Sembrar usuario Supervisor inicial si no existe ninguno en el sistema
+            supervisor_exists = db.query(User).filter(User.role == "Supervisor").first()
             if not supervisor_exists:
                 default_sup = User(
                     username="supervisor_sanagustin",
@@ -488,10 +482,8 @@ async def lifespan(app: FastAPI):
                 db.commit()
                 print("[*] Usuario Supervisor inicial creado con éxito: supervisor_sanagustin")
 
-            # 2.3 Sembrar usuario Empresa de Mantenimiento si no existe
-            mant_exists = db.query(User).filter(
-                (User.username == "mantenimiento_cctv") | (User.email == "mantenimiento@cctv-seguridad.gov.co")
-            ).first()
+            # 2.3 Sembrar usuario Empresa de Mantenimiento si no existe ninguno en el sistema
+            mant_exists = db.query(User).filter(User.role == "Empresa de Mantenimiento").first()
             if not mant_exists:
                 default_mant = User(
                     username="mantenimiento_cctv",
@@ -530,6 +522,14 @@ async def lifespan(app: FastAPI):
             print(f"[*] Licenciamiento multi-sede inicializado: {lic_res}")
         except Exception as e_lic:
             print(f"[!] Error al inicializar licenciamiento por sitio: {e_lic}")
+
+        # 6. Inicialización de firmas digitales institucionales
+        try:
+            from app.utils.signature import ensure_seed_signatures
+            ensure_seed_signatures(db)
+            print("[*] Firmas digitales de usuarios inicializadas.")
+        except Exception as e_sig:
+            print(f"[!] Error al inicializar firmas digitales: {e_sig}")
     except Exception as e:
         print(f"[!] Error durante la inicialización en lifespan: {e}")
     finally:
@@ -547,6 +547,20 @@ app = FastAPI(
 
 # Montar archivos estáticos para servir fotos locales
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.middleware("http")
+async def add_no_cache_headers_for_html(request: Request, call_next):
+    """
+    Garantiza que las vistas HTML dinámicas nunca se almacenen en caché del navegador (BFCache / disk cache),
+    evitando que al cambiar de rol de usuario o volver atrás se muestren estados desactualizados o botones faltantes.
+    """
+    response = await call_next(request)
+    content_type = response.headers.get("content-type", "")
+    if "text/html" in content_type:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # ----------------- 1. Landpage / Portal de Entrada (/) -----------------
@@ -811,7 +825,7 @@ def login_post(
 
     # Validar vigencia de 24 horas para credenciales temporales
     if user.must_change_password and user.temp_expires_at:
-        if datetime.datetime.utcnow() > user.temp_expires_at:
+        if get_local_now() > user.temp_expires_at:
             create_audit_log(
                 db,
                 user_id=user.id,
@@ -837,8 +851,8 @@ def login_post(
     from app.services.site_license_service import record_site_first_access
     record_site_first_access(db, clean_site_id)
 
-    # Validar licencia activa para usuarios sin rol Admin
-    if user.role != "Admin":
+    # Validar licencia activa para usuarios sin rol Admin (si no está suspendida)
+    if not getattr(settings, "SUSPEND_SITE_LICENSING", True) and not settings.DEV_MODE and user.role != "Admin":
         is_valid, reason = check_license_validity(db, site_id=clean_site_id)
         if not is_valid:
             create_audit_log(
@@ -942,11 +956,12 @@ def forgot_password_post(
     # 4. Actualizar usuario con contraseña temporal (24 horas) y requerimiento de cambio obligatorio
     user.hashed_password = get_password_hash(temp_password)
     user.must_change_password = True
-    user.temp_expires_at = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    user.temp_expires_at = get_local_now() + datetime.timedelta(hours=24)
     db.commit()
     db.refresh(user)
 
     # 5. Registrar en auditoría
+    temp_exp = user.temp_expires_at
     create_audit_log(
         db,
         user_id=user.id,
@@ -955,7 +970,7 @@ def forgot_password_post(
         details={
             "email": clean_email,
             "role": user.role,
-            "temp_expires_at": user.temp_expires_at.isoformat() if user.temp_expires_at else None
+            "temp_expires_at": temp_exp.isoformat() if temp_exp else None
         }
     )
     db.commit()
@@ -1025,10 +1040,11 @@ def change_credentials_post(
     email: Optional[str] = Form(None),
     new_password: str = Form(...),
     confirm_password: str = Form(...),
+    signature_data: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Procesa la actualización obligatoria de correo institucional y contraseña definitiva con validación MX."""
+    """Procesa la actualización obligatoria de correo institucional, contraseña definitiva y firma digital."""
     if not current_user:
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
@@ -1091,6 +1107,25 @@ def change_credentials_post(
             context={"current_user": current_user, "is_admin": is_admin, "error": "La contraseña ingresada ya se encuentra registrada en el sistema por otro usuario. Por seguridad, debes elegir una contraseña diferente y única."}
         )
 
+    # Validar firma digital obligatoria en primer ingreso
+    if not signature_data or not signature_data.strip():
+        return templates.TemplateResponse(
+            request=request,
+            name="change_credentials.html",
+            context={"current_user": current_user, "is_admin": is_admin, "error": "La firma digital es obligatoria. Debes dibujarla con el mouse o cargar una imagen de tu firma."}
+        )
+
+    try:
+        from app.utils.signature import save_signature_image
+        sig_path = save_signature_image(signature_data, current_user.id)
+        current_user.signature_path = sig_path
+    except Exception as e_sig:
+        return templates.TemplateResponse(
+            request=request,
+            name="change_credentials.html",
+            context={"current_user": current_user, "is_admin": is_admin, "error": f"Error al procesar la firma digital: {str(e_sig)}"}
+        )
+
     # Actualizar credenciales definitivas y remover banderas de cambio temporal
     old_email = current_user.email
     current_user.email = target_email
@@ -1144,22 +1179,17 @@ def demo_quick_login(
 
     user = db.query(User).filter(User.username == target_username).first()
     if not user:
-        from app.seeder_demo import seed_demo_data
-        try:
-            seed_demo_data(db)
-        except Exception as e:
-            print(f"[!] Error al sembrar datos demo: {e}")
-        user = db.query(User).filter(User.username == target_username).first()
+        if demo_role == "validador":
+            target_role = "Validador"
+        elif demo_role == "supervisor":
+            target_role = "Supervisor"
+        elif demo_role == "mantenimiento":
+            target_role = "Empresa de Mantenimiento"
+        else:
+            target_role = "Admin"
+        user = db.query(User).filter(User.role == target_role).first()
         if not user:
-            if demo_role == "validador":
-                target_role = "Validador"
-            elif demo_role == "supervisor":
-                target_role = "Supervisor"
-            else:
-                target_role = "Admin"
-            user = db.query(User).filter(User.role == target_role).first()
-            if not user:
-                user = db.query(User).first()
+            user = db.query(User).first()
 
     if not user:
         return RedirectResponse(url="/select-site?error=demo_user_not_found", status_code=status.HTTP_303_SEE_OTHER)
@@ -1220,12 +1250,12 @@ def logout(
     db: Session = Depends(get_db)
 ):
     """Cierra la sesión. Si la sesión era de Demo, borra y restablece todos los datos volátiles en memoria."""
-    is_demo = request.cookies.get("is_demo_session") == "true" or settings.DEMO_MODE
-    if is_demo:
+    # Si DEMO_MODE está activo a nivel de servidor, se restablece el sandbox en memoria
+    if settings.DEMO_MODE:
         try:
             from app.seeder_demo import seed_demo_data
             seed_demo_data(db)
-            print("[*] [Modo Demo] Sesión finalizada: todos los datos creados/modificados han sido borrados de memoria.")
+            print("[*] [Modo Demo] Sesión de memoria restablecida.")
         except Exception as e:
             print(f"[!] Error al limpiar datos de demo al salir: {e}")
 
@@ -1329,12 +1359,13 @@ def dashboard(
     cameras_pct = round((cameras_active / cameras_total * 100), 1) if cameras_total > 0 else 100.0
 
     # 2. Agregación SQL directa para métricas de Incidentes (Cero carga a RAM)
+    resolved_statuses = ["Cerrado", "Resuelto", "Validado / Conforme", "Conforme / Validado"]
     inc_agg = db.query(
         func.count(Incident.id).label("total"),
-        func.count(case((Incident.status != "Cerrado", 1))).label("open_count"),
-        func.count(case((Incident.status == "Cerrado", 1))).label("closed_count"),
-        func.count(case(((Incident.status != "Cerrado") & ((Incident.priority == "Crítica") | (Incident.fault_type == "Falla Crítica")), 1))).label("critical_count"),
-        func.count(case(((Incident.status != "Cerrado") & (Incident.priority == "Alta"), 1))).label("high_count"),
+        func.count(case((~Incident.status.in_(resolved_statuses), 1))).label("open_count"),
+        func.count(case((Incident.status.in_(resolved_statuses), 1))).label("closed_count"),
+        func.count(case(((~Incident.status.in_(resolved_statuses)) & ((Incident.priority == "Crítica") | (Incident.fault_type == "Falla Crítica")), 1))).label("critical_count"),
+        func.count(case(((~Incident.status.in_(resolved_statuses)) & (Incident.priority == "Alta"), 1))).label("high_count"),
     ).filter(site_inc_cond).first()
 
     total_incidents = (inc_agg.total if inc_agg else 0) or 0
@@ -1346,22 +1377,22 @@ def dashboard(
     # Evaluación eficiente de SLA sobre incidentes abiertos (máx 50)
     open_incidents = db.query(Incident).filter(
         site_inc_cond,
-        Incident.status != "Cerrado"
+        ~Incident.status.in_(resolved_statuses)
     ).order_by(Incident.created_at.desc()).limit(50).all()
 
     sla_expired_count = sum(1 for i in open_incidents if i.sla_info["status"] == "expired")
     sla_warning_count = sum(1 for i in open_incidents if i.sla_info["status"] == "warning")
 
-    # Muestra de cumplimiento SLA para tickets cerrados (máx 100)
+    # Muestra de cumplimiento SLA para tickets resueltos/cerrados (máx 100)
     sample_closed = db.query(Incident).filter(
         site_inc_cond,
-        Incident.status == "Cerrado"
-    ).order_by(Incident.closed_at.desc()).limit(100).all()
-    sla_on_time_closed = sum(1 for i in sample_closed if i.sla_info["status"] == "closed_on_time")
+        Incident.status.in_(resolved_statuses)
+    ).order_by(Incident.closed_at.desc().nullslast()).limit(100).all()
+    sla_on_time_closed = sum(1 for i in sample_closed if i.sla_info["status"] in ["closed_on_time", "resolved_on_time"])
     sla_compliance_pct = round((sla_on_time_closed / len(sample_closed) * 100), 1) if sample_closed else 100.0
 
     # 3. Agregación SQL directa para métricas de Mantenimientos
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
     maint_agg = db.query(
         func.count(Maintenance.id).label("total"),
         func.count(case((Maintenance.status == "En Ejecución", 1))).label("in_exec"),
@@ -1647,13 +1678,13 @@ def devices_view(
 
     # Lista ordenada de sitios preconfigurados y adicionales existentes
     default_sitios = [
+        "Parque Arqueológico",
+        "Colegio CRRC",
         "Estación de Policía",
         "Carabineros",
-        'Cam 1 "Terminal"',
-        'Cam 2 "Cuatro vientos"',
-        'Cam3 "Parque Arqueológico"',
-        'Cam4 "Colegio CRRC"',
-        'Cam5 "Kennedy"'
+        "Terminal de Transportes",
+        "Cuatro Vientos",
+        "Barrio Kennedy"
     ]
     ordered_sitios = list(default_sitios)
     for d in devices_list:
@@ -1698,8 +1729,11 @@ def create_device_web(
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
-    if current_user.role == "Supervisor":
-        err = urllib.parse.quote("Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede registrar nuevos equipos.")
+    if current_user.role in ["Supervisor", "Validador"]:
+        if current_user.role == "Validador":
+            err = urllib.parse.quote("Acceso denegado: El rol Validador (Policía Nacional) tiene funciones exclusivas de verificación y conformidad de incidentes y mantenimientos, y no puede registrar nuevos equipos.")
+        else:
+            err = urllib.parse.quote("Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede registrar nuevos equipos.")
         return RedirectResponse(url=f"/devices?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     current_site = get_current_site(request)
@@ -2054,7 +2088,7 @@ def create_user_web(
     assigned_pass = generate_temp_password()
     while is_password_already_in_use(assigned_pass, db):
         assigned_pass = generate_temp_password()
-    temp_expires = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    temp_expires = get_local_now() + datetime.timedelta(hours=24)
     must_change = True
 
     hashed_pw = get_password_hash(assigned_pass)
@@ -2122,10 +2156,11 @@ def update_admin_profile(
     email: str = Form(...),
     new_password: Optional[str] = Form(None),
     confirm_password: Optional[str] = Form(None),
+    signature_data: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Permite al Administrador actualizar voluntariamente sus datos personales (nombre, cédula, correo, contraseña) preservando su rol de Administrador."""
+    """Permite al Administrador actualizar voluntariamente sus datos personales (nombre, cédula, correo, contraseña, firma digital) preservando su rol de Administrador."""
     if not current_user:
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
@@ -2178,6 +2213,21 @@ def update_admin_profile(
         if is_password_already_in_use(new_password, db, exclude_user_id=current_user.id):
             return RedirectResponse(url="/users?error=La+contraseña+ingresada+ya+se+encuentra+registrada+en+el+sistema+para+otro+usuario.&edit_profile=1", status_code=status.HTTP_303_SEE_OTHER)
         current_user.hashed_password = get_password_hash(new_password)
+
+    # 4.1 Validar y procesar firma digital del Administrador
+    if signature_data and signature_data.strip():
+        try:
+            from app.utils.signature import save_signature_image
+            sig_path = save_signature_image(signature_data, current_user.id)
+            current_user.signature_path = sig_path
+        except Exception as e_sig:
+            encoded_err = urllib.parse.quote(f"Error procesando firma digital: {str(e_sig)}")
+            return RedirectResponse(url=f"/users?error={encoded_err}&edit_profile=1", status_code=status.HTTP_303_SEE_OTHER)
+    elif not current_user.signature_path:
+        return RedirectResponse(
+            url="/users?error=La+firma+digital+es+obligatoria+para+el+Administrador.+Debes+dibujarla+o+cargar+una+imagen.&edit_profile=1",
+            status_code=status.HTTP_303_SEE_OTHER
+        )
 
     # 5. Actualizar datos (el rol NO cambia, permanece Admin)
     current_user.full_name = clean_fullname
@@ -2428,9 +2478,25 @@ def incidents_view(
     current_page = min(page, total_pages) if total_records > 0 else 1
     offset = (current_page - 1) * page_size
 
-    # Paginación y ordenamiento optimizado directamente en el motor relacional
+    resolved_statuses = ["Cerrado", "Resuelto", "Validado / Conforme", "Conforme / Validado"]
+    active_statuses = ["Abierto", "En Proceso", "Pendiente de Validación"]
+
+    site_kpis = {
+        "critical_open": incidents_base.filter(Incident.fault_type == "Falla Crítica", Incident.status.in_(active_statuses)).count(),
+        "critical_total": incidents_base.filter(Incident.fault_type == "Falla Crítica").count(),
+        "inactive_open": incidents_base.filter(Incident.fault_type == "Inactivo", Incident.status.in_(active_statuses)).count(),
+        "inactive_total": incidents_base.filter(Incident.fault_type == "Inactivo").count(),
+        "in_process": incidents_base.filter(Incident.status == "En Proceso").count(),
+        "closed_total": incidents_base.filter((Incident.status.in_(resolved_statuses)) | (Incident.closed_at.isnot(None))).count(),
+        "total_records": total_records
+    }
+
+    # Paginación y ordenamiento optimizado:
+    # 1. Incidentes activos primero (Abierto, En Proceso), luego cerrados/resueltos
+    # 2. Por criticidad y severidad dentro de los abiertos
+    # 3. Por fecha de creación más reciente
     incidents_list = incidents_base.order_by(
-        case((Incident.status != "Cerrado", 0), else_=1),
+        case((Incident.status.in_(active_statuses), 0), else_=1),
         case(
             (Incident.priority == "Crítica", 0),
             (Incident.fault_type == "Falla Crítica", 0),
@@ -2449,13 +2515,13 @@ def incidents_view(
     # Extraer sitios físicos específicos del municipio activo
     db_points = [d.location_detail.strip() for d in devices_list if d.location_detail and d.location_detail.strip()]
     default_points = [
+        'Parque Arqueológico',
+        'Colegio CRRC',
         'Estación de Policía',
         'Carabineros',
-        'Cam 1 "Terminal"',
-        'Cam 2 "Cuatro vientos"',
-        'Cam3 "Parque Arqueológico"',
-        'Cam4 "Colegio CRRC"',
-        'Cam5 "Kennedy"'
+        'Terminal de Transportes',
+        'Cuatro Vientos',
+        'Barrio Kennedy'
     ]
     physical_sites = []
     for pt in default_points:
@@ -2490,6 +2556,7 @@ def incidents_view(
             "available_sites": get_available_sites(db, active_only=True),
             "active_page": "incidents",
             "incidents": incidents_list,
+            "site_kpis": site_kpis,
             "devices": devices_list,
             "devices_json": devices_json,
             "sedes": site_sedes,
@@ -2537,17 +2604,38 @@ async def create_incident_web(
     final_location = custom_location.strip() if (location_detail == "Otro" and custom_location and custom_location.strip()) else location_detail.strip()
 
     # Generación de Serial / Ticket único
-    year = datetime.datetime.utcnow().year
+    year = get_local_now().year
     count = db.query(Incident).filter(Incident.ticket_number.like(f"TKT-{year}-%")).count()
     ticket_number = f"TKT-{year}-{count + 1:04d}"
     while db.query(Incident).filter(Incident.ticket_number == ticket_number).first():
         count += 1
         ticket_number = f"TKT-{year}-{count + 1:04d}"
 
-    # Buscar nombre del equipo si fue seleccionado
+    # Buscar nombre del equipo si fue seleccionado o resolverlo automáticamente según el punto físico
     device_obj = None
     if parsed_device_id:
         device_obj = db.query(Device).filter(Device.id == parsed_device_id).first()
+    elif final_location:
+        device_obj = (
+            db.query(Device).filter(
+                Device.sede == assigned_sede,
+                Device.location_detail.ilike(f"%{final_location}%"),
+                Device.device_type.ilike("%cámara%")
+            ).first()
+            or db.query(Device).filter(
+                Device.sede == assigned_sede,
+                Device.location_detail.ilike(f"%{final_location}%")
+            ).first()
+            or db.query(Device).filter(
+                Device.location_detail.ilike(f"%{final_location}%"),
+                Device.device_type.ilike("%cámara%")
+            ).first()
+            or db.query(Device).filter(
+                Device.location_detail.ilike(f"%{final_location}%")
+            ).first()
+        )
+        if device_obj:
+            parsed_device_id = device_obj.id
 
     # Generación automática de título de Mantenimiento Correctivo
     dev_suffix = f" [{device_obj.name}]" if device_obj else ""
@@ -2601,11 +2689,15 @@ async def create_incident_web(
 @app.post("/incidents/{incident_id}/status")
 def update_incident_status_web(
     incident_id: int,
+    request: Request,
     new_status: str = Form(..., alias="status"),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """Actualiza el estado de un incidente (atención o avance de ciclo)."""
+    referer = request.headers.get("referer", "")
+    target_base = "/validation" if "/validation" in referer else "/incidents"
+
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -2614,35 +2706,35 @@ def update_incident_status_web(
 
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
-        return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
     # 1. Bloqueo estricto para el personal técnico si la orden está pendiente de validación o validada
     if incident.status in ["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
         return RedirectResponse(
-            url=f"/incidents?error=La+orden+de+trabajo+{incident.ticket_code}+se+encuentra+en+estado+'{urllib.parse.quote(incident.status)}'+y+la+edición+técnica+está+bloqueada.",
+            url=f"{target_base}?error=La+orden+de+trabajo+{incident.ticket_code}+se+encuentra+en+estado+'{urllib.parse.quote(incident.status)}'+y+la+edición+técnica+está+bloqueada.",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
     if current_user.role == "Supervisor":
         err = urllib.parse.quote("Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede modificar el estado de los tickets.")
-        return RedirectResponse(url=f"/incidents?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=f"{target_base}?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     allowed_roles = ["Admin", "Operario", "Responsable", "Empresa de Mantenimiento"]
     if current_user.role not in allowed_roles:
-        return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
     old_status = incident.status
     if old_status != new_status:
         incident.status = new_status
-        incident.updated_at = datetime.datetime.utcnow()
+        incident.updated_at = get_local_now()
 
         if new_status == "En Proceso" and not incident.attended_at:
-            incident.attended_at = datetime.datetime.utcnow()
+            incident.attended_at = get_local_now()
             if not incident.assigned_to_id:
                 incident.assigned_to_id = current_user.id
 
         if new_status in ["Cerrado", "Validado / Conforme"]:
-            incident.closed_at = datetime.datetime.utcnow()
+            incident.closed_at = get_local_now()
             incident.closed_by_id = current_user.id
 
         db.add(Event(
@@ -2661,12 +2753,13 @@ def update_incident_status_web(
         )
         db.commit()
 
-    return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/incidents/{incident_id}/close")
 async def close_incident_web(
     incident_id: int,
+    request: Request,
     root_cause: str = Form(...),
     solution: str = Form(...),
     closing_photo: Optional[UploadFile] = File(None),
@@ -2674,6 +2767,9 @@ async def close_incident_web(
     db: Session = Depends(get_db)
 ):
     """Cierre técnico de incidente que cambia automáticamente a 'Pendiente de Validación' para revisión policial."""
+    referer = request.headers.get("referer", "")
+    target_base = "/validation" if "/validation" in referer else "/incidents"
+
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -2682,34 +2778,34 @@ async def close_incident_web(
 
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
-        return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
     if incident.status in ["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
         return RedirectResponse(
-            url=f"/incidents?error=La+orden+de+trabajo+{incident.ticket_code}+se+encuentra+en+estado+'{urllib.parse.quote(incident.status)}'+y+la+edición+técnica+está+bloqueada.",
+            url=f"{target_base}?error=La+orden+de+trabajo+{incident.ticket_code}+se+encuentra+en+estado+'{urllib.parse.quote(incident.status)}'+y+la+edición+técnica+está+bloqueada.",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
     if current_user.role == "Supervisor":
         err = urllib.parse.quote("Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede cerrar ni finalizar tickets.")
-        return RedirectResponse(url=f"/incidents?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=f"{target_base}?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     allowed_roles = ["Admin", "Operario", "Responsable", "Empresa de Mantenimiento"]
     if current_user.role not in allowed_roles:
-        return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
     closing_image_path = await save_uploaded_photo(closing_photo)
 
     # Transición automática a Pendiente de Validación
     incident.status = "Pendiente de Validación"
     incident.validation_status = "Pendiente"
-    incident.closed_at = datetime.datetime.utcnow()
+    incident.closed_at = get_local_now()
     incident.closed_by_id = current_user.id
     incident.root_cause = root_cause.strip()
     incident.solution = solution.strip()
     if closing_image_path:
         incident.closing_image_path = closing_image_path
-    incident.updated_at = datetime.datetime.utcnow()
+    incident.updated_at = get_local_now()
 
     db.add(Event(
         incident_id=incident.id,
@@ -2735,7 +2831,7 @@ async def close_incident_web(
     db.commit()
 
     return RedirectResponse(
-        url=f"/incidents?msg=Ticket+{incident.ticket_code}+marcado+como+finalizado.+Ha+pasado+a+estado+'Pendiente+de+Validación'+para+revisión+y+firma+de+la+Estación+de+Policía.",
+        url=f"{target_base}?msg=Ticket+{incident.ticket_code}+marcado+como+finalizado.+Ha+pasado+a+estado+'Pendiente+de+Validación'+para+revisión+y+firma+de+la+Estación+de+Policía.",
         status_code=status.HTTP_303_SEE_OTHER
     )
 
@@ -2776,7 +2872,7 @@ async def validate_incident_web(
             status_code=status.HTTP_303_SEE_OTHER
         )
 
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     if action == "approve":
         incident.status = "Validado / Conforme"
@@ -2842,7 +2938,7 @@ async def validate_incident_web(
             incident_id=incident.id,
             user_id=current_user.id,
             event_type="INCIDENT_REJECTED",
-            description=f"Ticket {incident.ticket_code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {incident.validation_notes[:100]}"
+            description=f"Ticket {incident.ticket_code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {(incident.validation_notes or '')[:100]}"
         ))
 
         create_audit_log(
@@ -2880,27 +2976,30 @@ def download_incident_certificate_pdf(
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
-    # Restricción estricta de seguridad: Solo Administrador, Validador y Supervisor
-    if current_user.role not in ["Admin", "Validador", "Supervisor"]:
+    # Restricción de seguridad: Administrador, Validador, Supervisor, Empresa de Mantenimiento y Operario
+    if current_user.role not in ["Admin", "Validador", "Supervisor", "Empresa de Mantenimiento", "Operario"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso Denegado: Este informe técnico oficial de validación solo puede ser consultado por el Administrador, el Validador y el Supervisor."
+            detail="Acceso Denegado: Este informe técnico oficial de validación solo puede ser consultado por usuarios autorizados."
         )
 
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incidente no encontrado.")
 
-    if incident.status not in ["Validado / Conforme", "Conforme / Validado"] and incident.validation_status != "Conforme":
+    if not incident.is_validated:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Este trabajo aún no ha sido aprobado ni validado formalmente por la Estación de Policía."
+            detail="La orden técnica aún no ha sido aprobada ni validada formalmente por la Estación de Policía."
         )
 
     active_site_id = request.cookies.get("active_site", "san-agustin")
     current_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
 
-    validator_user = incident.validator or current_user
+    validator_user = incident.validator
+    if not validator_user:
+        validator_user = db.query(User).filter(User.role == "Validador").first() or current_user
+
     pdf_bytes = generate_validation_conformity_pdf(
         item=incident,
         item_type="incident",
@@ -2922,13 +3021,13 @@ def download_incident_certificate_pdf(
 @app.get("/maintenances", response_class=HTMLResponse)
 def maintenance_view(
     request: Request,
-    status: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
     msg: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Vista web operativa de mantenimientos preventivos, correctivos y proactivos filtrada por el municipio activo."""
+    """Vista web operativa de mantenimientos preventivos y proactivos filtrada por el municipio activo."""
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -2957,13 +3056,13 @@ def maintenance_view(
     # Extraer sitios físicos específicos del municipio activo
     db_points = [d.location_detail.strip() for d in devices_list if d.location_detail and d.location_detail.strip()]
     default_points = [
+        'Parque Arqueológico',
+        'Colegio CRRC',
         'Estación de Policía',
         'Carabineros',
-        'Cam 1 "Terminal"',
-        'Cam 2 "Cuatro vientos"',
-        'Cam3 "Parque Arqueológico"',
-        'Cam4 "Colegio CRRC"',
-        'Cam5 "Kennedy"'
+        'Terminal de Transportes',
+        'Cuatro Vientos',
+        'Barrio Kennedy'
     ]
     physical_sites = []
     for pt in default_points:
@@ -3002,7 +3101,7 @@ def maintenance_view(
             "devices": devices_list,
             "devices_json": devices_json,
             "physical_sites": physical_sites,
-            "initial_status": status or "all",
+            "initial_status": status_filter or "all",
             "pending_validation_count": pending_validation_count,
             "msg": msg,
             "error": error
@@ -3028,7 +3127,7 @@ async def create_maintenance_web(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Procesa la programación de un nuevo mantenimiento (preventivo, correctivo o proactivo) con serial y título autogenerado."""
+    """Procesa la programación de un nuevo mantenimiento (preventivo o proactivo) con serial y título autogenerado."""
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -3050,7 +3149,7 @@ async def create_maintenance_web(
         try:
             parsed_date = datetime.datetime.strptime(scheduled_date.strip(), "%d/%m/%Y %H:%M")
         except Exception:
-            parsed_date = datetime.datetime.utcnow()
+            parsed_date = get_local_now()
 
     parsed_incident_id = int(incident_id) if incident_id and incident_id.strip() else None
     parsed_device_id = int(device_id) if device_id and device_id.strip() else None
@@ -3059,7 +3158,7 @@ async def create_maintenance_web(
     final_location = custom_location.strip() if (location_detail == "Otro" and custom_location and custom_location.strip()) else location_detail.strip()
 
     # Generación de Serial / Código de Protocolo Preventivo único (MP-YYYY-XXXX)
-    year = datetime.datetime.utcnow().year
+    year = get_local_now().year
     count = db.query(Maintenance).filter(Maintenance.protocol_code.like(f"MP-{year}-%")).count()
     protocol_code = f"MP-{year}-{count + 1:04d}"
     while db.query(Maintenance).filter(Maintenance.protocol_code == protocol_code).first():
@@ -3145,9 +3244,9 @@ def update_maintenance_status_web(
     if old_status != new_status:
         maint.status = new_status
         if new_status == "En Ejecución" and not maint.execution_date:
-            maint.execution_date = datetime.datetime.utcnow()
+            maint.execution_date = get_local_now()
         elif new_status == "Completado":
-            maint.completed_date = datetime.datetime.utcnow()
+            maint.completed_date = get_local_now()
             maint.completed_by_id = current_user.id
 
         db.add(Event(
@@ -3226,7 +3325,7 @@ async def complete_maintenance_web(
     # Transición automática a Pendiente de Validación
     maint.status = "Pendiente de Validación"
     maint.validation_status = "Pendiente"
-    maint.completed_date = datetime.datetime.utcnow()
+    maint.completed_date = get_local_now()
     maint.completed_by_id = current_user.id
     maint.actions_taken = actions_taken.strip()
     if recommendations and recommendations.strip():
@@ -3238,6 +3337,11 @@ async def complete_maintenance_web(
         maint.completion_photo = completion_photo_path
     if not maint.execution_date:
         maint.execution_date = maint.completed_date
+
+    # Reset de campos de validación previa (en caso de reapertura tras rechazo)
+    maint.validator_id = None
+    maint.validated_at = None
+    maint.validation_notes = None
 
     db.add(Event(
         maintenance_id=maint.id,
@@ -3301,7 +3405,7 @@ async def validate_maintenance_web(
     if not maint:
         return RedirectResponse(url=f"{target_redirect}?error=Mantenimiento+no+encontrado", status_code=status.HTTP_303_SEE_OTHER)
 
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     if action == "approve":
         maint.status = "Validado / Conforme"
@@ -3354,7 +3458,7 @@ async def validate_maintenance_web(
             maint.rejection_photo = rejection_photo_path
 
         # Reinicio del ticket con tiempo cero y devolución a la Empresa de Mantenimiento
-        maint.status = "En Ejecución"
+        maint.status = "Rechazado"
         maint.validation_status = "Rechazado"
         maint.validator_id = current_user.id
         maint.validated_at = now
@@ -3368,7 +3472,7 @@ async def validate_maintenance_web(
             maintenance_id=maint.id,
             user_id=current_user.id,
             event_type="MAINTENANCE_REJECTED",
-            description=f"Protocolo {maint.code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {maint.validation_notes[:100]}"
+            description=f"Protocolo {maint.code} rechazado y devuelto a subsanación técnica con tiempo cero por Validador {current_user.full_name or current_user.username}{badge_txt}. Obs: {(maint.validation_notes or '')[:100]}"
         ))
 
         create_audit_log(
@@ -3406,18 +3510,18 @@ def download_maintenance_certificate_pdf(
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
-    # Restricción estricta de seguridad: Solo Administrador, Validador y Supervisor
-    if current_user.role not in ["Admin", "Validador", "Supervisor"]:
+    # Restricción de seguridad: Administrador, Validador, Supervisor, Empresa de Mantenimiento y Operario
+    if current_user.role not in ["Admin", "Validador", "Supervisor", "Empresa de Mantenimiento", "Operario"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso Denegado: Este informe técnico oficial de validación solo puede ser consultado por el Administrador, el Validador y el Supervisor."
+            detail="Acceso Denegado: Este informe técnico oficial de validación solo puede ser consultado por usuarios autorizados."
         )
 
     maint = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
     if not maint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mantenimiento no encontrado.")
 
-    if maint.status not in ["Validado / Conforme", "Conforme / Validado"] and maint.validation_status != "Conforme":
+    if not maint.is_validated:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Este protocolo preventivo aún no ha sido aprobado ni validado formalmente por la Estación de Policía."
@@ -3426,7 +3530,10 @@ def download_maintenance_certificate_pdf(
     active_site_id = request.cookies.get("active_site", "san-agustin")
     current_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
 
-    validator_user = maint.validator or current_user
+    validator_user = maint.validator
+    if not validator_user:
+        validator_user = db.query(User).filter(User.role == "Validador").first() or current_user
+
     pdf_bytes = generate_validation_conformity_pdf(
         item=maint,
         item_type="maintenance",
@@ -3483,13 +3590,13 @@ def validation_view(
     # 1. Incidentes relevantes para validación
     all_incidents = db.query(Incident).filter(
         site_filter_inc,
-        Incident.status.in_(["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Cerrado", "En Proceso"])
+        Incident.status.in_(["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Cerrado", "En Proceso", "Abierto"])
     ).order_by(Incident.updated_at.desc()).all()
 
     # 2. Mantenimientos preventivos relevantes
     all_maintenances = db.query(Maintenance).filter(
         site_filter_maint,
-        Maintenance.status.in_(["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Completado", "En Ejecución"])
+        Maintenance.status.in_(["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Completado", "En Ejecución", "Programado"])
     ).order_by(Maintenance.completed_date.desc(), Maintenance.created_at.desc()).all()
 
     # Conteos de indicadores
@@ -3532,7 +3639,7 @@ def validation_view(
 
 def resolve_date_range(period: str, start_date_str: Optional[str], end_date_str: Optional[str]):
     """Calcula y estandariza el rango de fechas para las consultas analíticas e informes."""
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
     end_dt = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     
     if period == "custom" and start_date_str and end_date_str:

@@ -13,6 +13,7 @@ from app.services.auth_service import get_current_user, RoleChecker
 from app.services.license_service import verify_license_dependency
 from app.services.audit_service import create_audit_log
 from app.services.report_service import generate_validation_conformity_pdf
+from app.utils.timezone import get_local_now
 
 router = APIRouter(prefix="/api/maintenance", tags=["Mantenimientos"])
 
@@ -28,13 +29,13 @@ def create_maintenance(
     license_payload: dict = Depends(verify_license_dependency)
 ):
     """
-    Programa un nuevo mantenimiento preventivo o correctivo (Administradores y Técnicos).
+    Programa un nuevo mantenimiento preventivo o proactivo (Administradores y Técnicos).
     Verifica licencia activa.
     """
     # Generar protocol_code si no viene especificado
     protocol_code = maint_in.protocol_code
     if not protocol_code:
-        year = datetime.datetime.utcnow().year
+        year = get_local_now().year
         count = db.query(Maintenance).filter(Maintenance.protocol_code.like(f"MP-{year}-%")).count()
         protocol_code = f"MP-{year}-{count + 1:04d}"
 
@@ -167,12 +168,12 @@ def update_maintenance(
         
         # Si pasa a Pendiente de Validación, registrar fecha de finalización y técnico
         if target_status == "Pendiente de Validación":
-            maint.completed_date = datetime.datetime.utcnow()
+            maint.completed_date = get_local_now()
             maint.completed_by_id = current_user.id
             maint.validation_status = "Pendiente"
             changes.append("completed_date: set to now, validation_status: Pendiente")
         elif target_status == "En Ejecución" and not maint.execution_date:
-            maint.execution_date = datetime.datetime.utcnow()
+            maint.execution_date = get_local_now()
             changes.append("execution_date: set to now")
             
         db.add(Event(
@@ -249,7 +250,7 @@ def validate_maintenance(
             detail="Mantenimiento no encontrado."
         )
 
-    now = datetime.datetime.utcnow()
+    now = get_local_now()
 
     if val_in.action == "approve":
         maint.status = "Conforme / Validado"
@@ -302,7 +303,7 @@ def validate_maintenance(
             maintenance_id=maint.id,
             user_id=current_user.id,
             event_type="MAINTENANCE_REJECTED",
-            description=f"Protocolo {maint.code} devuelto a subsanación técnica con tiempo cero por {current_user.full_name or current_user.username}. Obs: {maint.validation_notes[:100]}"
+            description=f"Protocolo {maint.code} devuelto a subsanación técnica con tiempo cero por {current_user.full_name or current_user.username}. Obs: {(maint.validation_notes or '')[:100]}"
         ))
 
         create_audit_log(
@@ -348,14 +349,14 @@ def get_maintenance_certificate_pdf(
     if not maint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mantenimiento no encontrado.")
 
-    if maint.status not in ["Validado / Conforme", "Conforme / Validado"] and maint.validation_status != "Conforme":
+    if not maint.is_validated:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La orden preventiva aún no ha sido aprobada ni validada formalmente."
         )
 
     current_site = {"name": maint.sede or "General", "full_name": maint.sede or "Sede General"}
-    validator_user = maint.validator or current_user
+    validator_user = maint.validator or db.query(User).filter(User.role == "Validador").first() or current_user
     pdf_bytes = generate_validation_conformity_pdf(
         item=maint,
         item_type="maintenance",

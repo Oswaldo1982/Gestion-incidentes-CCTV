@@ -125,9 +125,9 @@
                 </div>
 
                 <!-- Botón de Registro de Nuevo Equipo -->
-                {% if current_user.role == 'Supervisor' %}
+                {% if current_user.role in ['Supervisor', 'Validador'] %}
                 <button disabled
-                        title="Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría en inventario de equipos. No puede registrar ni modificar dispositivos."
+                        title="{% if current_user.role == 'Validador' %}Acceso restringido: El rol Validador (Policía Nacional) tiene funciones exclusivas de verificación y conformidad. No puede registrar nuevos equipos.{% else %}Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría en inventario de equipos. No puede registrar ni modificar dispositivos.{% endif %}"
                         class="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-800/80 text-slate-400 border border-slate-700 text-xs font-bold cursor-not-allowed shadow-none">
                     <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     <span>Registrar Equipo</span>
@@ -476,7 +476,7 @@
                             </div>
                             {% elif dev.calculated_status == 'En Mantenimiento' %}
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-sm"
-                                  title="Mantenimiento preventivo/correctivo programado">
+                                  title="Mantenimiento preventivo programado">
                                 <span class="w-2 h-2 rounded-full bg-blue-500"></span>
                                 Mantenimiento
                             </span>
@@ -661,6 +661,7 @@
     </div>
 
     <!-- ==================== MODAL: REGISTRAR NUEVO EQUIPO ==================== -->
+    {% if current_user.role not in ['Supervisor', 'Validador'] %}
     <div x-show="openModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             
@@ -831,6 +832,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     {% if is_default_admin %}
     <!-- ==================== MODAL: TRASLADAR EQUIPO (SOLO ADMIN CON CONTRASEÑA) ==================== -->

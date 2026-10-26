@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 class MaintenanceBase(BaseModel):
-    type: Literal["Preventivo", "Correctivo", "Proactivo"] = "Preventivo"
+    type: Literal["Preventivo", "Proactivo"] = "Preventivo"
     title: Optional[str] = Field(None, max_length=150)
     description: str = Field(..., min_length=5)
     scheduled_date: datetime

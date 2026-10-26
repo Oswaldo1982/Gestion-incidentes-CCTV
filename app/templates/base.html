@@ -279,7 +279,13 @@
                 </div>
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-medium truncate">{{ current_user.full_name if current_user.full_name else current_user.username }}</p>
-                    <p class="text-xs text-gray-400">{{ current_user.role }}</p>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="text-xs text-gray-400">{{ current_user.role }}</span>
+                        {% if current_user.role == 'Admin' %}
+                        <span class="text-gray-600">&bull;</span>
+                        <a href="/users?edit_profile=1" title="Editar mis datos y firma digital" class="text-[10px] text-purple-400 hover:text-purple-300 font-semibold underline">Editar mis datos</a>
+                        {% endif %}
+                    </div>
                 </div>
                 <a href="/logout" title="Cerrar sesión"
                    class="text-gray-400 hover:text-white transition">

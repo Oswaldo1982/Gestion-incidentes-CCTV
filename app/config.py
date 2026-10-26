@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Modo Desarrollador (Bypass Total de Restricciones y Licencias para Desarrollo/Pruebas)
     DEV_MODE: bool = False
 
+    # Suspensión de Licenciamiento Multi-Sede (Por solicitud administrativa)
+    SUSPEND_SITE_LICENSING: bool = True
+
     # Base de Datos de Producción / Desarrollo Estándar
     DATABASE_URL: str = "sqlite:///./sqlite.db"
     SECRET_KEY: str = "cctv-secret-key-production-2026"
