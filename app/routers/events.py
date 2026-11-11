@@ -53,7 +53,7 @@ def add_incident_comment(
     if not incident:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incidente no encontrado.")
     
-    if incident.status == "Cerrado":
+    if incident.status in ["Cerrado", "Validado / Conforme", "Conforme / Validado"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se pueden agregar comentarios a incidentes cerrados."
@@ -118,7 +118,7 @@ def add_maintenance_comment(
     if not maint:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mantenimiento no encontrado.")
     
-    if maint.status in ["Completado", "Cancelado"]:
+    if maint.status in ["Completado", "Cancelado", "Validado / Conforme", "Conforme / Validado"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No se pueden agregar comentarios a mantenimientos en estado '{maint.status}'."

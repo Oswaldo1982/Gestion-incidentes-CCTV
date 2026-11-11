@@ -25,7 +25,7 @@ def get_users(
     """
     Lista todos los usuarios registrados (Solo Administrador).
     """
-    return db.query(User).all()
+    return db.query(User).filter(User.is_deleted == False).all()
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
@@ -65,39 +65,50 @@ def create_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="El número de placa policial debe contener únicamente dígitos numéricos."
             )
-        if db.query(User).filter(User.badge_number == clean_badge).first():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El número de placa policial ya se encuentra registrado para otro usuario."
-            )
-    elif clean_badge:
-        if db.query(User).filter(User.badge_number == clean_badge).first():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El número de placa policial ya se encuentra registrado para otro usuario."
-            )
-
-    # Verificar si el usuario ya existe por nombre de usuario o correo
-    existing_user = db.query(User).filter(
+    # Comprobar registros existentes en base de datos
+    clean_doc = user_in.document_id.strip() if user_in.document_id else None
+    existing_by_email = db.query(User).filter(
+        User.is_deleted == False,
         (User.username == user_in.username) | (User.email == user_in.email)
     ).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de usuario o correo electrónico ya está registrado."
-        )
+    existing_by_doc = db.query(User).filter(User.is_deleted == False, User.document_id == clean_doc).first() if clean_doc else None
+    existing_by_badge = db.query(User).filter(User.is_deleted == False, User.badge_number == clean_badge).first() if clean_badge else None
 
-    # Verificar si el documento de identidad (cédula) ya existe
-    if user_in.document_id and user_in.document_id.strip():
-        clean_doc = user_in.document_id.strip()
-        if db.query(User).filter(User.document_id == clean_doc).first():
+    # Regla: Los datos del Administrador Principal jamás pueden ser reutilizados ni reemplazados
+    for ex in [existing_by_email, existing_by_doc, existing_by_badge]:
+        if ex and (ex.id == 1 or ex.role == "Admin" or ex.username == 'admin'):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El número de documento de identidad (cédula) ya se encuentra registrado para otro usuario."
+                detail="No es posible utilizar los datos asociados al Administrador Principal."
             )
 
+    # Permitir la recreación limpia si el usuario fue borrado previamente o se están reutilizando sus datos
+    target_user_to_reuse = None
+    if existing_by_email:
+        target_user_to_reuse = existing_by_email
+        if existing_by_doc and existing_by_doc.id != target_user_to_reuse.id and existing_by_doc.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El número de documento de identidad (cédula) ya se encuentra registrado para otro usuario activo."
+            )
+        if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El número de placa policial ya se encuentra registrado para otro usuario activo."
+            )
+    elif existing_by_doc:
+        target_user_to_reuse = existing_by_doc
+        if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El número de placa policial ya se encuentra registrado para otro usuario activo."
+            )
+    elif existing_by_badge:
+        target_user_to_reuse = existing_by_badge
+
     # Verificar si la contraseña ya está en uso en el sistema
-    if is_password_already_in_use(user_in.password, db):
+    exclude_id = target_user_to_reuse.id if target_user_to_reuse else None
+    if is_password_already_in_use(user_in.password, db, exclude_user_id=exclude_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La contraseña ingresada ya se encuentra registrada en el sistema para otro usuario. Debe proporcionar una contraseña única."
@@ -109,22 +120,39 @@ def create_user(
         
     hashed_pw = get_password_hash(user_in.password)
     temp_expires = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    new_user = User(
-        username=user_in.username,
-        email=user_in.email,
-        full_name=user_in.full_name,
-        document_id=user_in.document_id,
-        badge_number=clean_badge,
-        assigned_site=user_in.assigned_site,
-        hashed_password=hashed_pw,
-        role=user_in.role,
-        is_active=user_in.is_active,
-        must_change_password=True,  # Cambio obligatorio en primer ingreso (24h)
-        temp_expires_at=temp_expires
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+
+    if target_user_to_reuse:
+        target_user_to_reuse.username = user_in.username
+        target_user_to_reuse.email = user_in.email
+        target_user_to_reuse.full_name = user_in.full_name
+        target_user_to_reuse.document_id = clean_doc
+        target_user_to_reuse.badge_number = clean_badge
+        target_user_to_reuse.assigned_site = user_in.assigned_site
+        target_user_to_reuse.hashed_password = hashed_pw
+        target_user_to_reuse.role = user_in.role
+        target_user_to_reuse.is_active = user_in.is_active
+        target_user_to_reuse.must_change_password = True
+        target_user_to_reuse.temp_expires_at = temp_expires
+        new_user = target_user_to_reuse
+        db.commit()
+        db.refresh(new_user)
+    else:
+        new_user = User(
+            username=user_in.username,
+            email=user_in.email,
+            full_name=user_in.full_name,
+            document_id=user_in.document_id,
+            badge_number=clean_badge,
+            assigned_site=user_in.assigned_site,
+            hashed_password=hashed_pw,
+            role=user_in.role,
+            is_active=user_in.is_active,
+            must_change_password=True,  # Cambio obligatorio en primer ingreso (24h)
+            temp_expires_at=temp_expires
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
     
     create_audit_log(
         db,
@@ -280,19 +308,26 @@ def delete_user(
             detail="La cuenta del Administrador Inicial del sistema no puede ser eliminada."
         )
 
-    username = user.username
+    from app.utils.time_utils import get_local_now
+    now = get_local_now()
 
-    # Reasignar referencias en Incident, Maintenance y Event
-    from app.models.incident import Incident
-    from app.models.maintenance import Maintenance
-    from app.models.event import Event
+    # PRESERVAR INTEGRIDAD HISTÓRICA COMPLETA:
+    # 1. No desvincular referencias en tickets ni mantenimientos
+    # 2. No borrar firma digital física para preservar actas y trazabilidad
+    # 3. Marcar como eliminado e inactivo
+    user.is_deleted = True
+    user.is_active = False
+    user.deleted_at = now
 
-    db.query(Incident).filter(Incident.created_by_id == user_id).update({"created_by_id": admin.id})
-    db.query(Incident).filter(Incident.assigned_to_id == user_id).update({"assigned_to_id": None})
-    db.query(Maintenance).filter(Maintenance.created_by_id == user_id).update({"created_by_id": admin.id})
-    db.query(Event).filter(Event.user_id == user_id).update({"user_id": admin.id})
+    ts = int(now.timestamp())
+    orig_username = user.username
+    if not user.username.startswith("deleted_"):
+        user.username = f"deleted_{ts}_{user.username}"
+    if not user.email.startswith("deleted_"):
+        user.email = f"deleted_{ts}_{user.email}"
+    if user.badge_number and not user.badge_number.startswith("del_"):
+        user.badge_number = f"del_{ts}_{user.badge_number}"
 
-    db.delete(user)
     db.commit()
 
     create_audit_log(
@@ -300,7 +335,7 @@ def delete_user(
         user_id=admin.id,
         username=admin.username,
         action="USER_DELETED",
-        details={"deleted_user_id": user_id, "deleted_username": username}
+        details={"deleted_user_id": user_id, "deleted_username": orig_username, "preserved_historical_data": True}
     )
 
-    return {"message": f"Usuario {username} eliminado exitosamente."}
+    return {"message": f"Usuario {orig_username} eliminado exitosamente. Sus registros históricos y firmas han sido preservados en actas y trazabilidad."}

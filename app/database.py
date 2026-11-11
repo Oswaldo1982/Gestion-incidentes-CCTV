@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import StaticPool
 from app.config import settings
@@ -27,6 +27,23 @@ engine = create_engine(
     db_url,
     **engine_kwargs
 )
+
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """
+    Configura la conexión SQLite para activar explícitamente el modo WAL (Write-Ahead Logging)
+    y PRAGMA synchronous=NORMAL, evitando bloqueos por concurrencia ('database is locked')
+    en entornos de producción o múltiples hilos.
+    """
+    if db_url.startswith("sqlite"):
+        try:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
+        except Exception as e:
+            # En bases de datos en memoria o SQLite con configuraciones restringidas
+            pass
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

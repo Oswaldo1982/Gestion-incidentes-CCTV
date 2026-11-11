@@ -12,13 +12,24 @@
     function incidentsComponent() {
         return {
             openModal: false,
+            showCreatedModal: {{ 'true' if created_incident else 'false' }},
             closeModal: null,
             traceModal: null,
             validateModal: null,
             validationAction: 'approve',
             validationNotes: '',
             imagePreviewModal: null,
+
+            closeCreatedModal() {
+                this.showCreatedModal = false;
+                if (window.history && window.history.replaceState) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('created_ticket_id');
+                    window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
+                }
+            },
             searchQuery: '',
+            selectedDate: '',
             selectedStatus: 'all',
             selectedFault: 'all',
             selectedPriority: 'all',
@@ -39,6 +50,10 @@
                 const norm = pt.trim().toLowerCase();
                 if (!norm) return [];
                 return this.siteDevices.filter(d => (d.location || '').trim().toLowerCase() === norm);
+            },
+
+            openTraceModal(data) {
+                this.traceModal = data;
             },
 
             openValidateModal(data) {
@@ -98,64 +113,246 @@
                 }
             },
 
+            showSecondRow: false,
+            pageSize: 20,
+            currentPage: 1,
+            totalMatching: {{ incidents|length }},
+            totalPages: Math.max(1, Math.ceil({{ incidents|length }} / 20)),
+
+            applyFiltersAndPagination() {
+                this.$nextTick(() => {
+                    const tbody = document.getElementById('incidents-table-body');
+                    if (!tbody) return;
+                    const rows = Array.from(tbody.querySelectorAll('tr[data-code]'));
+                    if (!rows.length) {
+                        this.totalMatching = 0;
+                        this.totalPages = 1;
+                        this.currentPage = 1;
+                        return;
+                    }
+
+                    // Guardar índice de orden original de cada fila para restaurarlo fielmente
+                    rows.forEach((row, i) => {
+                        if (row.dataset.initialIndex === undefined) {
+                            row.dataset.initialIndex = i;
+                        }
+                    });
+
+                    const matchedRows = [];
+                    rows.forEach(row => {
+                        if (this.matchesRow(row)) {
+                            matchedRows.push(row);
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+
+                    // Priorizar el ticket buscado por número de ticket o código para que aparezca primero
+                    const rawQuery = (this.searchQuery || '').trim().toLowerCase();
+                    if (rawQuery) {
+                        const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                        const q = norm(rawQuery);
+                        const cleanQ = q.replace(/[^a-z0-9]/g, '');
+
+                        const queryNumMatches = q.match(/\d+/g);
+                        const queryLastNumStr = queryNumMatches ? queryNumMatches[queryNumMatches.length - 1] : null;
+                        const queryLastNum = queryLastNumStr !== null ? parseInt(queryLastNumStr, 10) : null;
+
+                        const getRelevance = (row) => {
+                            const rawCode = (row.getAttribute('data-code') || (row.dataset ? row.dataset.code : '') || '').trim();
+                            if (!rawCode) return 0;
+                            const code = norm(rawCode);
+                            const cleanCode = code.replace(/[^a-z0-9]/g, '');
+
+                            // 1. Coincidencia exacta con el código completo (ej: 'tkt-2026-0123' === 'tkt-2026-0123')
+                            if (code === q || (cleanQ && cleanCode === cleanQ)) {
+                                return 1000;
+                            }
+
+                            // 2. Extraer partes del código (ej: 'tkt-2026-0123' -> parts: ['tkt', '2026', '0123'])
+                            const codeParts = code.split(/[^a-z0-9]+/).filter(Boolean);
+                            const lastPart = codeParts.length > 0 ? codeParts[codeParts.length - 1] : '';
+                            const lastNum = parseInt(lastPart, 10);
+
+                            // Si el usuario ingresó números (ej: '123', '0123', 'tkt 123', 'ticket 123'):
+                            if (queryLastNum !== null && !isNaN(queryLastNum)) {
+                                // 2.1 Coincidencia numérica exacta con el número del ticket (ej: 123 con '0123')
+                                if (!isNaN(lastNum) && lastNum === queryLastNum) {
+                                    if (queryLastNumStr && lastPart === queryLastNumStr) {
+                                        return 960;
+                                    }
+                                    return 930;
+                                }
+
+                                // 2.2 El número de ticket termina con el número buscado
+                                if (queryLastNumStr && lastPart.endsWith(queryLastNumStr)) {
+                                    return 900;
+                                }
+
+                                // 2.3 El número de ticket contiene el número buscado
+                                if (queryLastNumStr && lastPart.includes(queryLastNumStr)) {
+                                    return 850;
+                                }
+                            }
+
+                            // 3. El código completo termina exactamente con la consulta
+                            if (code.endsWith(q) || (cleanQ && cleanCode.endsWith(cleanQ))) {
+                                return 800;
+                            }
+
+                            // 4. El código contiene la consulta
+                            if (code.includes(q) || (cleanQ && cleanCode.includes(cleanQ))) {
+                                return 750;
+                            }
+
+                            return 0;
+                        };
+
+                        matchedRows.sort((a, b) => {
+                            const scoreA = getRelevance(a);
+                            const scoreB = getRelevance(b);
+                            if (scoreB !== scoreA) {
+                                return scoreB - scoreA;
+                            }
+                            return Number(a.dataset.initialIndex || 0) - Number(b.dataset.initialIndex || 0);
+                        });
+                    } else {
+                        matchedRows.sort((a, b) => Number(a.dataset.initialIndex || 0) - Number(b.dataset.initialIndex || 0));
+                    }
+
+                    this.totalMatching = matchedRows.length;
+                    this.totalPages = Math.max(1, Math.ceil(this.totalMatching / this.pageSize));
+                    if (this.currentPage > this.totalPages) {
+                        this.currentPage = this.totalPages;
+                    }
+                    if (this.currentPage < 1) {
+                        this.currentPage = 1;
+                    }
+
+                    const startIndex = (this.currentPage - 1) * this.pageSize;
+                    const endIndex = startIndex + this.pageSize;
+
+                    matchedRows.forEach((row, idx) => {
+                        if (idx >= startIndex && idx < endIndex) {
+                            row.style.display = '';
+                            tbody.appendChild(row);
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+                });
+            },
+
+            nextPage() {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                    this.applyFiltersAndPagination();
+                }
+            },
+
+            prevPage() {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
+                    this.applyFiltersAndPagination();
+                }
+            },
+
+            goToPage(p) {
+                const target = parseInt(p, 10);
+                if (!isNaN(target) && target >= 1 && target <= this.totalPages) {
+                    this.currentPage = target;
+                    this.applyFiltersAndPagination();
+                }
+            },
+
+            onFilterChange() {
+                this.currentPage = 1;
+                this.applyFiltersAndPagination();
+            },
+
             clearFilters() {
                 this.searchQuery = '';
+                this.selectedDate = '';
                 this.selectedStatus = 'all';
                 this.selectedFault = 'all';
                 this.selectedPriority = 'all';
                 this.selectedPoint = 'all';
+                this.currentPage = 1;
+                this.applyFiltersAndPagination();
             },
 
             matchesRow(el) {
-                if (!el || !el.dataset) return true;
-                const ds = el.dataset;
+                if (!el) return true;
+                const getVal = (attr) => (el.getAttribute('data-' + attr) || (el.dataset ? el.dataset[attr] : '') || '').trim();
+                const norm = (s) => (s || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+                const st = getVal('status');
+                const valSt = getVal('val-status');
+                const isResolved = getVal('resolved') === 'true';
+                const fault = getVal('fault');
+                const priority = getVal('priority');
+                const point = getVal('point');
+                const searchHaystack = getVal('search');
+
+                // 0. Filtro por Fecha de Apertura
+                if (this.selectedDate && this.selectedDate !== '') {
+                    const rowDate = (getVal('date') || '').trim();
+                    if (rowDate !== this.selectedDate) {
+                        return false;
+                    }
+                }
 
                 // 1. Filtro de Estado
-                if (this.selectedStatus !== 'all') {
-                    const st = (ds.status || '').trim();
-                    const valSt = (ds.valStatus || '').trim();
-                    const isResolved = ds.resolved === 'true';
+                if (this.selectedStatus && this.selectedStatus !== 'all') {
+                    const selSt = norm(this.selectedStatus);
+                    const normSt = norm(st);
+                    const normVal = norm(valSt);
+                    const isOvertime = getVal('overtime') === 'true';
 
-                    if (this.selectedStatus === 'Cerrado') {
-                        if (!isResolved && st !== 'Cerrado' && st !== 'Resuelto') return false;
-                    } else if (this.selectedStatus === 'Abierto') {
-                        if (st !== 'Abierto') return false;
-                    } else if (this.selectedStatus === 'En Proceso') {
-                        if (st !== 'En Proceso') return false;
-                    } else if (this.selectedStatus === 'Pendiente de Validación') {
-                        if (!st.includes('Pendiente de Validación') && valSt !== 'Pendiente') return false;
-                    } else if (this.selectedStatus === 'Validado / Conforme') {
-                        if (!st.includes('Validado') && !st.includes('Conforme') && valSt !== 'Conforme') return false;
-                    } else if (this.selectedStatus === 'Rechazado') {
-                        if (st !== 'Rechazado' && valSt !== 'Rechazado') return false;
+                    if (selSt === 'resuelto sla' || (selSt.includes('resuelto') && selSt.includes('sla'))) {
+                        // Resuelto SLA: ticket resuelto pero superando el tiempo límite
+                        if (!isResolved || !isOvertime) return false;
+                    } else if (selSt === 'resuelto' || (selSt.includes('resuelto') && !selSt.includes('sla') && !selSt.includes('todos') && !selSt.includes('cerrado'))) {
+                        // Resuelto: ticket resuelto dentro del tiempo estipulado
+                        if (!isResolved || isOvertime) return false;
+                    } else if (selSt === 'cerrado' || selSt.includes('todos los cerrados') || selSt.includes('todos los resueltos')) {
+                        if (!isResolved && normSt !== 'cerrado' && normSt !== 'resuelto') return false;
+                    } else if (selSt === 'abierto') {
+                        if (normSt !== 'abierto') return false;
+                    } else if (selSt === 'en proceso') {
+                        if (normSt !== 'en proceso') return false;
+                    } else if (selSt.includes('pendiente') || selSt.includes('validar')) {
+                        if (!normSt.includes('pendiente') && !normVal.includes('pendiente')) return false;
+                    } else if (selSt.includes('validado') || selSt.includes('conforme')) {
+                        if (!normSt.includes('validado') && !normSt.includes('conforme') && !normVal.includes('conforme')) return false;
+                    } else if (selSt === 'rechazado') {
+                        if (normSt !== 'rechazado' && normVal !== 'rechazado') return false;
                     } else {
-                        if (st.toLowerCase() !== this.selectedStatus.toLowerCase()) return false;
+                        if (normSt !== selSt) return false;
                     }
                 }
 
                 // 2. Filtro de Tipo de Falla / Criticidad
-                if (this.selectedFault !== 'all') {
-                    const f = (ds.fault || '').trim().toLowerCase();
-                    if (f !== this.selectedFault.trim().toLowerCase()) return false;
+                if (this.selectedFault && this.selectedFault !== 'all') {
+                    if (norm(fault) !== norm(this.selectedFault)) return false;
                 }
 
                 // 3. Filtro de Prioridad
-                if (this.selectedPriority !== 'all') {
-                    const p = (ds.priority || '').trim().toLowerCase();
-                    if (p !== this.selectedPriority.trim().toLowerCase()) return false;
+                if (this.selectedPriority && this.selectedPriority !== 'all') {
+                    if (norm(priority) !== norm(this.selectedPriority)) return false;
                 }
 
                 // 4. Filtro de Punto de Cámara / Sitio Físico
-                if (this.selectedPoint !== 'all') {
-                    const pt = (ds.point || '').trim().toLowerCase();
-                    const filterPt = this.selectedPoint.trim().toLowerCase();
-                    if (pt !== filterPt && !pt.includes(filterPt) && !filterPt.includes(pt)) return false;
+                if (this.selectedPoint && this.selectedPoint !== 'all') {
+                    const normPt = norm(point);
+                    const normSelPt = norm(this.selectedPoint);
+                    if (normPt !== normSelPt && !normPt.includes(normSelPt) && !normSelPt.includes(normPt)) return false;
                 }
 
                 // 5. Búsqueda de Texto (Serial, Título, Falla, Sitio, Diagnóstico, etc.)
                 if (this.searchQuery && this.searchQuery.trim() !== '') {
-                    const tokens = this.searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
-                    const hay = (ds.search || '').toLowerCase();
+                    const tokens = norm(this.searchQuery).split(/\s+/).filter(Boolean);
+                    const hay = norm(searchHaystack);
                     if (!tokens.every(t => hay.includes(t))) return false;
                 }
 
@@ -165,6 +362,20 @@
             init() {
                 this.$nextTick(() => {
                     this.updateDeviceOptions();
+                    this.applyFiltersAndPagination();
+                    const dateEl = document.getElementById('incidents-date-input');
+                    if (dateEl) {
+                        dateEl.disabled = false;
+                        dateEl.readOnly = false;
+                        dateEl.removeAttribute('disabled');
+                        dateEl.removeAttribute('readonly');
+                        const syncDate = (e) => {
+                            this.selectedDate = e.target.value || '';
+                            this.onFilterChange();
+                        };
+                        dateEl.addEventListener('input', syncDate);
+                        dateEl.addEventListener('change', syncDate);
+                    }
                 });
             }
         };
@@ -192,7 +403,15 @@
             <p class="text-xs text-slate-500 mt-0.5">Control operativo con serialización automática de tickets, alertas
                 tempranas de SLA y registro de diagnóstico.</p>
         </div>
-        {% if current_user.role == 'Supervisor' %}
+        {% if current_user.role in ['Admin', 'Empresa de Mantenimiento', 'Validador', 'Operario'] %}
+        <button @click="openModal = true"
+            class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/25 transition transform hover:-translate-y-0.5 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Ticket Correctivo
+        </button>
+        {% else %}
         <button disabled
             title="Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría en incidentes. No puede crear nuevos tickets."
             class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-100 text-slate-400 border border-slate-300 text-xs font-bold cursor-not-allowed shadow-none shrink-0">
@@ -201,153 +420,215 @@
             </svg>
             Nuevo Ticket Correctivo
         </button>
-        {% else %}
-        <button @click="openModal = true"
-            class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/25 transition transform hover:-translate-y-0.5 shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            Nuevo Ticket Correctivo
-        </button>
         {% endif %}
     </div>
 
-    <!-- ═════ 1. MÉTRICAS DE LA PÁGINA ACTUAL ═════ -->
-    <div class="space-y-2">
+    {% if msg %}
+    <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-between shadow-2xs">
+        <div class="flex items-center gap-2">
+            <span>✅</span>
+            <span>{{ msg }}</span>
+        </div>
+        <a href="/incidents" class="text-emerald-600 hover:text-emerald-800 font-bold">✕</a>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between shadow-2xs">
+        <div class="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{{ error }}</span>
+        </div>
+        <a href="/incidents" class="text-rose-600 hover:text-rose-800 font-bold">✕</a>
+    </div>
+    {% endif %}
+
+    <!-- ═════ 1. PANORAMA GENERAL & MÉTRICAS COMPLETAS DE LA SEDE ═════ -->
+    <div class="space-y-3">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
             <div class="flex items-center gap-2">
                 <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-black">1</span>
                 <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <span>📄</span> Métricas de la Página Actual
+                    <span>📊</span> Panorama Operativo & Métricas Completas de la Sede
                 </h3>
                 <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    Página {{ page }} de {{ total_pages }}
+                    <span x-text="'Página ' + currentPage + ' de ' + totalPages"></span>
                 </span>
             </div>
             <p class="text-[11px] font-medium text-slate-500">
-                Mostrando {{ incidents|length }} de {{ total_records }} registros totales
+                Mostrando <span class="font-bold text-slate-700" x-text="Math.min(pageSize, totalMatching)"></span> de <span class="font-bold text-indigo-700" x-text="totalMatching"></span> tickets filtrados ({{ site_kpis.total_records }} registrados en sede)
             </p>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <!-- Falla Crítica en página actual -->
-            <div class="bg-gradient-to-br from-rose-50 to-white p-4 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
+        <!-- Fila 1: Indicadores Macro de Gestión y SLA -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            <!-- 1. Total Incidentes -->
+            <div class="bg-gradient-to-br from-slate-50 to-white p-3.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden cursor-help"
+                 title="Total histórico de tickets de incidentes registrados en esta sede">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-rose-700 font-bold uppercase tracking-wider">Fallas Críticas</p>
-                    <span class="text-rose-500 text-base">🚨</span>
+                    <p class="text-[11px] text-slate-600 font-bold uppercase tracking-wider">Total Registrados</p>
+                    <span class="p-1 rounded-md bg-slate-100 text-slate-700 text-xs">📋</span>
                 </div>
-                <p class="text-2xl font-black text-rose-700 mt-1">
-                    {{ incidents | selectattr('fault_type', 'equalto', 'Falla Crítica') | list | length }}
+                <p class="text-2xl font-black text-slate-900 mt-1">
+                    {{ site_kpis.total_records }}
                 </p>
-                <p class="text-[10px] text-rose-600 font-medium mt-0.5">En esta pág. ({{ incidents | selectattr('fault_type', 'equalto', 'Falla Crítica') | rejectattr('is_resolved') | list | length }} activas / SLA 4h)</p>
+                <p class="text-[10px] text-slate-500 font-medium mt-0.5">
+                    {{ site_kpis.closed_total }} resueltos • {{ site_kpis.active_total }} en atención
+                </p>
             </div>
 
-            <!-- Inactivos en página actual -->
-            <div class="bg-gradient-to-br from-amber-50 to-white p-4 rounded-xl border border-amber-200 shadow-sm relative overflow-hidden">
+            <!-- 2. En Proceso / Activos -->
+            <div class="bg-gradient-to-br from-blue-50 to-white p-3.5 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden cursor-help"
+                 title="Tickets que se encuentran actualmente abiertos, en proceso o pendientes de validación técnica">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-amber-700 font-bold uppercase tracking-wider">Dispositivos Inactivos</p>
-                    <span class="text-amber-500 text-base">⚠️</span>
-                </div>
-                <p class="text-2xl font-black text-amber-700 mt-1">
-                    {{ incidents | selectattr('fault_type', 'equalto', 'Inactivo') | list | length }}
-                </p>
-                <p class="text-[10px] text-amber-600 font-medium mt-0.5">En esta pág. ({{ incidents | selectattr('fault_type', 'equalto', 'Inactivo') | rejectattr('is_resolved') | list | length }} activas / SLA 12h)</p>
-            </div>
-
-            <!-- En Proceso en página actual -->
-            <div class="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
-                <div class="flex items-center justify-between">
-                    <p class="text-xs text-blue-700 font-bold uppercase tracking-wider">En Proceso / Atención</p>
-                    <span class="text-blue-500 text-base">🔧</span>
+                    <p class="text-[11px] text-blue-700 font-bold uppercase tracking-wider">En Proceso / Activos</p>
+                    <span class="p-1 rounded-md bg-blue-100 text-blue-700 text-xs">🔧</span>
                 </div>
                 <p class="text-2xl font-black text-blue-700 mt-1">
-                    {{ incidents | selectattr('status', 'equalto', 'En Proceso') | list | length }}
+                    {{ site_kpis.active_total }}
                 </p>
-                <p class="text-[10px] text-blue-600 font-medium mt-0.5">En esta pág. con técnico asignado</p>
+                <p class="text-[10px] text-blue-600 font-medium mt-0.5">
+                    {{ site_kpis.in_process }} con técnico asignado en campo
+                </p>
             </div>
 
-            <!-- Cerrados / Solucionados en página actual -->
-            <div class="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden">
+            <!-- 3. Cerrados / Validados Oficiales -->
+            <div class="bg-gradient-to-br from-emerald-50 to-white p-3.5 rounded-xl border border-emerald-200 shadow-sm relative overflow-hidden cursor-help"
+                 title="Incidentes formalmente resueltos y certificados con acta de validación policial">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-emerald-700 font-bold uppercase tracking-wider">Cerrados / Solucionados</p>
-                    <span class="text-emerald-500 text-base">✅</span>
+                    <p class="text-[11px] text-emerald-700 font-bold uppercase tracking-wider">Cerrados / Validados</p>
+                    <span class="p-1 rounded-md bg-emerald-100 text-emerald-700 text-xs">✅</span>
                 </div>
                 <p class="text-2xl font-black text-emerald-700 mt-1">
-                    {{ incidents | selectattr('is_resolved') | list | length }}
+                    {{ site_kpis.closed_total }}
                 </p>
-                <p class="text-[10px] text-emerald-600 font-medium mt-0.5">En esta pág. resueltos formalmente</p>
+                <p class="text-[10px] text-emerald-600 font-medium mt-0.5">
+                    100% con acta técnica policial certificada
+                </p>
+            </div>
+
+            <!-- 4. Resueltos (Dentro del tiempo estipulado) -->
+            <div class="bg-gradient-to-br from-teal-50 to-white p-3.5 rounded-xl border border-teal-200 shadow-sm relative overflow-hidden cursor-help"
+                 title="Tickets que se resolvieron pero dentro del tiempo estipulado (a tiempo / SLA cumplido)">
+                <div class="flex items-center justify-between">
+                    <p class="text-[11px] text-teal-800 font-bold uppercase tracking-wider">Resueltos (A Tiempo)</p>
+                    <span class="p-1 rounded-md bg-teal-100 text-teal-800 text-xs">✓</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <p class="text-2xl font-black text-teal-800">
+                        {{ site_kpis.resolved_sla_within }}
+                    </p>
+                    <span class="text-xs font-semibold text-slate-500">dentro del tiempo</span>
+                </div>
+                <p class="text-[10px] text-teal-700 font-medium mt-0.5">
+                    {{ site_kpis.resolved_sla_rate }}% resueltos dentro del tiempo estipulado
+                </p>
+            </div>
+
+            <!-- 5. Resueltos SLA (Superando tiempo límite) -->
+            <div class="bg-gradient-to-br from-amber-50 to-white p-3.5 rounded-xl border border-amber-200 shadow-sm relative overflow-hidden cursor-help"
+                 title="Tickets que se resolvieron pero superando el tiempo límite pactado (Resuelto SLA)">
+                <div class="flex items-center justify-between">
+                    <p class="text-[11px] text-amber-800 font-bold uppercase tracking-wider">Resueltos SLA</p>
+                    <span class="p-1 rounded-md bg-amber-100 text-amber-800 text-xs">⏱️</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <p class="text-2xl font-black text-amber-800">
+                        {{ site_kpis.resolved_sla_overdue }}
+                    </p>
+                    <span class="text-xs font-semibold text-slate-500">en extra tiempo</span>
+                </div>
+                <p class="text-[10px] text-amber-700 font-medium mt-0.5">
+                    Resueltos pero superando el tiempo límite
+                </p>
             </div>
         </div>
-    </div>
 
-    <!-- ═════ 2. MÉTRICAS GENERALES (TODOS LOS DATOS REGISTRADOS HASTA EL MOMENTO) ═════ -->
-    <div class="space-y-2 pt-1">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
-            <div class="flex items-center gap-2">
-                <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-900 text-white text-[11px] font-black">2</span>
-                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <span>🌐</span> Métricas Generales (Todos los datos registrados hasta el momento)
-                </h3>
-                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                    {{ current_site.name if current_site else 'Sede Activa' }}
+        <!-- Pestaña para desplegar/ocultar el segundo renglón -->
+        <div class="flex justify-center -mt-1">
+            <button type="button"
+                    @click="showSecondRow = !showSecondRow"
+                    class="group inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white hover:bg-slate-50 border border-slate-300 text-xs font-bold text-slate-700 hover:text-blue-700 shadow-2xs hover:shadow-xs transition active:scale-95 cursor-pointer">
+                <span x-show="!showSecondRow" class="inline-flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-blue-600 transition group-hover:translate-y-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                    <span>Desplegar desglose por criticidad y tipos de falla</span>
+                    <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-800">4 métricas</span>
                 </span>
-            </div>
-            <p class="text-[11px] font-bold text-indigo-700">
-                Total acumulado histórico: {{ site_kpis.total_records if site_kpis else total_records }} incidentes
-            </p>
+                <span x-show="showSecondRow" x-cloak class="inline-flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-blue-600 transition group-hover:-translate-y-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"/>
+                    </svg>
+                    <span>Ocultar segundo renglón</span>
+                </span>
+            </button>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <!-- Fallas Críticas Totales Generales -->
-            <div class="bg-gradient-to-br from-rose-50/70 via-white to-white p-4 rounded-xl border border-rose-300 shadow-sm relative overflow-hidden">
+        <!-- Fila 2: Desglose Completo por Tipos de Falla y Criticidad -->
+        <div x-show="showSecondRow"
+             x-cloak
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 -translate-y-2"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 -translate-y-2"
+             class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <!-- 1. Fallas Críticas -->
+            <div class="bg-gradient-to-br from-rose-50 to-white p-3.5 rounded-xl border border-rose-200 shadow-sm relative overflow-hidden">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-rose-800 font-bold uppercase tracking-wider">Fallas Críticas (General)</p>
-                    <span class="p-1 rounded-md bg-rose-100 text-rose-700 text-xs font-bold">🚨 Total</span>
+                    <p class="text-[11px] text-rose-700 font-bold uppercase tracking-wider">Fallas Críticas</p>
+                    <span class="p-1 rounded-md bg-rose-100 text-rose-600 text-xs">🚨</span>
                 </div>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <span class="text-2xl font-black text-rose-700">{{ site_kpis.critical_total if site_kpis else 0 }}</span>
-                    <span class="text-[11px] text-rose-600 font-bold">({{ site_kpis.critical_open if site_kpis else 0 }} activas)</span>
-                </div>
-                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de eventos críticos registrados</p>
+                <p class="text-2xl font-black text-rose-700 mt-1">
+                    {{ site_kpis.critical_total }}
+                </p>
+                <p class="text-[10px] text-rose-600 font-medium mt-0.5">
+                    Prioridad Alta • SLA 4h ({{ site_kpis.critical_open }} activa)
+                </p>
             </div>
 
-            <!-- Inactivos Totales Generales -->
-            <div class="bg-gradient-to-br from-amber-50/70 via-white to-white p-4 rounded-xl border border-amber-300 shadow-sm relative overflow-hidden">
+            <!-- 2. Cambio / Reemplazo -->
+            <div class="bg-gradient-to-br from-fuchsia-50 to-white p-3.5 rounded-xl border border-fuchsia-200 shadow-sm relative overflow-hidden">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-amber-800 font-bold uppercase tracking-wider">Dispositivos Inactivos (General)</p>
-                    <span class="p-1 rounded-md bg-amber-100 text-amber-700 text-xs font-bold">⚠️ Total</span>
+                    <p class="text-[11px] text-fuchsia-700 font-bold uppercase tracking-wider">Por Cambio</p>
+                    <span class="p-1 rounded-md bg-fuchsia-100 text-fuchsia-700 text-xs">🔄</span>
                 </div>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <span class="text-2xl font-black text-amber-700">{{ site_kpis.inactive_total if site_kpis else 0 }}</span>
-                    <span class="text-[11px] text-amber-600 font-bold">({{ site_kpis.inactive_open if site_kpis else 0 }} activos)</span>
-                </div>
-                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de caídas/inactivos registrados</p>
+                <p class="text-2xl font-black text-fuchsia-700 mt-1">
+                    {{ site_kpis.change_total }}
+                </p>
+                <p class="text-[10px] text-fuchsia-600 font-medium mt-0.5">
+                    Prioridad Crítica • SLA 48h ({{ site_kpis.change_open }} activa)
+                </p>
             </div>
 
-            <!-- En Proceso Totales Generales -->
-            <div class="bg-gradient-to-br from-blue-50/70 via-white to-white p-4 rounded-xl border border-blue-300 shadow-sm relative overflow-hidden">
+            <!-- 3. Falla Menor -->
+            <div class="bg-gradient-to-br from-sky-50 to-white p-3.5 rounded-xl border border-sky-200 shadow-sm relative overflow-hidden">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-blue-800 font-bold uppercase tracking-wider">En Proceso / Atención (General)</p>
-                    <span class="p-1 rounded-md bg-blue-100 text-blue-700 text-xs font-bold">🔧 Total</span>
+                    <p class="text-[11px] text-sky-700 font-bold uppercase tracking-wider">Fallas Menores</p>
+                    <span class="p-1 rounded-md bg-sky-100 text-sky-700 text-xs">ℹ️</span>
                 </div>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <span class="text-2xl font-black text-blue-700">{{ site_kpis.in_process if site_kpis else 0 }}</span>
-                    <span class="text-[11px] text-blue-700 font-bold">en intervención</span>
-                </div>
-                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Con cuadrilla técnica atendiendo</p>
+                <p class="text-2xl font-black text-sky-700 mt-1">
+                    {{ site_kpis.minor_total }}
+                </p>
+                <p class="text-[10px] text-sky-600 font-medium mt-0.5">
+                    Prioridad Media • SLA 24h ({{ site_kpis.minor_open }} activa)
+                </p>
             </div>
 
-            <!-- Cerrados / Solucionados Totales Generales -->
-            <div class="bg-gradient-to-br from-emerald-50/70 via-white to-white p-4 rounded-xl border border-emerald-300 shadow-sm relative overflow-hidden">
+            <!-- 4. Dispositivos Inactivos -->
+            <div class="bg-gradient-to-br from-amber-50 to-white p-3.5 rounded-xl border border-amber-200 shadow-sm relative overflow-hidden">
                 <div class="flex items-center justify-between">
-                    <p class="text-xs text-emerald-800 font-bold uppercase tracking-wider">Cerrados / Solucionados (General)</p>
-                    <span class="p-1 rounded-md bg-emerald-100 text-emerald-700 text-xs font-bold">✅ Total</span>
+                    <p class="text-[11px] text-amber-700 font-bold uppercase tracking-wider">Dispositivos Inactivos</p>
+                    <span class="p-1 rounded-md bg-amber-100 text-amber-700 text-xs">⚠️</span>
                 </div>
-                <div class="flex items-baseline gap-2 mt-1">
-                    <span class="text-2xl font-black text-emerald-700">{{ site_kpis.closed_total if site_kpis else 0 }}</span>
-                    <span class="text-[11px] text-emerald-700 font-bold">de {{ site_kpis.total_records if site_kpis else total_records }}</span>
-                </div>
-                <p class="text-[10px] text-slate-500 font-medium mt-0.5">Total de eventos 100% resueltos formalmente</p>
+                <p class="text-2xl font-black text-amber-700 mt-1">
+                    {{ site_kpis.inactive_total }}
+                </p>
+                <p class="text-[10px] text-amber-600 font-medium mt-0.5">
+                    Prioridad Baja • SLA 12h ({{ site_kpis.inactive_open }} activa)
+                </p>
             </div>
         </div>
     </div>
@@ -358,7 +639,7 @@
 
         <!-- Search Input -->
         <div class="relative flex-1">
-            <input type="text" x-model="searchQuery"
+            <input type="text" x-model="searchQuery" @input="onFilterChange()"
                 placeholder="Buscar por serial de ticket (TKT-...), título, falla o sitio físico..."
                 class="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
             <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor"
@@ -366,7 +647,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <button type="button" x-show="searchQuery" @click="searchQuery = ''"
+            <button type="button" x-show="searchQuery" @click="searchQuery = ''; onFilterChange()"
                 class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 transition" title="Borrar búsqueda">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -375,7 +656,7 @@
         <!-- Filter Selects -->
         <div class="flex flex-wrap items-center gap-2">
             <!-- Filter Estado -->
-            <select x-model="selectedStatus"
+            <select x-model="selectedStatus" @change="onFilterChange()"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
                 <option value="all">Todos los Estados</option>
                 <option value="Abierto">Abierto</option>
@@ -383,11 +664,13 @@
                 <option value="Pendiente de Validación">🛡️ Por Validar (Técnica Policial)</option>
                 <option value="Validado / Conforme">🎖️ Validado OK</option>
                 <option value="Rechazado">❌ Rechazado</option>
-                <option value="Cerrado">Cerrado / Resuelto</option>
+                <option value="Resuelto">✓ Resuelto (Dentro del tiempo estipulado)</option>
+                <option value="Resuelto SLA">⏱️ Resuelto SLA (Superando tiempo límite)</option>
+                <option value="Cerrado">Todos los Cerrados / Resueltos</option>
             </select>
 
             <!-- Filter Tipo de Falla / Criticidad -->
-            <select x-model="selectedFault"
+            <select x-model="selectedFault" @change="onFilterChange()"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todas las Fallas</option>
                 <option value="Falla Crítica">🚨 Falla Crítica</option>
@@ -397,7 +680,7 @@
             </select>
 
             <!-- Filter Prioridad -->
-            <select x-model="selectedPriority"
+            <select x-model="selectedPriority" @change="onFilterChange()"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">Todas las Prioridades</option>
                 <option value="Crítica">Crítica</option>
@@ -407,7 +690,7 @@
             </select>
 
             <!-- Filter Punto de Cámara -->
-            <select x-model="selectedPoint"
+            <select x-model="selectedPoint" @change="onFilterChange()"
                 class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="all">📍 Todos los Puntos de Cámara</option>
                 {% for p in physical_sites %}
@@ -415,13 +698,84 @@
                 {% endfor %}
             </select>
 
+            <!-- Filter Fecha -->
+            <div class="relative flex items-center">
+                <input id="incidents-date-input"
+                       type="date"
+                       x-model="selectedDate"
+                       @input="onFilterChange()"
+                       @change="onFilterChange()"
+                       title="Filtrar tickets por fecha de apertura"
+                       style="color-scheme: light;"
+                       class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs cursor-pointer">
+                <button type="button"
+                        x-show="selectedDate"
+                        x-cloak
+                        @click="selectedDate = ''; onFilterChange()"
+                        class="absolute right-7 text-slate-400 hover:text-rose-600 text-xs font-bold transition p-1"
+                        title="Quitar filtro de fecha">
+                    ✕
+                </button>
+            </div>
+
             <!-- Botón Limpiar Filtros -->
             <button type="button" 
-                x-show="searchQuery || selectedStatus !== 'all' || selectedFault !== 'all' || selectedPriority !== 'all' || selectedPoint !== 'all'"
+                x-show="searchQuery || selectedStatus !== 'all' || selectedFault !== 'all' || selectedPriority !== 'all' || selectedPoint !== 'all' || selectedDate"
                 @click="clearFilters()"
                 class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-300 shadow-2xs">
                 <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 <span>Limpiar</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Indicador de Cantidad de Tickets Filtrados (debajo de la barra de filtros) -->
+    <div x-show="searchQuery || selectedStatus !== 'all' || selectedFault !== 'all' || selectedPriority !== 'all' || selectedPoint !== 'all' || selectedDate"
+         x-cloak
+         class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs">
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[11px] font-black">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            </span>
+            <span class="text-slate-700 font-medium">
+                Tickets con la condición del filtro:
+                <strong class="text-blue-800 font-black text-sm" x-text="totalMatching"></strong>
+                <span class="text-slate-600 font-semibold" x-text="totalMatching === 1 ? 'ticket encontrado' : 'tickets encontrados'"></span>
+            </span>
+        </div>
+        <div class="flex items-center gap-2">
+            <template x-if="selectedDate">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>📅 Fecha:</span> <span x-text="selectedDate"></span>
+                </span>
+            </template>
+            <template x-if="selectedFault !== 'all'">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>Falla:</span> <span x-text="selectedFault"></span>
+                </span>
+            </template>
+            <template x-if="selectedStatus !== 'all'">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>Estado:</span> <span x-text="selectedStatus"></span>
+                </span>
+            </template>
+            <template x-if="selectedPriority !== 'all'">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>Prioridad:</span> <span x-text="selectedPriority"></span>
+                </span>
+            </template>
+            <template x-if="selectedPoint !== 'all'">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>Punto:</span> <span x-text="selectedPoint"></span>
+                </span>
+            </template>
+            <template x-if="searchQuery">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-300 text-blue-900 font-bold text-[11px] shadow-2xs">
+                    <span>Búsqueda:</span> "<span x-text="searchQuery"></span>"
+                </span>
+            </template>
+            <button type="button" @click="clearFilters()" class="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline ml-1">
+                Restablecer
             </button>
         </div>
     </div>
@@ -441,20 +795,37 @@
                         <th class="px-5 py-3.5 text-right">Gestión / Acciones</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-200 text-slate-700">
+                <tbody id="incidents-table-body" class="divide-y divide-slate-200 text-slate-700">
+                    <tr x-show="totalMatching === 0" style="display: none;">
+                        <td colspan="6" class="text-center py-14 text-slate-500 italic text-sm bg-slate-50/50">
+                            <div class="max-w-md mx-auto space-y-2">
+                                <p class="text-3xl">🔍</p>
+                                <p class="font-bold text-slate-800">No se encontraron tickets con los filtros aplicados</p>
+                                <p class="text-xs text-slate-500">Pruebe ajustando o limpiando los filtros para ver todos los registros.</p>
+                                <button type="button" @click="clearFilters()" class="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition">
+                                    Limpiar Filtros
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                     {% for inc in incidents %}
                     {% set sla = inc.sla_info %}
                     <tr class="hover:bg-slate-50/90 transition {% if inc.fault_type == 'Falla Crítica' and not inc.is_resolved %}bg-rose-50/20{% endif %}"
-                        x-show="matchesRow($el)"
                         data-code="{{ inc.ticket_code|e }}"
                         data-status="{{ inc.status|e }}"
                         data-val-status="{{ inc.validation_status|e if inc.validation_status else '' }}"
                         data-resolved="{{ 'true' if inc.is_resolved else 'false' }}"
+                        data-overtime="{{ 'true' if inc.is_overtime else 'false' }}"
+                        data-resolution-label="{{ inc.resolution_label|e }}"
                         data-fault="{{ inc.fault_type|e if inc.fault_type else '' }}"
                         data-priority="{{ inc.priority|e }}"
                         data-point="{{ inc.location_detail|e if inc.location_detail else '' }}"
+                        data-date="{{ inc.created_at.strftime('%Y-%m-%d') if inc.created_at else '' }}"
+                        data-dates="{{ (inc.created_at.strftime('%Y-%m-%d') if inc.created_at else '') ~ ' ' ~ (inc.closed_at.strftime('%Y-%m-%d') if inc.closed_at else '') ~ ' ' ~ (inc.validated_at.strftime('%Y-%m-%d') if inc.validated_at else '') }}"
                         data-search="{{ (
                             (inc.ticket_code or '') ~ ' ' ~ 
+                            (inc.created_at.strftime('%d/%m/%Y %Y-%m-%d') if inc.created_at else '') ~ ' ' ~
+                            (inc.closed_at.strftime('%d/%m/%Y %Y-%m-%d') if inc.closed_at else '') ~ ' ' ~
                             (inc.title or '') ~ ' ' ~ 
                             (inc.description or '') ~ ' ' ~ 
                             (inc.location_detail or '') ~ ' ' ~ 
@@ -462,6 +833,7 @@
                             (inc.fault_type or '') ~ ' ' ~ 
                             (inc.priority or '') ~ ' ' ~ 
                             (inc.status or '') ~ ' ' ~ 
+                            (inc.resolution_label or '') ~ ' ' ~ 
                             (inc.device.name if inc.device else '') ~ ' ' ~ 
                             (inc.device.device_type if inc.device else '') ~ ' ' ~ 
                             (inc.device.brand if inc.device and inc.device.brand else '') ~ ' ' ~ 
@@ -563,6 +935,15 @@
                                     </span>
                                     {% endif %}
                                 </div>
+
+                                {% if inc.status == 'Rechazado' or (inc.validation_status == 'Rechazado' and inc.status == 'En Proceso') %}
+                                <div class="mt-1.5 p-2 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-900">
+                                    <p class="font-bold text-rose-800 flex items-center gap-1">
+                                        <span>⚠️ Observación de Rechazo Policial:</span>
+                                    </p>
+                                    <p class="italic text-rose-700 mt-0.5">{{ inc.validation_notes or 'Devuelto para subsanación técnica desde el Paso 2 (Atender).' }}</p>
+                                </div>
+                                {% endif %}
                             </div>
                         </td>
 
@@ -705,141 +1086,112 @@
                             <div class="flex flex-col items-end gap-1.5">
                                 {% set s_norm = (inc.status or '')|lower|trim %}
                                 {% set u_role = (current_user.role or '')|lower|trim %}
-                                {% if s_norm in ['pendiente de validación', 'pendiente de validacion', 'pendiente de validación policial', 'pendiente de validacion policial'] %}
-                                    {% if u_role in ['validador', 'validator'] %}
-                                    <!-- Botón Exclusivo para la Policía / Validador -->
-                                    <button @click="openValidateModal({
-                                                id: {{ inc.id }},
-                                                ticket: '{{ inc.ticket_code }}',
-                                                title: '{{ inc.title|replace('\'', '\\\'') }}',
-                                                description: '{{ inc.description|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                                fault_type: '{{ inc.fault_type }}',
-                                                priority: '{{ inc.priority }}',
-                                                location: '{{ inc.location_detail }}',
-                                                device: '{{ inc.device.name if inc.device else 'General' }}',
-                                                technician: '{{ inc.closed_by.full_name or inc.closed_by.username if inc.closed_by else (inc.creator.full_name if inc.creator else 'Empresa de Mantenimiento') }}',
-                                                technician_role: '{{ inc.closed_by.role if inc.closed_by else 'Empresa de Mantenimiento' }}',
-                                                closed_at: '{{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'N/A' }}',
-                                                root_cause: '{{ (inc.root_cause or 'Sin registrar')|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                                solution: '{{ (inc.solution or 'Sin registrar')|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                                initial_img: '{{ inc.image_path or '' }}',
-                                                closing_img: '{{ inc.closing_image_path or '' }}'
-                                            })"
-                                            class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-[11px] font-black shadow-md shadow-indigo-500/25 transition flex items-center gap-1.5 active:scale-95 animate-pulse">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Revisar y Validar
-                                    </button>
-                                    {% elif u_role in ['admin', 'administrador', 'supervisor'] %}
-                                    <!-- Botón marcado en gris para el Administrador / Supervisor indicando que la validación es exclusiva de Policía Nacional -->
-                                    <button disabled
-                                            title="Revisión y validación técnica exclusiva de Policía Nacional (Rol: Validador). El rol {{ current_user.role }} tiene perfil de supervisión/administración."
-                                            class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center gap-1.5">
-                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                        <span>Revisar y Validar</span>
-                                    </button>
-                                    {% else %}
-                                    <!-- Edición Bloqueada para el Técnico -->
-                                    <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold" title="Remitido a la estación de policía. Edición técnica bloqueada.">
-                                        <svg class="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                        <span>En Validación (Bloqueado)</span>
-                                    </div>
-                                    {% endif %}
 
-                                {% elif s_norm in ['abierto', 'en proceso', 'en_proceso', 'en atención', 'en atencion', 'rechazado'] %}
-                                    {% if s_norm == 'abierto' and u_role in ['admin', 'administrador', 'empresa de mantenimiento', 'mantenimiento', 'operario'] %}
-                                    <form action="/incidents/{{ inc.id }}/status" method="POST" class="inline">
+                                {# PASO 2 y PASO 7: Estado Abierto o Rechazado -> Activo 'Atender' (para Admin/Empresa) y Deshabilitado 'Finalizar y Remitir' y 'Trazabilidad' #}
+                                {% if s_norm in ['abierto', 'rechazado'] %}
+                                    {% if u_role in ['admin', 'administrador', 'empresa de mantenimiento', 'mantenimiento', 'operario'] %}
+                                    <form action="/incidents/{{ inc.id }}/status" method="POST" class="w-full">
                                         <input type="hidden" name="status" value="En Proceso">
                                         <button type="submit"
-                                                class="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold transition flex items-center gap-1 shadow-2xs">
+                                                class="w-full px-2.5 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-500 text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-sm">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
-                                            Atender
+                                            <span>Atender</span>
                                         </button>
                                     </form>
+                                    {% else %}
+                                    <button disabled
+                                            title="Solo el Administrador o la Empresa de Mantenimiento pueden iniciar la atención del ticket."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center justify-center gap-1 shadow-none">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        <span>Atender</span>
+                                    </button>
                                     {% endif %}
+
+                                    <!-- Finalizar y Remitir DESHABILITADO hasta que hagan clic en Atender -->
+                                    <button disabled
+                                            title="Opción deshabilitada: Primero debe hacer clic en 'Atender' para iniciar el proceso de corrección."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center justify-center gap-1 shadow-none">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                        <span>Finalizar y Remitir</span>
+                                    </button>
+
+                                    <!-- Trazabilidad DESHABILITADA hasta que se finalice y remita (Paso 4) -->
+                                    <button disabled
+                                            title="La opción Trazabilidad se activa una vez se finaliza y remite el mantenimiento correctivo con su evidencia fotográfica."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 text-[11px] font-semibold cursor-not-allowed flex items-center justify-center gap-1 opacity-75">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span>Trazabilidad</span>
+                                    </button>
+
+                                {# PASO 3: Estado En Proceso -> Activo 'Finalizar y Remitir' (para Admin/Empresa) y Deshabilitado 'Trazabilidad' #}
+                                {% elif s_norm in ['en proceso', 'en_proceso', 'en atención', 'en atencion'] %}
+                                    <div class="w-full inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                                        <svg class="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                        <span>En Atención</span>
+                                    </div>
 
                                     {% if u_role in ['admin', 'administrador', 'empresa de mantenimiento', 'mantenimiento', 'operario'] %}
-                                    <!-- Botón Finalizar Trabajo y Remitir a Validación Policial -->
+                                    <!-- Botón Finalizar y Remitir ACTIVO -->
                                     <button @click="closeModal = { id: {{ inc.id }}, ticket: '{{ inc.ticket_code }}', title: '{{ inc.title|replace('\'', '\\\'') }}' }"
-                                            class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition flex items-center gap-1">
+                                            class="w-full px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold shadow-sm transition flex items-center justify-center gap-1">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                        Finalizar y Remitir
+                                        <span>Finalizar y Remitir</span>
                                     </button>
-                                    {% elif u_role == 'supervisor' %}
-                                    <button disabled
-                                            title="Acceso restringido: El rol Supervisor tiene perfil de solo lectura y auditoría. No puede atender ni cerrar tickets."
-                                            class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center gap-1 shadow-none">
-                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                        <span>Solo Lectura</span>
-                                    </button>
-                                    {% elif u_role in ['validador', 'validator'] %}
-                                    <div class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold" title="En intervención técnica por el personal de mantenimiento. La validación policial se habilitará una vez el técnico finalice y remita el ticket.">
-                                        <svg class="w-3.5 h-3.5 text-blue-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                        <span>Intervención Técnica</span>
-                                    </div>
                                     {% else %}
-                                    <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-semibold">
-                                        <span>En Proceso</span>
-                                    </div>
+                                    <button disabled
+                                            title="Solo el Administrador o la Empresa de Mantenimiento pueden finalizar y remitir el mantenimiento correctivo."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center justify-center gap-1 shadow-none">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        <span>Finalizar y Remitir</span>
+                                    </button>
                                     {% endif %}
-                                {% elif s_norm in ['cerrado', 'validado / conforme', 'conforme / validado', 'resuelto'] %}
-                                    <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                                        <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+
+                                    <!-- Trazabilidad DESHABILITADA hasta que se finalice y remita (Paso 4) -->
+                                    <button disabled
+                                            title="La opción Trazabilidad se activa una vez se finaliza y remite el mantenimiento correctivo con su evidencia fotográfica."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 text-[11px] font-semibold cursor-not-allowed flex items-center justify-center gap-1 opacity-75">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span>Trazabilidad</span>
+                                    </button>
+
+                                {# PASOS 4 y 5: Estado Pendiente de Validación -> Se activa Trazabilidad (con las 2 fotos, sin validación policial) y Validación Policial se muestra deshabilitada en Incidentes #}
+                                {% elif s_norm in ['pendiente de validación', 'pendiente de validacion', 'pendiente de validación policial', 'pendiente de validacion policial'] %}
+                                    <!-- Paso 5: Validación Policial deshabilitada en Incidentes (solo se muestra; el validador solo puede validar en la opción Validación Policial) -->
+                                    <button disabled
+                                            title="El validador solo puede validar un ticket en la opción 'Validación Policial'."
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-300 text-[11px] font-bold cursor-not-allowed flex items-center justify-center gap-1.5">
+                                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                        <span>Validación Policial</span>
+                                    </button>
+
+                                    <!-- Paso 4: Botón Trazabilidad ACTIVO con los datos existentes y las dos fotografías (sin validación policial) -->
+                                    <button @click="openTraceModal({{ inc.to_trace_dict() | tojson | forceescape }})"
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-2xs">
+                                        <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span>Trazabilidad</span>
+                                    </button>
+
+                                {# PASO 6: Posterior a la Validación Policial -> Se actualiza Trazabilidad y se activa el Acta Oficial PDF #}
+                                {% elif s_norm in ['cerrado', 'validado / conforme', 'conforme / validado', 'resuelto'] or inc.is_validated %}
+                                    <div class="w-full inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold whitespace-nowrap">
+                                        <svg class="w-3 h-3 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                         <span>Validado Oficial</span>
                                     </div>
-                                {% endif %}
 
-                                <!-- Botón Ver Trazabilidad Digital -->
-                                <button @click="traceModal = {
-                                            id: {{ inc.id }},
-                                            ticket: '{{ inc.ticket_code }}',
-                                            title: '{{ inc.title|replace('\'', '\\\'') }}',
-                                            description: '{{ inc.description|replace('\'', '\\\'')|replace('\n', ' ') }}',
-                                            fault_type: '{{ inc.fault_type }}',
-                                            priority: '{{ inc.priority }}',
-                                            location: '{{ inc.location_detail if inc.location_detail else 'Estación de Policía' }}',
-                                            device: '{{ inc.device.name if inc.device else 'General' }}',
-                                            device_ip: '{{ inc.device.ip_address if inc.device else '' }}',
-                                            created_by: '{{ inc.creator.full_name or inc.creator.username if inc.creator else 'Sistema' }}',
-                                            created_at: '{{ inc.created_at.strftime('%d/%m/%Y %H:%M') }}',
-                                            attended_at: '{{ inc.attended_at.strftime('%d/%m/%Y %H:%M') if inc.attended_at else 'Inmediato' }}',
-                                            closed_by: '{{ (inc.closed_by.full_name or inc.closed_by.username) if inc.closed_by else ('Técnico de Mantenimiento' if inc.is_technically_closed else 'Pendiente de Cierre') }}',
-                                            closed_at: '{{ inc.closed_at.strftime('%d/%m/%Y %H:%M') if inc.closed_at else 'Pendiente' }}',
-                                            elapsed: '{{ inc.elapsed_text }}',
-                                            root_cause: '{{ (inc.root_cause or 'Sin registrar')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ') }}',
-                                            solution: '{{ (inc.solution or 'Sin registrar')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ') }}',
-                                            status: '{{ inc.status }}',
-                                            validation_status: '{{ inc.validation_status or '' }}',
-                                            is_technically_closed: {{ 'true' if inc.is_technically_closed else 'false' }},
-                                            is_validated: {{ 'true' if inc.is_validated else 'false' }},
-                                            is_resolved: {{ 'true' if inc.is_resolved else 'false' }},
-                                            is_rejected: {{ 'true' if (inc.status == 'Rechazado' or inc.validation_status == 'Rechazado') else 'false' }},
-                                            is_overtime: {{ 'true' if inc.is_overtime else 'false' }},
-                                            resolution_label: '{{ inc.resolution_label }}',
-                                            validator: '{{ ((inc.validator.full_name or inc.validator.username) if inc.validator else '') if inc.is_validated else '' }}',
-                                            validator_badge: '{{ (inc.validator.badge_number or '') if (inc.is_validated and inc.validator) else '' }}',
-                                            validator_document: '{{ (inc.validator.document_id or '') if (inc.is_validated and inc.validator) else '' }}',
-                                            validator_role: '{{ (inc.validator.role or 'Validador') if inc.is_validated else '' }}',
-                                            validator_rank: '{{ 'Oficial Validador de Seguridad y Convivencia Policial (CCTV)' if inc.is_validated else '' }}',
-                                            validator_unit: '{{ 'Policía Nacional de Colombia - Estación de Policía - Centro de Monitoreo CCTV' if inc.is_validated else '' }}',
-                                            validated_at: '{{ (inc.validated_at.strftime('%d/%m/%Y %H:%M') if inc.validated_at else '') if inc.is_validated else '' }}',
-                                            validation_notes: '{{ ((inc.validation_notes or '')|replace('\\', '\\\\')|replace('\'', '\\\'')|replace('\r', ' ')|replace('\n', ' ')) if inc.is_validated else '' }}',
-                                            initial_img: '{{ inc.image_path or '' }}',
-                                            closing_img: '{{ inc.closing_image_path or '' }}',
-                                            rejection_img: '{{ inc.rejection_photo or '' }}'
-                                        }"
-                                        class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-2xs">
-                                    <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                    <span>Trazabilidad</span>
-                                </button>
+                                    <!-- Paso 6: Trazabilidad actualizada con apertura, cierre y validación -->
+                                    <button @click="openTraceModal({{ inc.to_trace_dict() | tojson | forceescape }})"
+                                            class="w-full px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-2xs whitespace-nowrap">
+                                        <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span>Trazabilidad</span>
+                                    </button>
 
-                                {% if inc.is_validated %}
-                                <!-- Acta Oficial PDF con todos los datos técnicos (DEBAJO DE LA TRAZABILIDAD - SOLO VISIBLE TRAS VALIDACIÓN) -->
-                                <a href="/incidents/{{ inc.id }}/certificate.pdf" target="_blank"
-                                   class="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition shadow-xs"
-                                   title="Descargar Acta Oficial de Conformidad y Validación Técnica Policial en PDF con todos los datos técnicos">
-                                    <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                    <span>Acta Oficial PDF</span>
-                                </a>
+                                    <!-- Paso 6: Acta Oficial PDF activa -->
+                                    <a href="/incidents/{{ inc.id }}/certificate.pdf" target="_blank"
+                                       class="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold transition shadow-xs whitespace-nowrap"
+                                       title="Descargar Acta Oficial de Conformidad y Validación Técnica Policial en PDF con todos los datos técnicos">
+                                        <svg class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        <span>Acta Oficial PDF</span>
+                                    </a>
                                 {% endif %}
                             </div>
                         </td>
@@ -862,60 +1214,102 @@
                 </tbody>
             </table>
 
-            <!-- Barra de Paginación Estandarizada -->
-            {% if total_pages is defined and total_pages > 0 %}
+            <!-- Barra de Paginación Estandarizada (20 tickets por página) -->
             <div
                 class="px-6 py-4 bg-slate-50/80 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div class="text-xs text-slate-600 font-medium">
-                    Mostrando página <span class="font-bold text-slate-900">{{ page }}</span> de <span
-                        class="font-bold text-slate-900">{{ total_pages }}</span>
+                    Mostrando página <span class="font-bold text-slate-900" x-text="currentPage"></span> de <span
+                        class="font-bold text-slate-900" x-text="totalPages"></span>
                     <span class="text-slate-400 mx-1.5">•</span>
-                    Total: <span class="font-bold text-indigo-700">{{ total_records }}</span> tickets registrados
+                    Total: <span class="font-bold text-indigo-700" x-text="totalMatching"></span> tickets coincidentes
+                    <span class="text-slate-500 text-[11px] font-semibold">(20 por página)</span>
                 </div>
-                <div class="flex items-center gap-2">
-                    {% if has_prev %}
-                    <a href="?page={{ page - 1 }}&page_size={{ page_size }}"
-                        class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-sm transition flex items-center gap-1">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <!-- Primera Página -->
+                    <button type="button"
+                        @click="goToPage(1)"
+                        :disabled="currentPage <= 1"
+                        :class="currentPage <= 1 ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1"
+                        title="Ir a la primera página">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+                        <span class="hidden sm:inline">Primera</span>
+                    </button>
+
+                    <!-- Salto -5 Páginas -->
+                    <button type="button"
+                        x-show="totalPages > 5"
+                        @click="goToPage(Math.max(1, currentPage - 5))"
+                        :disabled="currentPage <= 1"
+                        :class="currentPage <= 1 ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2 py-1.5 rounded-lg border text-[11px] font-bold transition"
+                        title="Retroceder 5 páginas">
+                        -5
+                    </button>
+
+                    <!-- Anterior (1 en 1) -->
+                    <button type="button"
+                        @click="prevPage()"
+                        :disabled="currentPage <= 1"
+                        :class="currentPage <= 1 ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1"
+                        title="Página anterior">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                         </svg>
-                        Anterior
-                    </a>
-                    {% else %}
-                    <span
-                        class="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-400 cursor-not-allowed flex items-center gap-1">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
-                        Anterior
-                    </span>
-                    {% endif %}
+                        <span class="hidden sm:inline">Anterior</span>
+                    </button>
 
-                    <span
-                        class="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
-                        {{ page }} / {{ total_pages }}
-                    </span>
+                    <!-- Selector Directo de Página -->
+                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-xs">
+                        <span class="text-indigo-900 font-bold hidden sm:inline">Pág.</span>
+                        <select x-model.number="currentPage"
+                            @change="goToPage(currentPage)"
+                            class="py-0.5 px-2 bg-white border border-indigo-300 rounded-md font-black text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs text-xs">
+                            <template x-for="p in totalPages" :key="p">
+                                <option :value="p" :selected="p === currentPage" x-text="p"></option>
+                            </template>
+                        </select>
+                        <span class="text-indigo-600 font-bold">/</span>
+                        <span class="font-black text-indigo-950" x-text="totalPages"></span>
+                    </div>
 
-                    {% if has_next %}
-                    <a href="?page={{ page + 1 }}&page_size={{ page_size }}"
-                        class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-sm transition flex items-center gap-1">
-                        Siguiente
+                    <!-- Siguiente (1 en 1) -->
+                    <button type="button"
+                        @click="nextPage()"
+                        :disabled="currentPage >= totalPages"
+                        :class="currentPage >= totalPages ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1"
+                        title="Página siguiente">
+                        <span class="hidden sm:inline">Siguiente</span>
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                         </svg>
-                    </a>
-                    {% else %}
-                    <span
-                        class="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-400 cursor-not-allowed flex items-center gap-1">
-                        Siguiente
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                    </span>
-                    {% endif %}
+                    </button>
+
+                    <!-- Salto +5 Páginas -->
+                    <button type="button"
+                        x-show="totalPages > 5"
+                        @click="goToPage(Math.min(totalPages, currentPage + 5))"
+                        :disabled="currentPage >= totalPages"
+                        :class="currentPage >= totalPages ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2 py-1.5 rounded-lg border text-[11px] font-bold transition"
+                        title="Avanzar 5 páginas">
+                        +5
+                    </button>
+
+                    <!-- Última Página -->
+                    <button type="button"
+                        @click="goToPage(totalPages)"
+                        :disabled="currentPage >= totalPages"
+                        :class="currentPage >= totalPages ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'"
+                        class="px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center gap-1"
+                        title="Ir a la última página">
+                        <span class="hidden sm:inline">Última</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                    </button>
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 
@@ -1105,10 +1499,9 @@
                             class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
                     </div>
 
-                    <!-- 6. Evidencia Fotográfica (Opcional) -->
+                    <!-- 6. Evidencia Fotográfica Inicial (Recomendado) -->
                     <div>
-                        <label for="photo" class="block text-xs font-bold text-slate-800 mb-1">6. Evidencia Fotográfica
-                            Inicial (Opcional)</label>
+                        <label for="photo" class="block text-xs font-bold text-slate-800 mb-1">6. Evidencia Fotográfica Inicial (Recomendado)</label>
                         <input type="file" name="photo" id="photo" accept="image/*"
                             class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
                     </div>
@@ -1172,7 +1565,7 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-base font-bold text-slate-900">Cierre Técnico de Incidente</h3>
+                            <h3 class="text-base font-bold text-slate-900">Finalizar y Remitir a Validación Policial</h3>
                             <p class="text-xs text-slate-500" x-text="closeModal?.ticket"></p>
                         </div>
                     </div>
@@ -1188,7 +1581,7 @@
                     class="mt-4 space-y-4">
                     <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                         <p class="font-bold text-slate-800" x-text="closeModal?.title"></p>
-                        <p class="text-[11px] text-slate-500 mt-0.5">Técnico que finaliza: <strong
+                        <p class="text-[11px] text-slate-500 mt-0.5">Responsable que finaliza y remite: <strong
                                 class="text-slate-700">{{ current_user.full_name or current_user.username }} ({{
                                 current_user.role }})</strong></p>
                     </div>
@@ -1211,14 +1604,13 @@
                             class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
                     </div>
 
-                    <!-- Evidencia Fotográfica de Cierre -->
+                    <!-- Evidencia Fotográfica de Cierre (Obligatoria para finalizar y remitir) -->
                     <div>
                         <label for="closing_photo" class="block text-xs font-bold text-slate-800 mb-1">Evidencia
-                            Fotográfica de Solución (Opcional)</label>
-                        <input type="file" name="closing_photo" id="closing_photo" accept="image/*"
+                            Fotográfica de Finalización y Remisión a Validación *</label>
+                        <input type="file" name="closing_photo" id="closing_photo" accept="image/*" required
                             class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-700 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
-                        <p class="text-[10px] text-slate-400 mt-1">Fotografía del equipo operativo o pantalla de
-                            monitoreo con video restablecido.</p>
+                        <p class="text-[10px] text-slate-500 mt-1">Obligatorio: Cargue la fotografía que soporta la finalización del mantenimiento correctivo y su remisión a validación.</p>
                     </div>
 
                     <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
@@ -1228,7 +1620,7 @@
                         </button>
                         <button type="submit"
                             class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 transition">
-                            Guardar Diagnóstico y Cerrar Incidente
+                            Finalizar y Remitir
                         </button>
                     </div>
                 </form>
@@ -1257,6 +1649,7 @@
                             100%
                         </div>
                         <div>
+                            <p class="text-[10px] font-black uppercase tracking-wider text-indigo-700">Sistema Integral de Gestión de Mantenimiento CCTV - SIGMC</p>
                             <h3 class="text-base font-bold text-slate-900">Hoja de Trazabilidad Digital</h3>
                             <p class="text-xs font-mono font-bold text-blue-600" x-text="traceModal?.ticket"></p>
                         </div>
@@ -1294,28 +1687,52 @@
                     </div>
 
                     <!-- Línea de Vida Operativa -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
                         <!-- Reporte Inicial -->
-                        <div class="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                            <p class="text-[10px] font-bold uppercase text-slate-400">1. Apertura / Reporte</p>
-                            <p class="font-bold text-slate-800" x-text="traceModal?.created_by"></p>
-                            <p class="text-[11px] text-slate-500" x-text="traceModal?.created_at"></p>
+                        <div class="p-3 bg-white rounded-xl border border-slate-200 flex flex-col justify-between">
+                            <div class="space-y-1">
+                                <p class="text-[10px] font-bold uppercase text-slate-400">1. Apertura del Ticket</p>
+                                <p class="font-bold text-slate-800" x-text="traceModal?.created_by"></p>
+                                <template x-if="traceModal?.created_by_doc">
+                                    <p class="text-[10px] font-mono font-semibold text-slate-600" x-text="'C.C. ' + traceModal?.created_by_doc"></p>
+                                </template>
+                                <p class="text-[10px] font-semibold text-indigo-700" x-text="'Rol: ' + (traceModal?.created_by_role || 'Usuario')"></p>
+                                <p class="text-[11px] text-slate-500" x-text="'Fecha/Hora: ' + (traceModal?.created_at || '')"></p>
+                            </div>
+                            <template x-if="traceModal?.created_by_sig">
+                                <div class="pt-1.5 border-t border-slate-100 mt-2 h-11 flex items-center justify-center">
+                                    <img :src="traceModal?.created_by_sig" alt="Firma Apertura" class="max-h-8 max-w-[140px] w-auto h-auto object-contain mx-auto">
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Cierre y Solución -->
-                        <div class="p-3 rounded-xl border space-y-1"
+                        <div class="p-3 rounded-xl border flex flex-col justify-between"
                              :class="traceModal?.is_technically_closed ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'">
-                            <p class="text-[10px] font-bold uppercase"
-                               :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-400'">2. Cierre & Solución Técnica</p>
-                            <p class="font-bold"
-                               :class="traceModal?.is_technically_closed ? 'text-emerald-900' : 'text-slate-600'"
-                               x-text="traceModal?.is_technically_closed ? (traceModal?.closed_by || 'Técnico de Mantenimiento') : 'Pendiente de Cierre'"></p>
-                            <p class="text-[11px]"
-                               :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-500'"
-                               x-text="traceModal?.is_technically_closed ? traceModal?.closed_at : 'En atención operativa'"></p>
-                            <p class="text-[10px] font-semibold"
-                               :class="traceModal?.is_technically_closed ? 'text-emerald-800' : 'text-slate-500'"
-                               x-text="(traceModal?.is_technically_closed ? 'Tiempo Total: ' : 'Tiempo Transcurrido: ') + traceModal?.elapsed"></p>
+                            <div class="space-y-1">
+                                <p class="text-[10px] font-bold uppercase"
+                                   :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-400'">2. Cierre Técnico y Remisión</p>
+                                <p class="font-bold"
+                                   :class="traceModal?.is_technically_closed ? 'text-emerald-900' : 'text-slate-600'"
+                                   x-text="traceModal?.is_technically_closed ? (traceModal?.closed_by || 'Técnico de Mantenimiento') : 'Pendiente de Cierre'"></p>
+                                <template x-if="traceModal?.is_technically_closed && traceModal?.closed_by_doc">
+                                    <p class="text-[10px] font-mono font-semibold text-emerald-900" x-text="'C.C. ' + traceModal?.closed_by_doc"></p>
+                                </template>
+                                <template x-if="traceModal?.is_technically_closed && traceModal?.closed_by_role">
+                                    <p class="text-[10px] font-semibold text-emerald-800" x-text="'Rol: ' + traceModal?.closed_by_role"></p>
+                                </template>
+                                <p class="text-[11px]"
+                                   :class="traceModal?.is_technically_closed ? 'text-emerald-700' : 'text-slate-500'"
+                                   x-text="traceModal?.is_technically_closed ? ('Fecha/Hora: ' + traceModal?.closed_at) : 'En atención operativa'"></p>
+                                <p class="text-[10px] font-semibold"
+                                   :class="traceModal?.is_technically_closed ? 'text-emerald-800' : 'text-slate-500'"
+                                   x-text="(traceModal?.is_technically_closed ? 'Tiempo Total: ' : 'Tiempo Transcurrido: ') + traceModal?.elapsed"></p>
+                            </div>
+                            <template x-if="traceModal?.is_technically_closed && traceModal?.closed_by_sig">
+                                <div class="pt-1.5 border-t border-emerald-200/70 mt-2 h-11 flex items-center justify-center">
+                                    <img :src="traceModal?.closed_by_sig" alt="Firma Cierre" class="max-h-8 max-w-[140px] w-auto h-auto object-contain mx-auto">
+                                </div>
+                            </template>
                         </div>
                     </div>
                     <div class="space-y-3">
@@ -1337,29 +1754,35 @@
                     <!-- Evidencias Comparativas -->
                     <div class="space-y-1.5" x-show="traceModal?.initial_img || traceModal?.closing_img || traceModal?.rejection_img">
                         <p class="font-bold text-slate-800 text-xs">Evidencias Fotográficas Registradas:</p>
-                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 items-start">
                             <template x-if="traceModal?.initial_img">
                                 <div class="space-y-1">
                                     <p class="text-[10px] text-slate-500 font-semibold">Evidencia de Falla</p>
-                                    <img :src="traceModal?.initial_img"
-                                        class="w-full h-28 object-cover rounded-xl border border-slate-200 cursor-pointer"
-                                        @click="imagePreviewModal = traceModal?.initial_img">
+                                    <div class="w-full h-28 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-center p-1 overflow-hidden">
+                                        <img :src="traceModal?.initial_img"
+                                            class="max-w-full max-h-full w-auto h-auto object-contain mx-auto cursor-pointer"
+                                            @click="imagePreviewModal = traceModal?.initial_img">
+                                    </div>
                                 </div>
                             </template>
                             <template x-if="traceModal?.closing_img">
                                 <div class="space-y-1">
                                     <p class="text-[10px] text-emerald-600 font-semibold">Evidencia de Solución</p>
-                                    <img :src="traceModal?.closing_img"
-                                        class="w-full h-28 object-cover rounded-xl border border-emerald-300 cursor-pointer"
-                                        @click="imagePreviewModal = traceModal?.closing_img">
+                                    <div class="w-full h-28 bg-slate-50 rounded-xl border border-emerald-300 flex items-center justify-center p-1 overflow-hidden">
+                                        <img :src="traceModal?.closing_img"
+                                            class="max-w-full max-h-full w-auto h-auto object-contain mx-auto cursor-pointer"
+                                            @click="imagePreviewModal = traceModal?.closing_img">
+                                    </div>
                                 </div>
                             </template>
                             <template x-if="traceModal?.rejection_img">
                                 <div class="space-y-1">
                                     <p class="text-[10px] text-rose-600 font-semibold">Foto de Rechazo / Novedad</p>
-                                    <img :src="traceModal?.rejection_img"
-                                        class="w-full h-28 object-cover rounded-xl border border-rose-300 cursor-pointer"
-                                        @click="imagePreviewModal = traceModal?.rejection_img">
+                                    <div class="w-full h-28 bg-slate-50 rounded-xl border border-rose-300 flex items-center justify-center p-1 overflow-hidden">
+                                        <img :src="traceModal?.rejection_img"
+                                            class="max-w-full max-h-full w-auto h-auto object-contain mx-auto cursor-pointer"
+                                            @click="imagePreviewModal = traceModal?.rejection_img">
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -1427,7 +1850,12 @@
                                     <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
                                         <span class="text-[10px] font-bold uppercase text-slate-400 block">Oficial Validador:</span>
                                         <strong class="text-slate-900 font-black block text-xs truncate" x-text="traceModal?.validator || 'Oficial Validador Policial'"></strong>
-                                        <span class="text-[10px] text-purple-700 font-semibold block truncate" x-text="traceModal?.validator_rank || 'Oficial Validador de Seguridad y Convivencia Policial (CCTV)'"></span>
+                                        <span class="text-[10px] text-purple-700 font-semibold block truncate" x-text="traceModal?.validator_rank || 'Validador Policial - SIGMC'"></span>
+                                        <template x-if="traceModal?.validator_sig">
+                                            <div class="pt-1 border-t border-purple-100 mt-1 h-9 flex items-center justify-center">
+                                                <img :src="traceModal?.validator_sig" alt="Firma Validador" class="max-h-7 max-w-[130px] w-auto h-auto object-contain mx-auto">
+                                            </div>
+                                        </template>
                                     </div>
 
                                     <!-- Placa Policial y Cédula -->
@@ -1442,10 +1870,10 @@
                                         <span class="text-[10px] text-slate-500 block truncate" x-text="'Rol: ' + (traceModal?.validator_role || 'Validador Policial')"></span>
                                     </div>
 
-                                    <!-- Unidad Policial -->
+                                    <!-- Sistema -->
                                     <div class="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-0.5">
-                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Unidad Policial:</span>
-                                        <strong class="text-slate-800 text-[11px] block truncate" x-text="traceModal?.validator_unit || 'Policía Nacional de Colombia - Estación de Policía - Centro de Monitoreo CCTV'"></strong>
+                                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Sistema:</span>
+                                        <strong class="text-slate-800 text-[11px] block truncate" x-text="traceModal?.validator_unit || 'Sistema Integral de Gestión de Mantenimiento CCTV - SIGMC'"></strong>
                                         <span class="text-[10px] text-slate-500 block truncate" x-text="'Jurisdicción: ' + (traceModal?.location || 'Sede Municipal')"></span>
                                     </div>
 
@@ -1748,6 +2176,106 @@
             </div>
         </div>
     </div>
+
+    <!-- MODAL DE CONFIRMACIÓN: TICKET GENERADO CON DATOS TÉCNICOS -->
+    {% if created_incident %}
+    <div x-show="showCreatedModal" x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div x-show="showCreatedModal"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 @click="closeCreatedModal()"
+                 class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+
+            <div x-show="showCreatedModal"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="relative inline-block align-middle bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all my-8 max-w-lg w-full border border-slate-100">
+                
+                <!-- Encabezado con Icono de Éxito -->
+                <div class="bg-gradient-to-br from-blue-700 via-indigo-700 to-slate-900 px-6 pt-6 pb-5 text-white text-center relative overflow-hidden">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-3xl shadow-inner mb-3">
+                        🎫
+                    </div>
+                    <span class="inline-block px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-400 text-emerald-950 mb-2 shadow-xs">
+                        ¡Ticket Generado con Éxito!
+                    </span>
+                    <h3 class="text-lg font-black text-white">Mantenimiento Correctivo Registrado</h3>
+                    <p class="text-xs text-blue-200/90 mt-1 max-w-sm mx-auto">
+                        La orden técnica ha quedado radicada oficialmente en el sistema CCTV.
+                    </p>
+                </div>
+
+                <!-- Tarjeta Principal: Número de Ticket Completo -->
+                <div class="p-6 space-y-4">
+                    <div class="p-4 rounded-2xl bg-slate-900 text-center border border-slate-800 shadow-md">
+                        <span class="text-[10px] font-black tracking-widest text-slate-400 uppercase block mb-1">
+                            Número Oficial de Ticket
+                        </span>
+                        <p class="text-3xl font-mono font-black text-amber-400 tracking-wider">
+                            {{ created_incident.ticket_code }}
+                        </p>
+                        <div class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                            <span class="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
+                            <span>Estado Inicial: {{ created_incident.status }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Ficha Resumen de Datos Técnicos Importantes -->
+                    <div class="grid grid-cols-2 gap-3 text-xs">
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Sede Territorial</span>
+                            <span class="font-bold text-slate-800 text-xs block truncate mt-0.5">{{ created_incident.sede or (current_site.full_name if current_site else 'Sede Central') }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Punto de Ubicación</span>
+                            <span class="font-bold text-slate-800 text-xs block truncate mt-0.5">{{ created_incident.location_detail or 'Punto de Cámara' }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Equipo CCTV</span>
+                            <span class="font-bold text-slate-800 text-xs block truncate mt-0.5">{{ created_incident.device.name if created_incident.device else 'General / Punto de Red' }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Tipo de Falla & SLA</span>
+                            <span class="font-bold text-slate-800 text-xs block truncate mt-0.5">{{ created_incident.fault_type }} ({{ created_incident.sla_info.limit_hours }}h)</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Prioridad Asignada</span>
+                            <span class="font-black text-xs block mt-0.5 {% if created_incident.priority == 'Crítica' %}text-rose-600{% elif created_incident.priority == 'Alta' %}text-amber-600{% else %}text-blue-600{% endif %}">
+                                ● {{ created_incident.priority }}
+                            </span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                            <span class="text-[10px] font-bold uppercase text-slate-400 block">Fecha y Hora de Apertura</span>
+                            <span class="font-bold text-slate-800 text-xs block truncate mt-0.5">{{ created_incident.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Botón de Aceptar para continuar con el proceso -->
+                    <div class="pt-2">
+                        <button type="button"
+                                @click="closeCreatedModal()"
+                                class="w-full py-3 px-5 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-black text-xs shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 cursor-pointer">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <span>Aceptar</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

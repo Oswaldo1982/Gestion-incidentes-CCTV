@@ -11,7 +11,7 @@ import dns.resolver
 from contextlib import asynccontextmanager
 
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, Request, Form, UploadFile, File, Query, status, HTTPException
+from fastapi import FastAPI, Depends, Request, Form, UploadFile, File, Query, status, HTTPException, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -35,8 +35,9 @@ from app.auth import get_password_hash, authenticate_user, create_access_token, 
 from app.utils.timezone import get_local_now
 from app.services.license_service import check_license_validity, get_active_license_payload, activate_license, verify_user_limit
 from app.services.audit_service import create_audit_log
+from app.services.realtime_service import realtime_manager
 from app.services.email_service import send_temporary_password_email
-from app.services.report_service import get_reports_statistics, generate_cctv_pdf_report, generate_validation_conformity_pdf
+from app.services.report_service import get_reports_statistics, generate_cctv_pdf_report, generate_validation_conformity_pdf, generate_cctv_executive_pdf_report
 from app.routers import auth, users, license
 from app.routers import sites as sites_api
 from app.routers import incidents as incidents_api
@@ -44,14 +45,17 @@ from app.routers import maintenance as maintenance_api
 from app.routers import events as events_api
 
 # Directorio de subida local para evidencias fotográficas
-UPLOAD_DIR = os.path.join("static", "uploads")
+UPLOAD_DIR = settings.UPLOAD_DIR
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
 
 # Inicializar motor de plantillas Jinja2 y exponer estado de Modo Demo
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["demo_mode"] = settings.DEMO_MODE
 
-# Definición Oficial de las 4 Sedes Territoriales Multi-Tenant
+# Definición Oficial de Sedes Territoriales Multi-Tenant
+# Por directriz operativa inicial, San Agustín es la única sede real activa para producción.
+# El Sitio de Prueba se reserva para el Entorno Demo / Sandbox.
 AVAILABLE_SITES: List[Dict[str, Any]] = [
     {
         "id": "san-agustin",
@@ -67,6 +71,23 @@ AVAILABLE_SITES: List[Dict[str, Any]] = [
         "default_supervisor": "supervisor_sanagustin"
     },
     {
+        "id": "sitio-prueba",
+        "name": "Sitio de Prueba",
+        "full_name": "Sitio de Prueba (Entorno Demo)",
+        "region": "Demostración",
+        "badge": "Modo Sandbox",
+        "description": "Entorno general de demostración y pruebas operativas",
+        "icon": "🧪",
+        "cameras_count": 8,
+        "status": "Operativo",
+        "color": "amber",
+        "default_supervisor": "supervisor_sanagustin"
+    }
+]
+
+# Sedes reservadas para fases futuras de expansión territorial:
+EXPANSION_SITES_CATALOG: List[Dict[str, Any]] = [
+    {
         "id": "san-jose-guaviare",
         "name": "San José del Guaviare",
         "full_name": "San José del Guaviare (Guaviare)",
@@ -75,7 +96,7 @@ AVAILABLE_SITES: List[Dict[str, Any]] = [
         "description": "Parque Santander, Muelle Fluvial y CAD Central",
         "icon": "🏢",
         "cameras_count": 24,
-        "status": "Operativo",
+        "status": "Inactivo",
         "color": "emerald",
         "default_supervisor": "supervisor_guaviare"
     },
@@ -88,7 +109,7 @@ AVAILABLE_SITES: List[Dict[str, Any]] = [
         "description": "Control Vía Nacional, Alcaldía y Polideportivo",
         "icon": "🌳",
         "cameras_count": 12,
-        "status": "Operativo",
+        "status": "Inactivo",
         "color": "amber",
         "default_supervisor": "supervisor_guaviare"
     },
@@ -101,22 +122,9 @@ AVAILABLE_SITES: List[Dict[str, Any]] = [
         "description": "Muelle Río Unilla, Casco Urbano y Puesto de Salud",
         "icon": "🚤",
         "cameras_count": 8,
-        "status": "Operativo",
+        "status": "Inactivo",
         "color": "purple",
         "default_supervisor": "supervisor_guaviare"
-    },
-    {
-        "id": "sitio-prueba",
-        "name": "Sitio de Prueba",
-        "full_name": "Sitio de Prueba (Entorno Demo)",
-        "region": "Demostración",
-        "badge": "Modo Sandbox",
-        "description": "Entorno general de demostración y pruebas operativas",
-        "icon": "🧪",
-        "cameras_count": 8,
-        "status": "Operativo",
-        "color": "amber",
-        "default_supervisor": "supervisor_sanagustin"
     }
 ]
 
@@ -382,6 +390,19 @@ async def save_uploaded_photo(photo: Optional[UploadFile]) -> Optional[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 0. Creación automática de directorios al arrancar (volumen persistente y subidas)
+    upload_dir = getattr(settings, "UPLOAD_DIR", os.path.join("static", "uploads"))
+    os.makedirs(upload_dir, exist_ok=True)
+    os.makedirs(os.path.join("static", "uploads"), exist_ok=True)
+
+    # Si la base de datos es SQLite basada en disco persistente, verificar y crear su directorio contenedor
+    db_url = settings.effective_database_url
+    if db_url.startswith("sqlite:///") and ":memory:" not in db_url:
+        db_file_path = db_url.replace("sqlite:///", "")
+        db_folder = os.path.dirname(db_file_path)
+        if db_folder:
+            os.makedirs(db_folder, exist_ok=True)
+
     # 1. Crear tablas en la base de datos efectiva si no existen y sincronizar esquema
     from app.database import ensure_database_schema
     Base.metadata.create_all(bind=engine)
@@ -443,63 +464,6 @@ async def lifespan(app: FastAPI):
             else:
                 print(f"[*] Usuario Administrador ya configurado: {admin_exists.username}")
 
-            # 2.1 Sembrar usuario Validador inicial si no existe ninguno en el sistema
-            validador_exists = db.query(User).filter(User.role == "Validador").first()
-            if not validador_exists:
-                default_validador = User(
-                    username="validador",
-                    email="validador.cctv@seguridad-cctv.gov.co",
-                    full_name="Oficial Validador de Calidad CCTV (Policía Nacional)",
-                    document_id="1010202303",
-                    badge_number="109845",
-                    assigned_site="Todas las Sedes",
-                    hashed_password=get_password_hash("validador123"),
-                    role="Validador",
-                    is_active=True,
-                    must_change_password=False
-                )
-                db.add(default_validador)
-                db.commit()
-                print("[*] Usuario Validador inicial creado con éxito: validador (Placa #109845)")
-            else:
-                print(f"[*] Usuario Validador disponible: {validador_exists.username} (Placa #{validador_exists.badge_number or 'N/A'})")
-
-            # 2.2 Sembrar usuario Supervisor inicial si no existe ninguno en el sistema
-            supervisor_exists = db.query(User).filter(User.role == "Supervisor").first()
-            if not supervisor_exists:
-                default_sup = User(
-                    username="supervisor_sanagustin",
-                    email="supervisor@sanagustin-huila.gov.co",
-                    full_name="Supervisor Territorial de Contrato",
-                    document_id="2020303404",
-                    assigned_site="Todas las Sedes",
-                    hashed_password=get_password_hash("supervisor123"),
-                    role="Supervisor",
-                    is_active=True,
-                    must_change_password=False
-                )
-                db.add(default_sup)
-                db.commit()
-                print("[*] Usuario Supervisor inicial creado con éxito: supervisor_sanagustin")
-
-            # 2.3 Sembrar usuario Empresa de Mantenimiento si no existe ninguno en el sistema
-            mant_exists = db.query(User).filter(User.role == "Empresa de Mantenimiento").first()
-            if not mant_exists:
-                default_mant = User(
-                    username="mantenimiento_cctv",
-                    email="mantenimiento@cctv-seguridad.gov.co",
-                    full_name="Técnico Empresa de Mantenimiento",
-                    document_id="3030404505",
-                    assigned_site="Todas las Sedes",
-                    hashed_password=get_password_hash("mantenimiento123"),
-                    role="Empresa de Mantenimiento",
-                    is_active=True,
-                    must_change_password=False
-                )
-                db.add(default_mant)
-                db.commit()
-                print("[*] Usuario Empresa de Mantenimiento inicial creado con éxito: mantenimiento_cctv")
-
             # 3. Sembrar licencia activa si no existe
             license_active = db.query(License).filter(License.is_active == True).first()
             if not license_active:
@@ -534,7 +498,8 @@ async def lifespan(app: FastAPI):
         print(f"[!] Error durante la inicialización en lifespan: {e}")
     finally:
         db.close()
-        
+
+    realtime_manager.bind_loop()
     yield
 
 
@@ -545,14 +510,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Montar archivos estáticos para servir fotos locales
+# Endpoint de chequeo de salud (Health Check) para Railway y orquestadores en la nube
+@app.get("/health", status_code=status.HTTP_200_OK, tags=["Health"])
+def health_check():
+    """Endpoint de comprobación de salud para Railway y monitorización de infraestructura."""
+    return {
+        "status": "healthy",
+        "service": "cctv-incidentes"
+    }
+
+# Montar archivos estáticos para servir fotos y evidencias locales
+if os.path.abspath(settings.UPLOAD_DIR) != os.path.abspath(os.path.join("static", "uploads")):
+    app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="persistent_uploads")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.middleware("http")
 async def add_no_cache_headers_for_html(request: Request, call_next):
     """
     Garantiza que las vistas HTML dinámicas nunca se almacenen en caché del navegador (BFCache / disk cache),
-    evitando que al cambiar de rol de usuario o volver atrás se muestren estados desactualizados o botones faltantes.
+    y emite notificaciones en tiempo real tras operaciones de modificación (POST/PUT/PATCH/DELETE).
     """
     response = await call_next(request)
     content_type = response.headers.get("content-type", "")
@@ -560,7 +536,57 @@ async def add_no_cache_headers_for_html(request: Request, call_next):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        path = request.url.path
+        excluded_paths = ("/login", "/logout", "/demo/quick-login", "/demo/exit", "/forgot-password", "/change-credentials")
+        if not any(path.startswith(ep) for ep in excluded_paths) and response.status_code < 400:
+            realtime_manager.notify(
+                event_type="resource_mutated",
+                payload={"method": request.method, "path": path}
+            )
+
+    # Renovación deslizante de sesión por actividad (20 minutos de inactividad para todos los roles)
+    path = request.url.path
+    is_realtime_bg = (
+        path.startswith(("/api/realtime", "/ws/", "/static", "/logout", "/login", "/demo/exit"))
+        or request.headers.get("X-Realtime-Sync") == "1"
+    )
+    if not is_realtime_bg and "set-cookie" not in (k.lower() for k in response.headers.keys()):
+        cookie_token = request.cookies.get("access_token")
+        if cookie_token:
+            raw_token = cookie_token[7:] if cookie_token.startswith("Bearer ") else cookie_token
+            try:
+                from jose import jwt as _jwt
+                payload = _jwt.decode(raw_token, settings.SECRET_KEY, algorithms=["HS256"])
+                sub = payload.get("sub")
+                if sub:
+                    refreshed_token = create_access_token(data={"sub": sub})
+                    response.set_cookie(
+                        key="access_token",
+                        value=f"Bearer {refreshed_token}",
+                        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+                        httponly=True,
+                        samesite="lax"
+                    )
+            except Exception:
+                pass
+
     return response
+
+
+# ----------------- 0. Endpoints de Sincronización en Tiempo Real (SSE y WebSocket) -----------------
+
+@app.get("/api/realtime/stream", include_in_schema=False)
+async def realtime_sse_endpoint(request: Request):
+    """Stream Server-Sent Events (SSE) para actualización reactiva del DOM en tiempo real."""
+    return realtime_manager.create_sse_response(request)
+
+
+@app.websocket("/ws/updates")
+async def realtime_ws_endpoint(websocket: WebSocket):
+    """Canal WebSocket para actualización reactiva en tiempo real."""
+    await realtime_manager.handle_websocket(websocket)
 
 
 # ----------------- 1. Landpage / Portal de Entrada (/) -----------------
@@ -685,7 +711,7 @@ def generate_temp_password() -> str:
 def login_post(
     request: Request,
     username: str = Form(...),
-    password: str = Form(...),
+    password: Optional[str] = Form(""),
     site_id: str = Form("san-agustin"),
     role_type: Optional[str] = Form(None),
     db: Session = Depends(get_db)
@@ -695,6 +721,11 @@ def login_post(
     referer = request.headers.get("referer", "")
     template_name = "login.html" if "/login" in referer else "landing.html"
     
+    def redirect_login_error(msg: str):
+        quoted = urllib.parse.quote(msg)
+        target = f"/login?site={clean_site_id}&error={quoted}" if "/login" in referer else f"/?site={clean_site_id}&error={quoted}"
+        return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
+
     # 1. Autenticación por correo/usuario y contraseña
     user = authenticate_user(db, username=username.strip(), password=password)
     
@@ -706,19 +737,7 @@ def login_post(
             action="WEB_LOGIN_FAILED",
             details={"reason": "Credenciales inválidas", "attempted_site": clean_site_id, "attempted_role": role_type}
         )
-        return templates.TemplateResponse(
-            request=request,
-            name=template_name,
-            context={
-                "current_user": None,
-                "selected_site": clean_site_id,
-                "username": username,
-                "error": "Las credenciales ingresadas son incorrectas.",
-                "available_sites": AVAILABLE_SITES,
-                "demo_mode": settings.DEMO_MODE
-            },
-            status_code=status.HTTP_401_UNAUTHORIZED
-        )
+        return redirect_login_error("Las credenciales ingresadas son incorrectas.")
 
     if not user.is_active:
         create_audit_log(
@@ -728,19 +747,7 @@ def login_post(
             action="WEB_LOGIN_FAILED",
             details={"reason": "Cuenta desactivada"}
         )
-        return templates.TemplateResponse(
-            request=request,
-            name=template_name,
-            context={
-                "current_user": None,
-                "selected_site": clean_site_id,
-                "username": username,
-                "error": "Esta cuenta se encuentra desactivada.",
-                "available_sites": AVAILABLE_SITES,
-                "demo_mode": settings.DEMO_MODE
-            },
-            status_code=status.HTTP_403_FORBIDDEN
-        )
+        return redirect_login_error("Esta cuenta se encuentra desactivada.")
 
     # 2. VALIDACIÓN OBLIGATORIA DE COINCIDENCIA DE ROL
     if role_type and role_type.strip():
@@ -765,63 +772,43 @@ def login_post(
                 action="WEB_LOGIN_FAILED_ROLE_MISMATCH",
                 details={"attempted_role": role_type, "actual_role": user.role, "site_id": clean_site_id}
             )
-            return templates.TemplateResponse(
-                request=request,
-                name=template_name,
-                context={
-                    "current_user": None,
-                    "selected_site": clean_site_id,
-                    "username": username,
-                    "error": "Las credenciales ingresadas son incorrectas.",
-                    "available_sites": AVAILABLE_SITES,
-                    "demo_mode": settings.DEMO_MODE
-                },
-                status_code=status.HTTP_401_UNAUTHORIZED
-            )
+            return redirect_login_error("Las credenciales ingresadas son incorrectas.")
 
     # 3. VALIDACIÓN OBLIGATORIA DE COINCIDENCIA DE SEDE TERRITORIAL
-    # El Administrador Principal tiene autorización global para administrar cualquiera de los 4 municipios
-    if user.role != "Admin":
-        assigned = (user.assigned_site or "").strip()
-        if assigned and assigned not in ["Todas las Sedes", "Todas", "Global", ""]:
-            selected_site_obj = next((s for s in AVAILABLE_SITES if s["id"] == clean_site_id), None)
-            site_name = selected_site_obj["name"] if selected_site_obj else clean_site_id
-            site_full = selected_site_obj["full_name"] if selected_site_obj else clean_site_id
-            
-            norm_assigned = assigned.lower()
-            norm_site_id = clean_site_id.lower().replace("-", " ")
-            norm_site_name = site_name.lower()
-            norm_site_full = site_full.lower()
-            
-            matches_site = (
-                norm_assigned in norm_site_full or
-                norm_assigned in norm_site_name or
-                norm_site_name in norm_assigned or
-                norm_site_id in norm_assigned or
-                norm_assigned in norm_site_id
+    selected_site_obj = next((s for s in AVAILABLE_SITES if s["id"] == clean_site_id), None)
+    site_name = selected_site_obj["name"] if selected_site_obj else clean_site_id
+    site_full = selected_site_obj["full_name"] if selected_site_obj else clean_site_id
+
+    assigned = (user.assigned_site or "").strip()
+    if assigned and assigned not in ["Todas las Sedes", "Todas", "Global", ""]:
+        norm_assigned = assigned.lower()
+        norm_site_id = clean_site_id.lower().replace("-", " ")
+        norm_site_name = site_name.lower()
+        norm_site_full = site_full.lower()
+
+        matches_site = False
+        if "agustin" in norm_assigned or "agustín" in norm_assigned:
+            matches_site = ("agustin" in norm_site_name or "agustín" in norm_site_name or "agustin" in norm_site_id or "agustín" in norm_site_id)
+        elif "guaviare" in norm_assigned or "josé" in norm_assigned or "jose" in norm_assigned:
+            matches_site = ("guaviare" in norm_site_name or "josé" in norm_site_name or "jose" in norm_site_name or "guaviare" in norm_site_id)
+        elif "retorno" in norm_assigned:
+            matches_site = ("retorno" in norm_site_name or "retorno" in norm_site_id)
+        elif "calamar" in norm_assigned:
+            matches_site = ("calamar" in norm_site_name or "calamar" in norm_site_id)
+        elif "prueba" in norm_assigned or "demo" in norm_assigned:
+            matches_site = ("prueba" in norm_site_id or "demo" in norm_site_id or "prueba" in norm_site_name or "demo" in norm_site_name)
+        else:
+            matches_site = (norm_assigned in norm_site_full or norm_assigned in norm_site_name or norm_assigned == norm_site_id)
+
+        if not matches_site:
+            create_audit_log(
+                db,
+                user_id=user.id,
+                username=user.username,
+                action="WEB_LOGIN_FAILED_SITE_MISMATCH",
+                details={"assigned_site": user.assigned_site, "attempted_site": clean_site_id}
             )
-            
-            if not matches_site:
-                create_audit_log(
-                    db,
-                    user_id=user.id,
-                    username=user.username,
-                    action="WEB_LOGIN_FAILED_SITE_MISMATCH",
-                    details={"assigned_site": user.assigned_site, "attempted_site": clean_site_id}
-                )
-                return templates.TemplateResponse(
-                    request=request,
-                    name=template_name,
-                    context={
-                        "current_user": None,
-                        "selected_site": clean_site_id,
-                        "username": username,
-                        "error": "Las credenciales ingresadas son incorrectas.",
-                        "available_sites": AVAILABLE_SITES,
-                        "demo_mode": settings.DEMO_MODE
-                    },
-                    status_code=status.HTTP_401_UNAUTHORIZED
-                )
+            return redirect_login_error("Las credenciales ingresadas son incorrectas o no corresponden a la sede seleccionada.")
 
     # Validar vigencia de 24 horas para credenciales temporales
     if user.must_change_password and user.temp_expires_at:
@@ -833,19 +820,7 @@ def login_post(
                 action="WEB_LOGIN_FAILED_EXPIRED_TEMP_CREDENTIALS",
                 details={"reason": "Credenciales temporales expiradas (24 horas)"}
             )
-            return templates.TemplateResponse(
-                request=request,
-                name=template_name,
-                context={
-                    "current_user": None,
-                    "selected_site": clean_site_id,
-                    "username": username,
-                    "error": "Las credenciales temporales han expirado (límite de 24 horas de vigencia). Por favor comuníquese con el Administrador para generar un nuevo acceso.",
-                    "available_sites": AVAILABLE_SITES,
-                    "demo_mode": settings.DEMO_MODE
-                },
-                status_code=status.HTTP_401_UNAUTHORIZED
-            )
+            return redirect_login_error("Las credenciales temporales han expirado (límite de 24 horas de vigencia). Por favor comuníquese con el Administrador para generar un nuevo acceso.")
 
     # Registrar primer acceso del sitio para activar el reloj de 24 horas
     from app.services.site_license_service import record_site_first_access
@@ -1041,6 +1016,7 @@ def change_credentials_post(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
     signature_data: Optional[str] = Form(None),
+    is_executive_signatory: Optional[str] = Form(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
@@ -1133,6 +1109,15 @@ def change_credentials_post(
     current_user.hashed_password = get_password_hash(new_password)
     current_user.must_change_password = False
     current_user.temp_expires_at = None
+
+    if current_user.role == "Validador":
+        is_sig_checked = (is_executive_signatory in ["true", "on", "1"])
+        if is_sig_checked:
+            db.query(User).filter(User.role == "Validador", User.id != current_user.id).update({"is_executive_signatory": False})
+            current_user.is_executive_signatory = True
+        else:
+            current_user.is_executive_signatory = False
+
     db.commit()
 
     create_audit_log(
@@ -1165,34 +1150,91 @@ def demo_quick_login(
 ):
     """
     Ingreso directo y cambio de rol instantáneo en el 'Sitio de Prueba'.
-    Autentica el rol solicitado y otorga acceso completo con todas las funciones reales.
+    Autentica el rol solicitado sin contraseña usando cuentas exclusivas de Demo
+    con los permisos exactos de cada perfil.
     """
     clean_site_id = "sitio-prueba"
-    target_username = "admin"
+    demo_site_full = "Sitio de Prueba (Entorno Demo)"
 
-    if demo_role == "validador":
-        target_username = "validador"
-    elif demo_role == "supervisor":
-        target_username = "supervisor"
-    elif demo_role == "mantenimiento":
-        target_username = "mantenimiento_cctv"
+    demo_profiles = {
+        "admin": {
+            "username": "admin_demo",
+            "email": "admin.demo@cctv-seguridad.gov.co",
+            "full_name": "Administrador Demo",
+            "role": "Admin",
+            "document_id": "9000000001",
+            "badge_number": None,
+            "signature_path": "/static/uploads/signatures/seed_sig_1_admin.png",
+        },
+        "validador": {
+            "username": "validador_demo",
+            "email": "validador.demo@cctv-seguridad.gov.co",
+            "full_name": "Validador Policial Demo",
+            "role": "Validador",
+            "document_id": "9000000002",
+            "badge_number": "DEMO-109845",
+            "signature_path": "/static/uploads/signatures/seed_sig_10_validador.png",
+        },
+        "supervisor": {
+            "username": "supervisor_demo",
+            "email": "supervisor.demo@cctv-seguridad.gov.co",
+            "full_name": "Supervisor de Contrato Demo",
+            "role": "Supervisor",
+            "document_id": "9000000003",
+            "badge_number": None,
+            "signature_path": None,
+        },
+        "mantenimiento": {
+            "username": "mantenimiento_demo",
+            "email": "mantenimiento.demo@cctv-seguridad.gov.co",
+            "full_name": "Empresa de Mantenimiento Demo",
+            "role": "Empresa de Mantenimiento",
+            "document_id": "9000000004",
+            "badge_number": None,
+            "signature_path": None,
+        },
+    }
 
-    user = db.query(User).filter(User.username == target_username).first()
+    role_key = (demo_role or "admin").strip().lower()
+    profile = demo_profiles.get(role_key, demo_profiles["admin"])
+
+    user = db.query(User).filter(User.username == profile["username"]).first()
     if not user:
-        if demo_role == "validador":
-            target_role = "Validador"
-        elif demo_role == "supervisor":
-            target_role = "Supervisor"
-        elif demo_role == "mantenimiento":
-            target_role = "Empresa de Mantenimiento"
-        else:
-            target_role = "Admin"
-        user = db.query(User).filter(User.role == target_role).first()
-        if not user:
-            user = db.query(User).first()
-
-    if not user:
-        return RedirectResponse(url="/select-site?error=demo_user_not_found", status_code=status.HTTP_303_SEE_OTHER)
+        user = User(
+            username=profile["username"],
+            email=profile["email"],
+            full_name=profile["full_name"],
+            document_id=profile["document_id"],
+            badge_number=profile["badge_number"],
+            assigned_site=demo_site_full,
+            hashed_password=get_password_hash("demo123"),
+            role=profile["role"],
+            is_active=True,
+            is_deleted=False,
+            must_change_password=False,
+            signature_path=profile["signature_path"],
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        changed = False
+        if not user.is_active or user.is_deleted or user.must_change_password or user.role != profile["role"]:
+            user.is_active = True
+            user.is_deleted = False
+            user.must_change_password = False
+            user.role = profile["role"]
+            user.assigned_site = demo_site_full
+            changed = True
+        if profile["signature_path"] and not user.signature_path:
+            user.signature_path = profile["signature_path"]
+            changed = True
+        if profile["badge_number"] and not user.badge_number:
+            user.badge_number = profile["badge_number"]
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(user)
 
     access_token = create_access_token(data={"sub": user.username})
 
@@ -1320,7 +1362,7 @@ def dashboard(
 
     # Subconsultas para cálculo operativo de dispositivos en BD (evita carga a RAM)
     falla_subq = select(Incident.device_id).filter(
-        Incident.status.in_(["Abierto", "En Proceso"]),
+        Incident.status.in_(["Abierto", "En Proceso", "Rechazado"]),
         Incident.device_id.isnot(None)
     )
     maint_subq = select(Maintenance.device_id).filter(
@@ -1397,7 +1439,7 @@ def dashboard(
         func.count(Maintenance.id).label("total"),
         func.count(case((Maintenance.status == "En Ejecución", 1))).label("in_exec"),
         func.count(case((Maintenance.status == "Programado", 1))).label("scheduled"),
-        func.count(case((Maintenance.status == "Completado", 1))).label("completed"),
+        func.count(case((Maintenance.status.in_(["Completado", "Validado / Conforme", "Conforme / Validado"]), 1))).label("completed"),
         func.count(case(((Maintenance.status.in_(["Programado", "En Ejecución"])) & (Maintenance.scheduled_date < now), 1))).label("overdue"),
         func.count(case(((Maintenance.status == "Programado") & (Maintenance.scheduled_date >= now) & (Maintenance.scheduled_date <= now + datetime.timedelta(days=2)), 1))).label("due_soon"),
     ).filter(site_maint_cond).first()
@@ -1647,7 +1689,7 @@ def is_default_main_admin(user: Optional[User]) -> bool:
     """
     if not user:
         return False
-    return user.role == "Admin" and (user.id == 1 or user.username == "admin" or user.username == settings.ADMIN_USERNAME)
+    return user.role == "Admin" and (user.id == 1 or user.username == "admin" or user.username == settings.ADMIN_USERNAME or user.username == "admin_demo")
 
 
 @app.get("/devices", response_class=HTMLResponse)
@@ -1966,11 +2008,14 @@ def users_view(
         return RedirectResponse(url="/dashboard?error=Acceso+restringido:+La+opción+de+gestión+de+usuarios+es+exclusiva+del+Administrador.", status_code=status.HTTP_303_SEE_OTHER)
 
     current_site = get_current_site(request)
+    if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+        return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
     site_name = current_site["name"]
     users_list = db.query(User).filter(
-        (User.assigned_site.ilike(f"%{site_name}%")) | 
-        (User.assigned_site == "Todas las Sedes") | 
-        (User.assigned_site == None)
+        User.is_deleted == False,
+        ((User.assigned_site.ilike(f"%{site_name}%")) | 
+         (User.assigned_site == "Todas las Sedes") | 
+         (User.assigned_site == None))
     ).order_by(User.created_at.desc()).all()
 
     new_credentials = None
@@ -2024,6 +2069,9 @@ def create_user_web(
     if current_user.role != "Admin":
         return RedirectResponse(url="/users?error=Solo+el+Administrador+Principal+puede+crear+cuentas+de+usuario", status_code=status.HTTP_303_SEE_OTHER)
 
+    if get_current_site(request).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+        return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
+
     # 1. Regla estricta: Solo un (1) Administrador Principal en todo el sistema
     if role == "Admin":
         return RedirectResponse(url="/users?error=No+es+posible+crear+administradores+adicionales.+Existe+únicamente+un+(1)+Administrador+Principal+en+todo+el+sistema.", status_code=status.HTTP_303_SEE_OTHER)
@@ -2044,20 +2092,6 @@ def create_user_web(
     clean_email = email.strip().lower()
     clean_badge = (badge_number or "").strip()
 
-    # Validación exclusiva para Validador: Número de placa policial obligatorio y numérico (Policía Nacional)
-    if role == "Validador":
-        if not clean_badge:
-            return RedirectResponse(url="/users?error=El+número+de+placa+policial+es+obligatorio+para+el+rol+Validador.", status_code=status.HTTP_303_SEE_OTHER)
-        if not clean_badge.isdigit():
-            return RedirectResponse(url="/users?error=El+número+de+placa+policial+debe+contener+únicamente+dígitos+numéricos.", status_code=status.HTTP_303_SEE_OTHER)
-        if db.query(User).filter(User.badge_number == clean_badge).first():
-            return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario.", status_code=status.HTTP_303_SEE_OTHER)
-    else:
-        clean_badge = clean_badge if clean_badge else None
-        if clean_badge:
-            if db.query(User).filter(User.badge_number == clean_badge).first():
-                return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario.", status_code=status.HTTP_303_SEE_OTHER)
-
     # 1. Validar que en el nombre se reciban solo letras y espacios (el nombre sí puede ser igual a otros)
     if not re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$", clean_fullname):
         return RedirectResponse(url="/users?error=El+nombre+completo+solo+puede+contener+letras+y+espacios.", status_code=status.HTTP_303_SEE_OTHER)
@@ -2066,25 +2100,56 @@ def create_user_web(
     if not clean_doc.isdigit():
         return RedirectResponse(url="/users?error=El+documento+de+identidad+debe+contener+solo+números+(sin+puntos+ni+espacios).", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 2.1 Validar que el documento de identidad (cédula) NO exista previamente en ningún rol
-    if db.query(User).filter(User.document_id == clean_doc).first():
-        return RedirectResponse(url="/users?error=El+número+de+documento+de+identidad+(cédula)+ya+se+encuentra+registrado+para+otro+usuario.", status_code=status.HTTP_303_SEE_OTHER)
+    # 3. Validación exclusiva para Validador: Número de placa policial obligatorio y numérico (Policía Nacional)
+    if role == "Validador":
+        if not clean_badge:
+            return RedirectResponse(url="/users?error=El+número+de+placa+policial+es+obligatorio+para+el+rol+Validador.", status_code=status.HTTP_303_SEE_OTHER)
+        if not clean_badge.isdigit():
+            return RedirectResponse(url="/users?error=El+número+de+placa+policial+debe+contener+únicamente+dígitos+numéricos.", status_code=status.HTTP_303_SEE_OTHER)
+    else:
+        clean_badge = clean_badge if clean_badge else None
 
-    # 3. Validar existencia real del dominio de correo mediante registros DNS MX
+    # 4. Validar existencia real del dominio de correo mediante registros DNS MX
     is_valid_mx, mx_err = check_email_mx_records(clean_email)
     if not is_valid_mx:
         encoded_err = urllib.parse.quote(mx_err)
         return RedirectResponse(url=f"/users?error={encoded_err}", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 4. Validar correo no duplicado en el sistema
-    if db.query(User).filter((User.email == clean_email) | (User.username == clean_email)).first():
-        return RedirectResponse(url="/users?error=El+correo+electrónico+ya+se+encuentra+registrado+para+otro+usuario.", status_code=status.HTTP_303_SEE_OTHER)
+    # 5. Comprobar registros coincidentes activos en base de datos (excluyendo cuentas eliminadas para no colisionar)
+    existing_by_email = db.query(User).filter(User.is_deleted == False, (User.email == clean_email) | (User.username == clean_email)).first()
+    existing_by_doc = db.query(User).filter(User.is_deleted == False, User.document_id == clean_doc).first()
+    existing_by_badge = db.query(User).filter(User.is_deleted == False, User.badge_number == clean_badge).first() if clean_badge else None
 
-    # 5. Sede territorial: la misma con la que ingresó el Administrador
+    # Regla: La cuenta del Administrador Principal no puede ser sobrescrita ni duplicada
+    for ex in [existing_by_email, existing_by_doc, existing_by_badge]:
+        if ex and (ex.id == 1 or ex.role == "Admin" or ex.username == 'admin'):
+            return RedirectResponse(url="/users?error=No+es+posible+utilizar+los+datos+asociados+al+Administrador+Principal.", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Regla: Si un usuario fue borrado previamente (inactivo) o se están reutilizando sus datos para recrearlo,
+    # el sistema no debe tomarlo como datos existentes conflictivos y debe permitir al Administrador crearlo/recrearlo.
+    target_user_to_reuse = None
+
+    if existing_by_email:
+        target_user_to_reuse = existing_by_email
+        # Si la cédula ingresada ya existe en OTRA cuenta activa distinta:
+        if existing_by_doc and existing_by_doc.id != target_user_to_reuse.id and existing_by_doc.is_active:
+            return RedirectResponse(url="/users?error=El+número+de+documento+de+identidad+(cédula)+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
+        # Si la placa ingresada ya existe en OTRA cuenta activa distinta:
+        if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
+            return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
+    elif existing_by_doc:
+        target_user_to_reuse = existing_by_doc
+        # Si la placa ingresada ya existe en OTRA cuenta activa distinta:
+        if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
+            return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
+    elif existing_by_badge:
+        target_user_to_reuse = existing_by_badge
+
+    # 6. Sede territorial: la misma con la que ingresó el Administrador
     current_site = get_current_site(request)
     assigned_sede = current_site["full_name"]
 
-    # 6. Generar contraseña temporal segura garantizando que sea única en el sistema (vigencia 24h)
+    # 7. Generar contraseña temporal segura garantizando que sea única en el sistema (vigencia 24h)
     assigned_pass = generate_temp_password()
     while is_password_already_in_use(assigned_pass, db):
         assigned_pass = generate_temp_password()
@@ -2092,22 +2157,40 @@ def create_user_web(
     must_change = True
 
     hashed_pw = get_password_hash(assigned_pass)
-    new_user = User(
-        username=clean_email,
-        email=clean_email,
-        full_name=clean_fullname,
-        document_id=clean_doc,
-        badge_number=clean_badge,
-        assigned_site=assigned_sede,
-        hashed_password=hashed_pw,
-        role=role,
-        is_active=True,
-        must_change_password=must_change,
-        temp_expires_at=temp_expires
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+
+    if target_user_to_reuse:
+        # Reutilizar y actualizar limpiamente la cuenta existente (permite recreación fluida)
+        target_user_to_reuse.username = clean_email
+        target_user_to_reuse.email = clean_email
+        target_user_to_reuse.full_name = clean_fullname
+        target_user_to_reuse.document_id = clean_doc
+        target_user_to_reuse.badge_number = clean_badge
+        target_user_to_reuse.assigned_site = assigned_sede
+        target_user_to_reuse.hashed_password = hashed_pw
+        target_user_to_reuse.role = role
+        target_user_to_reuse.is_active = True
+        target_user_to_reuse.must_change_password = must_change
+        target_user_to_reuse.temp_expires_at = temp_expires
+        new_user = target_user_to_reuse
+        db.commit()
+        db.refresh(new_user)
+    else:
+        new_user = User(
+            username=clean_email,
+            email=clean_email,
+            full_name=clean_fullname,
+            document_id=clean_doc,
+            badge_number=clean_badge,
+            assigned_site=assigned_sede,
+            hashed_password=hashed_pw,
+            role=role,
+            is_active=True,
+            must_change_password=must_change,
+            temp_expires_at=temp_expires
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
     # Enviar correo institucional con la clave temporal de acceso
     send_temporary_password_email(
@@ -2166,6 +2249,9 @@ def update_admin_profile(
 
     if current_user.role != "Admin":
         return RedirectResponse(url="/users?error=Solo+un+administrador+puede+modificar+estos+datos", status_code=status.HTTP_303_SEE_OTHER)
+
+    if get_current_site(request).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+        return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
 
     clean_fullname = full_name.strip()
     clean_doc = document_id.strip()
@@ -2334,14 +2420,31 @@ def delete_user_web(
         return RedirectResponse(url="/users?error=La+cuenta+del+Administrador+Inicial+del+sistema+no+puede+ser+eliminada", status_code=status.HTTP_303_SEE_OTHER)
 
     target_username = target_user.username
+    target_name = target_user.full_name or target_username
 
-    # Reasignar referencias en Incident, Maintenance y Event para preservar integridad
-    db.query(Incident).filter(Incident.created_by_id == user_id).update({"created_by_id": current_user.id})
-    db.query(Incident).filter(Incident.assigned_to_id == user_id).update({"assigned_to_id": None})
-    db.query(Maintenance).filter(Maintenance.created_by_id == user_id).update({"created_by_id": current_user.id})
-    db.query(Event).filter(Event.user_id == user_id).update({"user_id": current_user.id})
+    # PRESERVAR INTEGRIDAD HISTÓRICA COMPLETA CONFORME A REQUERIMIENTO:
+    # 1. NO desvincular las referencias de auditoría en Incident, Maintenance ni Event
+    #    (Se conservan intactos validator_id, closed_by_id, completed_by_id, created_by_id)
+    # 2. NO borrar el archivo físico de firma digital (signature_path) para que las actas oficiales,
+    #    certificados PDF, trazabilidad y el informe ejecutivo continúen mostrando la firma y datos auténticos.
 
-    db.delete(target_user)
+    # 3. Marcar la cuenta como eliminada e inactiva
+    now = get_local_now()
+    target_user.is_deleted = True
+    target_user.is_active = False
+    target_user.deleted_at = now
+
+    # 4. Modificar el email, username y placa con sufijo de eliminación para liberar
+    #    las restricciones de unicidad (unique constraints) en la base de datos, permitiendo
+    #    que en el futuro el Administrador pueda registrar a un nuevo usuario con ese mismo correo/documento/placa.
+    ts = int(now.timestamp())
+    if not target_user.username.startswith("deleted_"):
+        target_user.username = f"deleted_{ts}_{target_user.username}"
+    if not target_user.email.startswith("deleted_"):
+        target_user.email = f"deleted_{ts}_{target_user.email}"
+    if target_user.badge_number and not target_user.badge_number.startswith("del_"):
+        target_user.badge_number = f"del_{ts}_{target_user.badge_number}"
+
     db.commit()
 
     create_audit_log(
@@ -2349,11 +2452,11 @@ def delete_user_web(
         user_id=current_user.id,
         username=current_user.username,
         action="USER_DELETED_WEB",
-        details={"deleted_user_id": user_id, "deleted_username": target_username}
+        details={"deleted_user_id": user_id, "deleted_username": target_username, "preserved_historical_data": True}
     )
     db.commit()
 
-    return RedirectResponse(url=f"/users?msg=La+cuenta+de+{target_username}+ha+sido+eliminada+exitosamente", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/users?msg=La+cuenta+de+{urllib.parse.quote(target_name)}+ha+sido+eliminada+exitosamente.+Sus+firmas+y+registros+históricos+han+sido+preservados+en+actas+y+trazabilidad.", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ----------------- 7.5 Gestión y Administración de Licencias del Sistema por Sitio -----------------
@@ -2386,6 +2489,8 @@ def license_view(
 
     # La sede es única y exclusivamente la sede territorial actualmente activa en la sesión
     current_site = get_current_site(request, db=db)
+    if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+        return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
     target_site_id = current_site["id"]
 
     # Registrar primer acceso del sitio si aplica
@@ -2423,6 +2528,8 @@ def license_activate_web(
 
     # Bloquear activación a la sede territorial activa en sesión
     current_site = get_current_site(request, db=db)
+    if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+        return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
     clean_site_id = current_site["id"]
 
     from app.services.site_license_service import activate_site_year_license
@@ -2452,7 +2559,10 @@ def license_activate_web(
 def incidents_view(
     request: Request,
     page: int = Query(1, ge=1, description="Número de página actual"),
-    page_size: int = Query(15, ge=1, le=100, description="Cantidad de incidentes por página"),
+    page_size: int = Query(1000, ge=1, le=5000, description="Cantidad de incidentes por página"),
+    created_ticket_id: Optional[int] = Query(None, description="ID del ticket recién creado para confirmación"),
+    msg: Optional[str] = Query(None),
+    error: Optional[str] = Query(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
@@ -2474,21 +2584,57 @@ def incidents_view(
         get_site_filter_conditions(Incident, current_site)
     )
     total_records = incidents_base.count()
-    total_pages = (total_records + page_size - 1) // page_size if total_records > 0 else 1
+    effective_page_size = max(page_size, total_records) if total_records > 0 else page_size
+    total_pages = (total_records + effective_page_size - 1) // effective_page_size if total_records > 0 else 1
     current_page = min(page, total_pages) if total_records > 0 else 1
-    offset = (current_page - 1) * page_size
+    offset = (current_page - 1) * effective_page_size
 
     resolved_statuses = ["Cerrado", "Resuelto", "Validado / Conforme", "Conforme / Validado"]
-    active_statuses = ["Abierto", "En Proceso", "Pendiente de Validación"]
+    active_statuses = ["Abierto", "En Proceso", "Pendiente de Validación", "Rechazado"]
+
+    all_site_incidents = incidents_base.all()
+
+    # Métrica exclusiva: SLA sobre tickets SOLAMENTE RESUELTOS
+    resolved_incidents = [
+        inc for inc in all_site_incidents 
+        if inc.status in resolved_statuses or getattr(inc, 'is_resolved', False)
+    ]
+    resolved_total = len(resolved_incidents)
+    resolved_sla_within = sum(1 for inc in resolved_incidents if not inc.is_overtime)
+    resolved_sla_overdue = sum(1 for inc in resolved_incidents if inc.is_overtime)
+    resolved_sla_rate = round((resolved_sla_within / resolved_total) * 100, 1) if resolved_total > 0 else 0.0
+
+    # Métrica global: SLA sobre todos los tickets registrados
+    sla_within = sum(1 for inc in all_site_incidents if not inc.is_overtime)
+    sla_overdue = sum(1 for inc in all_site_incidents if inc.is_overtime)
+    sla_rate = round((sla_within / total_records) * 100, 1) if total_records > 0 else 0.0
 
     site_kpis = {
-        "critical_open": incidents_base.filter(Incident.fault_type == "Falla Crítica", Incident.status.in_(active_statuses)).count(),
-        "critical_total": incidents_base.filter(Incident.fault_type == "Falla Crítica").count(),
-        "inactive_open": incidents_base.filter(Incident.fault_type == "Inactivo", Incident.status.in_(active_statuses)).count(),
-        "inactive_total": incidents_base.filter(Incident.fault_type == "Inactivo").count(),
+        # 1. Panorama Operativo y Ciclo de Vida
+        "total_records": total_records,
+        "active_total": incidents_base.filter(Incident.status.in_(active_statuses)).count(),
+        "open_total": incidents_base.filter(Incident.status == "Abierto").count(),
         "in_process": incidents_base.filter(Incident.status == "En Proceso").count(),
-        "closed_total": incidents_base.filter((Incident.status.in_(resolved_statuses)) | (Incident.closed_at.isnot(None))).count(),
-        "total_records": total_records
+        "pending_validation": incidents_base.filter(Incident.status.in_(["Pendiente de Validación", "Pendiente de Validación Policial"])).count(),
+        "closed_total": incidents_base.filter(Incident.status.in_(resolved_statuses)).count(),
+        # 2. Nueva Métrica: SLA de Tickets Solamente Resueltos
+        "resolved_total": resolved_total,
+        "resolved_sla_within": resolved_sla_within,
+        "resolved_sla_overdue": resolved_sla_overdue,
+        "resolved_sla_rate": resolved_sla_rate,
+        # 3. Cumplimiento de Niveles de Servicio (SLA Global)
+        "sla_within": sla_within,
+        "sla_overdue": sla_overdue,
+        "sla_rate": sla_rate,
+        # 4. Panorama Completo por Tipo de Falla / Severidad
+        "critical_total": incidents_base.filter(Incident.fault_type == "Falla Crítica").count(),
+        "critical_open": incidents_base.filter(Incident.fault_type == "Falla Crítica", Incident.status.in_(active_statuses)).count(),
+        "change_total": incidents_base.filter(Incident.fault_type == "Cambio").count(),
+        "change_open": incidents_base.filter(Incident.fault_type == "Cambio", Incident.status.in_(active_statuses)).count(),
+        "minor_total": incidents_base.filter(Incident.fault_type == "Falla Menor").count(),
+        "minor_open": incidents_base.filter(Incident.fault_type == "Falla Menor", Incident.status.in_(active_statuses)).count(),
+        "inactive_total": incidents_base.filter(Incident.fault_type == "Inactivo").count(),
+        "inactive_open": incidents_base.filter(Incident.fault_type == "Inactivo", Incident.status.in_(active_statuses)).count(),
     }
 
     # Paginación y ordenamiento optimizado:
@@ -2506,7 +2652,7 @@ def incidents_view(
             else_=4
         ),
         Incident.created_at.desc()
-    ).offset(offset).limit(page_size).all()
+    ).offset(offset).limit(effective_page_size).all()
 
     devices_list = db.query(Device).filter(
         get_site_filter_conditions(Device, current_site)
@@ -2546,6 +2692,17 @@ def incidents_view(
         for d in devices_list
     ]
     devices_json = json.dumps(devices_data, ensure_ascii=False)
+    pending_validation_count = (
+        incidents_base.filter(Incident.status == "Pendiente de Validación").count()
+        + db.query(Maintenance).filter(
+            get_site_filter_conditions(Maintenance, current_site),
+            Maintenance.status == "Pendiente de Validación"
+        ).count()
+    )
+
+    created_incident = None
+    if created_ticket_id:
+        created_incident = db.query(Incident).filter(Incident.id == created_ticket_id).first()
 
     return templates.TemplateResponse(
         request=request,
@@ -2566,7 +2723,11 @@ def incidents_view(
             "total_records": total_records,
             "total_pages": total_pages,
             "has_prev": current_page > 1,
-            "has_next": current_page < total_pages
+            "has_next": current_page < total_pages,
+            "pending_validation_count": pending_validation_count,
+            "created_incident": created_incident,
+            "msg": msg,
+            "error": error
         }
     )
 
@@ -2683,7 +2844,7 @@ async def create_incident_web(
     )
     db.commit()
 
-    return RedirectResponse(url="/incidents", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/incidents?created_ticket_id={new_incident.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/incidents/{incident_id}/status")
@@ -2696,7 +2857,10 @@ def update_incident_status_web(
 ):
     """Actualiza el estado de un incidente (atención o avance de ciclo)."""
     referer = request.headers.get("referer", "")
-    target_base = "/validation" if "/validation" in referer else "/incidents"
+    if "/validation" in referer:
+        err = urllib.parse.quote("En Validación Policial el Administrador y la Empresa de Mantenimiento solo tienen acceso de observación. Gestione 'Atender' en el módulo Incidentes.")
+        return RedirectResponse(url=f"/validation?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+    target_base = "/incidents"
 
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
@@ -2728,10 +2892,9 @@ def update_incident_status_web(
         incident.status = new_status
         incident.updated_at = get_local_now()
 
-        if new_status == "En Proceso" and not incident.attended_at:
+        if new_status == "En Proceso":
             incident.attended_at = get_local_now()
-            if not incident.assigned_to_id:
-                incident.assigned_to_id = current_user.id
+            incident.assigned_to_id = current_user.id
 
         if new_status in ["Cerrado", "Validado / Conforme"]:
             incident.closed_at = get_local_now()
@@ -2753,7 +2916,7 @@ def update_incident_status_web(
         )
         db.commit()
 
-    return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"{target_base}?msg=Ticket+{incident.ticket_code}+en+proceso+de+atención+técnica.", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/incidents/{incident_id}/close")
@@ -2768,7 +2931,10 @@ async def close_incident_web(
 ):
     """Cierre técnico de incidente que cambia automáticamente a 'Pendiente de Validación' para revisión policial."""
     referer = request.headers.get("referer", "")
-    target_base = "/validation" if "/validation" in referer else "/incidents"
+    if "/validation" in referer:
+        err = urllib.parse.quote("En Validación Policial el Administrador y la Empresa de Mantenimiento solo tienen acceso de observación. Gestione 'Finalizar y Remitir' en el módulo Incidentes.")
+        return RedirectResponse(url=f"/validation?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+    target_base = "/incidents"
 
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
@@ -2794,7 +2960,14 @@ async def close_incident_web(
     if current_user.role not in allowed_roles:
         return RedirectResponse(url=target_base, status_code=status.HTTP_303_SEE_OTHER)
 
+    if incident.status in ["Abierto", "Rechazado"]:
+        err = urllib.parse.quote(f"Debe iniciar primero la atención del ticket {incident.ticket_code} haciendo clic en 'Atender' antes de finalizar y remitir.")
+        return RedirectResponse(url=f"{target_base}?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
     closing_image_path = await save_uploaded_photo(closing_photo)
+    if not closing_image_path:
+        err = urllib.parse.quote("Debe cargar la fotografía de evidencia que soporta la finalización y remisión a validación.")
+        return RedirectResponse(url=f"{target_base}?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     # Transición automática a Pendiente de Validación
     incident.status = "Pendiente de Validación"
@@ -2803,8 +2976,9 @@ async def close_incident_web(
     incident.closed_by_id = current_user.id
     incident.root_cause = root_cause.strip()
     incident.solution = solution.strip()
-    if closing_image_path:
-        incident.closing_image_path = closing_image_path
+    incident.closing_image_path = closing_image_path
+    incident.validator_id = None
+    incident.validated_at = None
     incident.updated_at = get_local_now()
 
     db.add(Event(
@@ -2839,6 +3013,7 @@ async def close_incident_web(
 @app.post("/incidents/{incident_id}/validate")
 async def validate_incident_web(
     incident_id: int,
+    request: Request,
     action: str = Form(...),  # "approve" or "reject"
     validation_notes: Optional[str] = Form(None),
     rejection_photo: Optional[UploadFile] = File(None),
@@ -2857,7 +3032,12 @@ async def validate_incident_web(
     if current_user.must_change_password:
         return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
 
-    target_redirect = redirect_to or "/incidents"
+    referer = request.headers.get("referer", "")
+    if "/incidents" in referer and redirect_to != "/validation":
+        err = urllib.parse.quote("El validador solo puede validar un ticket desde la opción 'Validación Policial'.")
+        return RedirectResponse(url=f"/incidents?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    target_redirect = redirect_to or "/validation"
 
     if current_user.role != "Validador":
         return RedirectResponse(
@@ -2924,13 +3104,14 @@ async def validate_incident_web(
         if rejection_photo_path:
             incident.rejection_photo = rejection_photo_path
 
-        # Reinicio del ticket con tiempo cero y devolución a la Empresa de Mantenimiento
+        # Reinicio del ticket desde el Paso 2 (se activa nuevamente Atender)
         incident.status = "Rechazado"
         incident.validation_status = "Rechazado"
         incident.validator_id = current_user.id
         incident.validated_at = now
         incident.validation_notes = validation_notes.strip()
         incident.timer_reset_at = now  # TIEMPO CERO
+        incident.attended_at = None   # Reinicia atención para que vuelva a hacer clic en Atender (Paso 2)
         incident.closed_at = None     # Reabierto para que el equipo de mantenimiento regrese a corregir
 
         badge_txt = f" (Placa #{current_user.badge_number})" if current_user.badge_number else ""
@@ -2993,12 +3174,20 @@ def download_incident_certificate_pdf(
             detail="La orden técnica aún no ha sido aprobada ni validada formalmente por la Estación de Policía."
         )
 
-    active_site_id = request.cookies.get("active_site", "san-agustin")
-    current_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
+    # Resolver la sede técnica propia del incidente
+    matched_site = None
+    if incident.sede:
+        incident_sede_norm = incident.sede.strip().lower()
+        matched_site = next((s for s in AVAILABLE_SITES if s["name"].lower() in incident_sede_norm or s["full_name"].lower() in incident_sede_norm or incident_sede_norm in s["full_name"].lower()), None)
+
+    if not matched_site:
+        active_site_id = request.cookies.get("active_site", "san-agustin")
+        matched_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
+    current_site = matched_site
 
     validator_user = incident.validator
     if not validator_user:
-        validator_user = db.query(User).filter(User.role == "Validador").first() or current_user
+        validator_user = db.query(User).filter(User.role == "Validador", User.is_active == True, User.is_deleted == False).first() or current_user
 
     pdf_bytes = generate_validation_conformity_pdf(
         item=incident,
@@ -3015,19 +3204,20 @@ def download_incident_certificate_pdf(
     )
 
 
-# ----------------- 9. Rutas Operativas: Mantenimientos Preventivos y Proactivos -----------------
+# ----------------- 9. Rutas Operativas: Mantenimientos Preventivos -----------------
 
 @app.get("/maintenance", response_class=HTMLResponse)
 @app.get("/maintenances", response_class=HTMLResponse)
 def maintenance_view(
     request: Request,
     status_filter: Optional[str] = Query(None, alias="status"),
+    created_maint_id: Optional[int] = Query(None, description="ID del mantenimiento recién creado para confirmación"),
     msg: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Vista web operativa de mantenimientos preventivos y proactivos filtrada por el municipio activo."""
+    """Vista web operativa de mantenimientos preventivos filtrada por el municipio activo."""
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -3087,6 +3277,24 @@ def maintenance_view(
     devices_json = json.dumps(devices_data, ensure_ascii=False)
 
     pending_validation_count = sum(1 for m in maintenances_list if m.status == "Pendiente de Validación")
+    total_maint = len(maintenances_list)
+
+    maint_kpis = {
+        "total_records": total_maint,
+        "scheduled": sum(1 for m in maintenances_list if m.status == "Programado"),
+        "in_progress": sum(1 for m in maintenances_list if m.status in ["En Ejecución", "En Ejecucion"]),
+        "pending_validation": pending_validation_count,
+        "validated_ok": sum(1 for m in maintenances_list if m.status in ["Validado / Conforme", "Conforme / Validado", "Completado", "Cerrado"]),
+        "rejected": sum(1 for m in maintenances_list if m.status == "Rechazado"),
+        "points_count": len(physical_sites),
+        "devices_count": len(devices_list),
+        "mensual_count": sum(1 for m in maintenances_list if (m.maintenance_type or "") == "Preventivo Mensual"),
+        "rutinaria_count": sum(1 for m in maintenances_list if (m.maintenance_type or "") == "Inspección Rutinaria"),
+    }
+
+    created_maintenance = None
+    if created_maint_id:
+        created_maintenance = db.query(Maintenance).filter(Maintenance.id == created_maint_id).first()
 
     return templates.TemplateResponse(
         request=request,
@@ -3097,12 +3305,15 @@ def maintenance_view(
             "available_sites": AVAILABLE_SITES,
             "active_page": "maintenance",
             "maintenances": maintenances_list,
+            "maint_kpis": maint_kpis,
             "active_incidents": active_incidents,
             "devices": devices_list,
             "devices_json": devices_json,
             "physical_sites": physical_sites,
             "initial_status": status_filter or "all",
             "pending_validation_count": pending_validation_count,
+            "min_scheduled_date": get_local_now().strftime("%Y-%m-%dT00:00"),
+            "created_maintenance": created_maintenance,
             "msg": msg,
             "error": error
         }
@@ -3127,7 +3338,8 @@ async def create_maintenance_web(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    """Procesa la programación de un nuevo mantenimiento (preventivo o proactivo) con serial y título autogenerado."""
+    """Procesa la programación de un nuevo mantenimiento preventivo con serial y título autogenerado."""
+    type = "Preventivo"
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -3140,7 +3352,6 @@ async def create_maintenance_web(
 
     current_site = get_current_site(request)
     assigned_sede = current_site["full_name"]
-    image_path = await save_uploaded_photo(photo)
 
     try:
         clean_date_str = scheduled_date.strip().replace(" ", "T")
@@ -3149,7 +3360,20 @@ async def create_maintenance_web(
         try:
             parsed_date = datetime.datetime.strptime(scheduled_date.strip(), "%d/%m/%Y %H:%M")
         except Exception:
-            parsed_date = get_local_now()
+            err = urllib.parse.quote("Formato de fecha y hora inválido para la programación del mantenimiento.")
+            return RedirectResponse(url=f"/maintenance?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    if parsed_date.tzinfo is not None:
+        parsed_date = parsed_date.replace(tzinfo=None)
+
+    current_today = get_local_now().date()
+    if parsed_date.date() < current_today:
+        err = urllib.parse.quote(
+            "No se permite programar una inspección rutinaria o un mantenimiento preventivo con fecha anterior a la fecha actual."
+        )
+        return RedirectResponse(url=f"/maintenance?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    image_path = await save_uploaded_photo(photo)
 
     parsed_incident_id = int(incident_id) if incident_id and incident_id.strip() else None
     parsed_device_id = int(device_id) if device_id and device_id.strip() else None
@@ -3218,17 +3442,22 @@ async def create_maintenance_web(
     )
     db.commit()
 
-    return RedirectResponse(url="/maintenance", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/maintenance?created_maint_id={new_maint.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/maintenance/{maintenance_id}/status")
 def update_maintenance_status_web(
     maintenance_id: int,
+    request: Request,
     new_status: str = Form(..., alias="status"),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """Actualiza el estado de un mantenimiento (p.ej. inicio de ejecución técnica en campo)."""
+    referer = request.headers.get("referer", "")
+    if "/validation" in referer:
+        err = urllib.parse.quote("En Validación Policial el Administrador y la Empresa de Mantenimiento solo tienen acceso de observación. Gestione 'Iniciar Labores' en el módulo Mantenimientos.")
+        return RedirectResponse(url=f"/validation?error={err}", status_code=status.HTTP_303_SEE_OTHER)
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
@@ -3239,6 +3468,11 @@ def update_maintenance_status_web(
     maint = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
     if not maint:
         return RedirectResponse(url="/maintenance", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Bloqueo: un mantenimiento ya validado no puede cambiar de estado (salvo Admin o Validador)
+    if maint.status in ["Validado / Conforme", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
+        err = urllib.parse.quote(f"La orden de trabajo {maint.code} ya fue validada y su estado no puede modificarse.")
+        return RedirectResponse(url=f"/maintenance?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     old_status = maint.status
     if old_status != new_status:
@@ -3297,7 +3531,7 @@ async def complete_maintenance_web(
         return RedirectResponse(url="/maintenance", status_code=status.HTTP_303_SEE_OTHER)
 
     # 1. Bloqueo estricto de edición para el técnico si está pendiente de validación o validado conforme
-    if maint.status in ["Pendiente de Validación", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
+    if maint.status in ["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
         return RedirectResponse(
             url=f"/maintenance?error=La+orden+de+trabajo+{maint.code}+se+encuentra+en+estado+'{urllib.parse.quote(maint.status)}'+y+la+edición+técnica+está+bloqueada.",
             status_code=status.HTTP_303_SEE_OTHER
@@ -3375,6 +3609,7 @@ async def complete_maintenance_web(
 @app.post("/maintenance/{maintenance_id}/validate")
 async def validate_maintenance_web(
     maintenance_id: int,
+    request: Request,
     action: str = Form(...),  # "approve" or "reject"
     validation_notes: Optional[str] = Form(None),
     rejection_photo: Optional[UploadFile] = File(None),
@@ -3393,7 +3628,12 @@ async def validate_maintenance_web(
     if current_user.must_change_password:
         return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
 
-    target_redirect = redirect_to or "/maintenance"
+    referer = request.headers.get("referer", "")
+    if "/maintenance" in referer and redirect_to != "/validation":
+        err = urllib.parse.quote("El validador solo puede validar un ticket preventivo desde la opción 'Validación Policial'.")
+        return RedirectResponse(url=f"/maintenance?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    target_redirect = redirect_to or "/validation"
 
     if current_user.role != "Validador":
         return RedirectResponse(
@@ -3527,12 +3767,20 @@ def download_maintenance_certificate_pdf(
             detail="Este protocolo preventivo aún no ha sido aprobado ni validado formalmente por la Estación de Policía."
         )
 
-    active_site_id = request.cookies.get("active_site", "san-agustin")
-    current_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
+    # Resolver la sede técnica propia del mantenimiento
+    matched_site = None
+    if maint.sede:
+        maint_sede_norm = maint.sede.strip().lower()
+        matched_site = next((s for s in AVAILABLE_SITES if s["name"].lower() in maint_sede_norm or s["full_name"].lower() in maint_sede_norm or maint_sede_norm in s["full_name"].lower()), None)
+
+    if not matched_site:
+        active_site_id = request.cookies.get("active_site", "san-agustin")
+        matched_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
+    current_site = matched_site
 
     validator_user = maint.validator
     if not validator_user:
-        validator_user = db.query(User).filter(User.role == "Validador").first() or current_user
+        validator_user = db.query(User).filter(User.role == "Validador", User.is_active == True, User.is_deleted == False).first() or current_user
 
     pdf_bytes = generate_validation_conformity_pdf(
         item=maint,
@@ -3571,10 +3819,10 @@ def validation_view(
     if current_user.must_change_password:
         return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
 
-    if current_user.role not in ["Validador", "Admin", "Supervisor"]:
+    if current_user.role not in ["Validador", "Admin", "Supervisor", "Empresa de Mantenimiento", "Operario"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Acceso denegado: El panel de validación policial es exclusivo para Validador, Administrador y Supervisor."
+            detail="Acceso denegado: El panel de validación policial es exclusivo para Validador, Administrador, Supervisor y Empresa de Mantenimiento."
         )
 
     active_site_id = request.cookies.get("active_site", "san-agustin")
@@ -3620,6 +3868,8 @@ def validation_view(
             "current_site": current_site,
             "available_sites": AVAILABLE_SITES,
             "all_sites": AVAILABLE_SITES,
+            "active_page": "validation",
+            "pending_validation_count": pending_count,
             "pending_count": pending_count,
             "validated_count": validated_count,
             "rejected_count": rejected_count,
@@ -3789,7 +4039,59 @@ def export_cctv_pdf_report(
     db.commit()
 
     clean_site_slug = current_site["id"].replace("-", "_")
-    filename = f"informe_cctv_{clean_site_slug}_{period}_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.pdf"
+    filename = f"informe_tecnico_cctv_{clean_site_slug}_{period}_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+
+@app.get("/reports/export/executive-pdf")
+def export_cctv_executive_pdf_report(
+    request: Request,
+    period: str = Query("weekly"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """Genera y descarga el Informe Ejecutivo Oficial en PDF para el rango de fechas seleccionado."""
+    if not current_user:
+        return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
+
+    current_site = get_current_site(request)
+    start_dt, end_dt, period_label = resolve_date_range(period, start_date, end_date)
+
+    pdf_bytes = generate_cctv_executive_pdf_report(
+        db=db,
+        current_site=current_site,
+        start_date=start_dt,
+        end_date=end_dt,
+        requested_by=current_user,
+        period_label=period_label
+    )
+
+    create_audit_log(
+        db,
+        user_id=current_user.id,
+        username=current_user.username,
+        action="EXECUTIVE_PDF_REPORT_GENERATED",
+        details={
+            "site": current_site["full_name"],
+            "period": period,
+            "period_label": period_label,
+            "range": f"{start_dt.strftime('%Y-%m-%d')} - {end_dt.strftime('%Y-%m-%d')}"
+        }
+    )
+    db.commit()
+
+    clean_site_slug = current_site["id"].replace("-", "_")
+    filename = f"informe_ejecutivo_cctv_{clean_site_slug}_{period}_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.pdf"
 
     return Response(
         content=pdf_bytes,

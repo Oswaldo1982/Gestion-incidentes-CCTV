@@ -12,11 +12,20 @@ venv/
 env/
 ENV/
 
-# Databases
+# Databases and local database backups
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
 *.bak
+*.bak*
+*.backup*
+sqlite.db*
+
+# Local uploads from test sessions (sample assets and signatures directory preserved)
+static/uploads/*.png
+!static/uploads/signatures/
+static/uploads/signatures/sig_user_*
 
 # Environment variables & secrets
 .env

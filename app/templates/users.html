@@ -392,6 +392,11 @@
                                     <span>#{{ u.badge_number }}</span>
                                 </div>
                                 {% endif %}
+                                {% if u.is_executive_signatory %}
+                                <div class="mt-1 flex items-center gap-1 font-sans font-bold text-[10px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 w-fit" title="Habilitado como firmante oficial en el Informe Ejecutivo">
+                                    <span>⭐ Firmante Informe Ejecutivo</span>
+                                </div>
+                                {% endif %}
                             </div>
                             {% elif u.role == 'Supervisor' %}
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
@@ -449,7 +454,7 @@
                                 </form>
 
                                 <form action="/users/{{ u.id }}/delete" method="POST" class="inline-block"
-                                      onsubmit="return confirm('¿Estás seguro de eliminar de forma permanente la cuenta de {{ u.email }} ({{ u.full_name or '' }})?');">
+                                      onsubmit="return confirm('¿Estás seguro de eliminar de forma permanente la cuenta de {{ u.email }}?');">
                                     <button type="submit"
                                             class="px-2.5 py-1 rounded-lg text-xs font-medium border border-rose-200 text-rose-600 hover:bg-rose-50 transition"
                                             title="Eliminar usuario">
@@ -735,7 +740,7 @@
                                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                pattern="[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+"
                                title="Solo se permiten letras y espacios"
-                               value="{{ current_user.full_name or '' }}"
+                               value="{{ '' if not current_user.full_name or current_user.full_name in ['Administrador Principal', 'Administrador del Sistema'] else current_user.full_name }}"
                                placeholder="Ej. Oswaldo Cerón Muñoz"
                                oninput="this.value = this.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')"
                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none font-medium">

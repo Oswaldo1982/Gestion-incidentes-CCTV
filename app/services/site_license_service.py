@@ -55,8 +55,11 @@ SECURE_VAULT_DIR = os.path.join(os.getcwd(), "secure_vault")
 VAULT_PDF_DIR = os.path.join(SECURE_VAULT_DIR, "licencias_pdf")
 VAULT_KEYS_FILE = os.path.join(SECURE_VAULT_DIR, "developer_license_vault.json")
 
-# Directorio de artefactos de Antigravity (Compartido exclusivamente al desarrollador)
-ANTIGRAVITY_ARTIFACTS_DIR = r"C:\Users\oswal\.gemini\antigravity-ide\brain\f71fc4a1-a846-403e-923c-cc24667e7908\licencias_pdf"
+# Directorio de artefactos de Antigravity (Opcional, compartido exclusivamente al desarrollador si está configurado)
+ANTIGRAVITY_ARTIFACTS_DIR = os.getenv(
+    "ANTIGRAVITY_ARTIFACTS_DIR",
+    r"C:\Users\oswal\.gemini\antigravity-ide\brain\f71fc4a1-a846-403e-923c-cc24667e7908\licencias_pdf"
+)
 
 
 def normalize_password(raw_pwd: str) -> str:
@@ -320,7 +323,10 @@ def load_or_create_developer_vault() -> Dict[str, Any]:
     """
     os.makedirs(SECURE_VAULT_DIR, exist_ok=True)
     os.makedirs(VAULT_PDF_DIR, exist_ok=True)
-    os.makedirs(ANTIGRAVITY_ARTIFACTS_DIR, exist_ok=True)
+    try:
+        os.makedirs(ANTIGRAVITY_ARTIFACTS_DIR, exist_ok=True)
+    except Exception:
+        pass
 
     if os.path.exists(VAULT_KEYS_FILE):
         try:

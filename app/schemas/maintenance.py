@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 class MaintenanceBase(BaseModel):
-    type: Literal["Preventivo", "Proactivo"] = "Preventivo"
+    type: Literal["Preventivo"] = "Preventivo"
     title: Optional[str] = Field(None, max_length=150)
     description: str = Field(..., min_length=5)
     scheduled_date: datetime
@@ -27,7 +27,7 @@ class MaintenanceUpdate(BaseModel):
     description: Optional[str] = None
     scheduled_date: Optional[datetime] = None
     completed_date: Optional[datetime] = None
-    status: Optional[Literal["Programado", "En Ejecución", "Pendiente de Validación", "Conforme / Validado", "Rechazado", "Completado", "Cancelado"]] = None
+    status: Optional[Literal["Programado", "En Ejecución", "Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Completado", "Cancelado"]] = None
     sede: Optional[str] = None
     location_detail: Optional[str] = None
     device_id: Optional[int] = None

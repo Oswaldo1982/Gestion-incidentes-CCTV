@@ -77,6 +77,8 @@ def get_canonical_site_filter(model_cls, current_site: Dict[str, Any]):
         keywords.update(["El Retorno", "El Retorno (Guaviare)", "Retorno"])
     elif "calamar" in site_id or "calamar" in site_name.lower():
         keywords.update(["Calamar", "Calamar (Guaviare)"])
+    elif "prueba" in site_id or "demo" in site_id or "prueba" in site_name.lower():
+        keywords.update(["Sitio de Prueba", "Sitio de Prueba (Entorno Demo)", "Entorno Demo", "Demo", "sitio-prueba"])
 
     conds = []
     for kw in keywords:
@@ -143,19 +145,16 @@ def find_matching_device_in_site(
 
 def ensure_all_sites_synchronized(db: Session) -> Dict[str, Any]:
     """
-    Garantiza que la lógica, inventario de equipos y contenidos operativos (incidentes y mantenimientos)
-    estén simétricamente reflejados y sincronizados en las 4 sedes territoriales.
-    Si una sede carece de registros homólogos a los de la sede de referencia, los genera
-    y asocia a sus propios equipos locales.
+    Sincronización multi-sede en pausa temporal:
+    Por directriz operativa, los cambios se realizan exclusivamente para la sede San Agustín.
+    Las demás tres sedes y el entorno demo se mantienen en pausa y vacíos hasta nueva orden.
     """
-    results = {
+    return {
+        "status": "paused",
         "devices_synced": 0,
         "incidents_synced": 0,
         "maintenances_synced": 0
     }
-
-    # Sede de referencia principal: San Agustín
-    ref_site_full = "San Agustín (Huila)"
 
     # 1. Obtener incidentes y mantenimientos de referencia
     ref_incidents = db.query(Incident).filter(

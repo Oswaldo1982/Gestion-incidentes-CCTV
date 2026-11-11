@@ -31,7 +31,7 @@ class Device(Base):
         """
         Calcula el estado operativo en tiempo real derivado de incidentes y mantenimientos:
         - 'Inactivo': Si fue desactivado administrativamente.
-        - 'En Falla': Si tiene al menos un incidente en estado 'Abierto' o 'En Proceso'.
+        - 'En Falla': Si tiene al menos un incidente en estado 'Abierto', 'En Proceso' o 'Rechazado'.
         - 'En Mantenimiento': Si tiene un mantenimiento en estado 'En Ejecución' o 'Programado'.
         - 'Operativo': En cualquier otro caso.
         """
@@ -39,7 +39,7 @@ class Device(Base):
             return "Inactivo"
         if hasattr(self, "incidents") and self.incidents:
             for inc in self.incidents:
-                if inc.status in ["Abierto", "En Proceso"]:
+                if inc.status in ["Abierto", "En Proceso", "Rechazado"]:
                     return "En Falla"
         if hasattr(self, "maintenances") and self.maintenances:
             for maint in self.maintenances:
@@ -52,7 +52,7 @@ class Device(Base):
         """Retorna el incidente activo más reciente si existe."""
         if hasattr(self, "incidents") and self.incidents:
             for inc in self.incidents:
-                if inc.status in ["Abierto", "En Proceso"]:
+                if inc.status in ["Abierto", "En Proceso", "Rechazado"]:
                     return inc
         return None
 

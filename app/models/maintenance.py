@@ -1,3 +1,13 @@
+from typing import Optional
+
+def _clean_str(s: Optional[str]) -> str:
+    if not s:
+        return ""
+    if s.startswith("deleted_") or s.startswith("del_"):
+        parts = s.split("_", 2)
+        return parts[-1] if len(parts) > 2 else s
+    return s
+
 import datetime
 from typing import Optional
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey
@@ -9,7 +19,7 @@ class Maintenance(Base):
     __tablename__ = "maintenances"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)                         # Preventivo, Proactivo
+    type: Mapped[str] = mapped_column(String(20), nullable=False)                         # Preventivo
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     scheduled_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
@@ -30,7 +40,7 @@ class Maintenance(Base):
     checklist_results: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                   # Checklist de tareas preventivas
     technical_findings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                  # Diagnóstico / Hallazgos previos
     actions_taken: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                       # Actividades ejecutadas
-    recommendations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                      # Recomendaciones proactivas
+    recommendations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                      # Recomendaciones preventivas
     execution_date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     completed_by_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     completion_photo: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -118,8 +128,9 @@ class Maintenance(Base):
         now = get_local_now()
 
         if self.status in ["Conforme / Validado", "Validado / Conforme"]:
-            val_name = self.validator.full_name or self.validator.username if self.validator else "Validador"
-            val_badge = f" (Placa #{self.validator.badge_number})" if self.validator and self.validator.badge_number else ""
+            val_name = _clean_str(self.validator.full_name or self.validator.username) if self.validator else "Validador"
+            raw_badge = _clean_str(self.validator.badge_number) if self.validator and self.validator.badge_number else ""
+            val_badge = f" (Placa #{raw_badge})" if raw_badge else ""
             return {
                 "status": "validated",
                 "label": "Validado / Conforme",
@@ -234,6 +245,149 @@ class Maintenance(Base):
                 "dot": "bg-sky-500",
                 "detail": f"Programado en {days} días"
             }
+
+    @property
+    def elapsed_text(self) -> str:
+        now = get_local_now()
+        start_time = self.timer_reset_at or self.execution_date or self.created_at or now
+        ref_time = self.validated_at or self.completed_date or now
+        delta = ref_time - start_time
+        total_seconds = max(0, int(delta.total_seconds()))
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+
+        if self.is_validated:
+            if hours > 24:
+                return f"Validado en {hours // 24}d {hours % 24}h"
+            elif hours > 0:
+                return f"Validado en {hours}h {minutes}m"
+            else:
+                return f"Validado en {minutes}m"
+        elif self.status == "Pendiente de Validación":
+            tech_time = self.completed_date or now
+            tech_delta = tech_time - start_time
+            tech_sec = max(0, int(tech_delta.total_seconds()))
+            t_h = tech_sec // 3600
+            t_m = (tech_sec % 3600) // 60
+            if t_h > 24:
+                return f"Finalizado en {t_h // 24}d {t_h % 24}h (Por Validar)"
+            elif t_h > 0:
+                return f"Finalizado en {t_h}h {t_m}m (Por Validar)"
+            else:
+                return f"Finalizado en {t_m}m (Por Validar)"
+        elif self.completed_date:
+            if hours > 24:
+                return f"Ejecutado en {hours // 24}d {hours % 24}h"
+            elif hours > 0:
+                return f"Ejecutado en {hours}h {minutes}m"
+            else:
+                return f"Ejecutado en {minutes}m"
+        else:
+            if hours > 24:
+                return f"En curso ({hours // 24}d {hours % 24}h)"
+            elif hours > 0:
+                return f"En curso ({hours}h {minutes}m)"
+            else:
+                return f"En curso ({minutes}m)"
+
+    def to_trace_dict(self) -> dict:
+        creator_name = _clean_str(self.creator.full_name or self.creator.username) if self.creator else 'Sistema'
+        closed_by_name = _clean_str(self.completed_by.full_name or self.completed_by.username) if self.completed_by else ('Técnico de Mantenimiento' if self.completed_date else 'Pendiente de Cierre')
+        val_user = self.validator
+        if self.is_validated or self.is_rejected:
+            validator_name = _clean_str(val_user.full_name or val_user.username) if val_user else 'Oficial Validador Policial'
+            validator_badge = _clean_str(val_user.badge_number or '1234') if val_user else '1234'
+            validator_doc = (val_user.document_id or '') if val_user else ''
+            validator_role = (val_user.role or 'Validador') if val_user else 'Validador'
+            validator_sig = (val_user.signature_path or '') if val_user else ''
+        else:
+            validator_name = ''
+            validator_badge = ''
+            validator_doc = ''
+            validator_role = ''
+            validator_sig = ''
+        val_notes = (self.validation_notes or '') if (self.is_validated or self.is_rejected) else ''
+        p_stat = self.proactive_status
+
+        creator_doc = (self.creator.document_id or '') if self.creator else ''
+        creator_sig = (self.creator.signature_path or '') if self.creator else ''
+        completed_by_doc = (self.completed_by.document_id or '') if self.completed_by else ''
+        completed_by_sig = (self.completed_by.signature_path or '') if self.completed_by else ''
+
+        if self.actions_taken:
+            actions_desc = self.actions_taken
+        elif self.status in ['Programado']:
+            actions_desc = 'Pendiente de inicio de labores en campo.'
+        elif self.status in ['En Ejecución', 'En Ejecucion']:
+            actions_desc = 'Labores técnicas actualmente en ejecución en sitio.'
+        else:
+            actions_desc = 'Mantenimiento integral ejecutado.'
+
+        if self.recommendations:
+            recom_desc = self.recommendations
+        elif self.status in ['Programado', 'En Ejecución']:
+            recom_desc = 'Se emitirán recomendaciones preventivas una vez finalizada la intervención técnica.'
+        else:
+            recom_desc = 'Continuar con el ciclo regular de mantenimiento preventivo.'
+
+        return {
+            "id": self.id,
+            "type": "maintenance",
+            "code": self.code,
+            "ticket": self.code,
+            "title": self.title or '',
+            "description": self.description or '',
+            "maintenance_type": self.maintenance_type or 'Preventivo Mensual',
+            "cycle": self.maintenance_type or self.type or 'Preventivo Mensual',
+            "fault_type": self.type or 'Preventivo',
+            "priority": self.priority or 'Media',
+            "location": self.location_detail or (self.sede or 'Estación de Policía'),
+            "device": self.device.name if self.device else 'General / Punto de Monitoreo',
+            "device_ip": self.device.ip_address if self.device else '',
+            "created_by": creator_name,
+            "created_at": self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            "scheduled_date": self.scheduled_date.strftime('%d/%m/%Y %H:%M') if self.scheduled_date else '',
+            "execution_date": self.execution_date.strftime('%d/%m/%Y %H:%M') if self.execution_date else 'N/A',
+            "attended_at": self.execution_date.strftime('%d/%m/%Y %H:%M') if self.execution_date else 'N/A',
+            "completed_by": closed_by_name,
+            "closed_by": closed_by_name,
+            "completed_date": self.completed_date.strftime('%d/%m/%Y %H:%M') if self.completed_date else 'Pendiente',
+            "closed_at": self.completed_date.strftime('%d/%m/%Y %H:%M') if self.completed_date else 'Pendiente',
+            "elapsed": self.elapsed_text,
+            "status": self.status or 'Programado',
+            "validation_status": self.validation_status or '',
+            "is_technically_closed": bool(self.completed_date is not None or self.status in ['Pendiente de Validación', 'Completado', 'Rechazado']),
+            "is_validated": bool(self.is_validated),
+            "is_pending_validation": bool(self.is_pending_validation),
+            "is_rejected": bool(self.is_rejected),
+            "is_resolved": bool(self.is_validated or self.status == 'Completado'),
+            "is_overtime": False,
+            "created_by_doc": creator_doc,
+            "created_by_sig": creator_sig,
+            "completed_by_doc": completed_by_doc,
+            "completed_by_sig": completed_by_sig,
+            "validator": validator_name,
+            "validator_badge": validator_badge,
+            "validator_document": validator_doc,
+            "validator_role": validator_role,
+            "validator_sig": validator_sig,
+            "validator_rank": 'Oficial Validador de Seguridad y Convivencia Policial (CCTV)' if (self.is_validated or self.is_rejected) else '',
+            "validator_unit": 'Policía Nacional de Colombia - Estación de Policía - Centro de Monitoreo CCTV' if (self.is_validated or self.is_rejected) else '',
+            "validated_at": self.validated_at.strftime('%d/%m/%Y %H:%M') if ((self.is_validated or self.is_rejected) and self.validated_at) else '',
+            "validation_notes": val_notes,
+            "proactive_label": p_stat.get("label", ""),
+            "proactive_detail": p_stat.get("detail", ""),
+            "resolution_label": p_stat.get("label", ""),
+            "root_cause": self.technical_findings or ('Pendiente de inspección' if self.status in ['Programado', 'En Ejecución'] else 'Sin observaciones previas'),
+            "solution": actions_desc,
+            "findings": self.technical_findings or ('Pendiente de inspección' if self.status in ['Programado', 'En Ejecución'] else 'Sin observaciones previas'),
+            "actions": actions_desc,
+            "recommendations": recom_desc,
+            "checklist_raw": self.checklist_results or '{}',
+            "initial_img": self.image_path or '',
+            "closing_img": self.completion_photo or '',
+            "rejection_img": self.rejection_photo or ''
+        }
 
     def __repr__(self):
         return f"<Maintenance id={self.id} code={self.protocol_code} title={self.title} status={self.status}>"

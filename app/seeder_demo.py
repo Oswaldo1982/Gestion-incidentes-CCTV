@@ -100,7 +100,7 @@ def seed_demo_data(db: Session):
         must_change_password=False,
         created_at=now - datetime.timedelta(days=70)
     )
-    # Perfil 4: Empresa de Mantenimiento (Preventivo, Correctivo y Proactivo)
+    # Perfil 4: Empresa de Mantenimiento (Preventivo y Correctivo)
     user_mantenimiento = User(
         username="mantenimiento_cctv",
         email="operaciones@contratistacctv.com",

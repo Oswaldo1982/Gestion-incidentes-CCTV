@@ -11,13 +11,17 @@
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div class="space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                    <span class="px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide uppercase bg-blue-100 text-blue-800 border border-blue-200">
+                    <span
+                        class="px-2.5 py-0.5 rounded-lg text-xs font-black tracking-wide uppercase bg-blue-100 text-blue-800 border border-blue-200">
                         Tablero Ejecutivo CCTV
                     </span>
-                    <span class="px-3 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                        Sede: <strong class="text-slate-900">{{ current_site.full_name if current_site else 'General' }}</strong>
+                    <span
+                        class="px-3 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        Sede: <strong class="text-slate-900">{{ current_site.full_name if current_site else 'General'
+                            }}</strong>
                     </span>
-                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                    <span
+                        class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
                         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>Monitoreo Operativo en Tiempo Real</span>
                     </span>
@@ -26,18 +30,36 @@
                     Centro de Estadísticas, Mantenimiento & Auditoría
                 </h1>
                 <p class="text-xs text-slate-500 max-w-3xl leading-relaxed">
-                    Visualización integral de disponibilidad del circuito, efectividad preventiva, atención de incidentes críticos y validación policial en <strong class="text-slate-700">{{ current_site.name if current_site else 'la Sede' }}</strong>.
+                    Visualización integral de disponibilidad del circuito, efectividad preventiva, atención de
+                    incidentes críticos y validación policial en <strong class="text-slate-700">{{ current_site.name if
+                        current_site else 'la Sede' }}</strong>.
                 </p>
             </div>
 
-            <!-- Botón Oficial de Exportación en PDF -->
-            <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <!-- Botones Oficiales de Exportación en PDF -->
+            <div class="flex flex-col gap-2 shrink-0">
+                <!-- Opción 1: Informe Técnico (antes "Descargar informe") -->
                 <a :href="getPdfUrl()"
-                   class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-600/25 transition">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    href="/reports/export/pdf?period={{ period }}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}"
+                    download
+                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-slate-900/20 transition">
+                    <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <span>Descargar Informe Ejecutivo en PDF</span>
+                    <span>Informe técnico</span>
+                </a>
+
+                <!-- Opción 2: Informe Ejecutivo (debajo de la opción Descargar Informe / Informe Técnico) -->
+                <a :href="getExecutivePdfUrl()"
+                    href="/reports/export/executive-pdf?period={{ period }}{% if start_date %}&start_date={{ start_date }}{% endif %}{% if end_date %}&end_date={{ end_date }}{% endif %}"
+                    download
+                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold shadow-md shadow-rose-600/25 transition">
+                    <svg class="w-4 h-4 text-rose-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Informe Ejecutivo</span>
                 </a>
             </div>
         </div>
@@ -46,63 +68,67 @@
         <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-1.5">
                 <span class="text-xs font-bold text-slate-600 mr-1">Rango:</span>
-                
+
                 <button type="button" @click="changePeriod('weekly')"
-                        :class="currentPeriod === 'weekly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    :class="currentPeriod === 'weekly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition">
                     Semanal (7d)
                 </button>
                 <button type="button" @click="changePeriod('monthly')"
-                        :class="currentPeriod === 'monthly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    :class="currentPeriod === 'monthly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition">
                     Mensual (30d)
                 </button>
                 <button type="button" @click="changePeriod('quarterly')"
-                        :class="currentPeriod === 'quarterly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    :class="currentPeriod === 'quarterly' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition">
                     Trimestral (90d)
                 </button>
                 <button type="button" @click="changePeriod('semiannual')"
-                        :class="currentPeriod === 'semiannual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    :class="currentPeriod === 'semiannual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition">
                     Semestral (180d)
                 </button>
                 <button type="button" @click="changePeriod('annual')"
-                        :class="currentPeriod === 'annual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition">
+                    :class="currentPeriod === 'annual' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition">
                     Anual (365d)
                 </button>
                 <button type="button" @click="customMode = !customMode"
-                        :class="currentPeriod === 'custom' || customMode ? 'bg-slate-800 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
-                        class="px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1">
+                    :class="currentPeriod === 'custom' || customMode ? 'bg-slate-800 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-lg text-xs transition flex items-center gap-1">
                     <span>Personalizado</span>
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
                 </button>
             </div>
 
             <!-- Etiqueta de Intervalo Activo -->
-            <div class="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
+            <div
+                class="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
                 <span>Período: </span>
-                <strong class="text-slate-800" x-text="periodLabel"></strong>
+                <strong class="text-slate-800" x-text="periodLabel">{{ period_label }}</strong>
                 <span class="text-slate-400 mx-1">&bull;</span>
-                <span x-text="startDateStr + ' al ' + endDateStr"></span>
+                <span x-text="startDateStr + ' al ' + endDateStr">{{ start_date }} al {{ end_date }}</span>
             </div>
         </div>
 
         <!-- Panel Desplegable para Rango Personalizado -->
-        <div x-show="customMode" x-cloak class="pt-3 border-t border-slate-100 bg-slate-50/80 p-4 rounded-xl flex flex-wrap items-center gap-3">
+        <div x-show="customMode" x-cloak
+            class="pt-3 border-t border-slate-100 bg-slate-50/80 p-4 rounded-xl flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2">
                 <label for="c_start" class="text-xs font-bold text-slate-700">Desde:</label>
                 <input type="date" id="c_start" x-model="customStart"
-                       class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
             <div class="flex items-center gap-2">
                 <label for="c_end" class="text-xs font-bold text-slate-700">Hasta:</label>
                 <input type="date" id="c_end" x-model="customEnd"
-                       class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    class="px-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
             <button type="button" @click="applyCustomRange()"
-                    class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition">
+                class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition">
                 Consultar Rango
             </button>
         </div>
@@ -110,105 +136,153 @@
 
     <!-- 1. FILA SUPERIOR: TARJETAS DE RESUMEN EJECUTIVO (KPI CARDS CON MÉTRICAS DE IMPACTO) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        
+
         <!-- KPI 1: Disponibilidad Global de la Red (%) -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-emerald-300 group">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md group"
+            :class="(kpis.circuit_availability >= 95) ? 'hover:border-emerald-300' : ((kpis.circuit_availability >= 75) ? 'hover:border-amber-300' : 'hover:border-rose-300')">
             <div class="flex items-center justify-between">
                 <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Disponibilidad Global</span>
-                <span class="p-2 rounded-xl bg-emerald-50 text-emerald-600 text-sm group-hover:scale-110 transition-transform">📡</span>
+                <span class="p-2 rounded-xl text-sm group-hover:scale-110 transition-transform"
+                    :class="(kpis.circuit_availability >= 95) ? 'bg-emerald-50 text-emerald-600' : ((kpis.circuit_availability >= 75) ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600')">📡</span>
             </div>
             <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-emerald-600 tracking-tight" x-text="(kpis.circuit_availability || 98.5) + '%'"></span>
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                    <span>Óptimo</span>
+                <span class="text-3xl font-black tracking-tight"
+                    :class="(kpis.circuit_availability >= 95) ? 'text-emerald-600' : ((kpis.circuit_availability >= 75) ? 'text-amber-600' : 'text-rose-600')"
+                    x-text="(kpis.circuit_availability !== undefined ? kpis.circuit_availability : {{ stats.kpis.circuit_availability }}) + '%'">{{
+                    stats.kpis.circuit_availability }}%</span>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black"
+                    :class="(kpis.circuit_availability >= 95) ? 'bg-emerald-100 text-emerald-800' : ((kpis.circuit_availability >= 75) ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')">
+                    <span class="w-1.5 h-1.5 rounded-full"
+                        :class="(kpis.circuit_availability >= 95) ? 'bg-emerald-500 animate-ping' : ((kpis.circuit_availability >= 75) ? 'bg-amber-500' : 'bg-rose-500 animate-pulse')"></span>
+                    <span
+                        x-text="(kpis.circuit_availability >= 95) ? 'Óptimo' : ((kpis.circuit_availability >= 75) ? 'Bajo Control' : 'Crítico / Atención')">
+                        {% if stats.kpis.circuit_availability >= 95 %}Óptimo{% elif stats.kpis.circuit_availability >=
+                        75 %}Bajo Control{% else %}Crítico / Atención{% endif %}
+                    </span>
                 </span>
             </div>
             <!-- Micro-barra de progreso -->
             <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" :style="'width: ' + (kpis.circuit_availability || 98.5) + '%'"></div>
+                <div class="h-full rounded-full transition-all duration-500"
+                    :class="(kpis.circuit_availability >= 95) ? 'bg-emerald-500' : ((kpis.circuit_availability >= 75) ? 'bg-amber-500' : 'bg-rose-500')"
+                    :style="'width: ' + (kpis.circuit_availability !== undefined ? kpis.circuit_availability : {{ stats.kpis.circuit_availability }}) + '%'"
+                    style="width: {{ stats.kpis.circuit_availability }}%"></div>
             </div>
             <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
-                <span class="font-medium" x-text="(kpis.operatives_count || 0) + ' / ' + (kpis.total_monitored_points || 0) + ' cámaras activas'"></span>
+                <span class="font-medium"
+                    x-text="(kpis.operatives_count || 0) + ' / ' + (kpis.total_monitored_points || 0) + ' cámaras activas'">{{
+                    stats.kpis.operatives_count }} / {{ stats.kpis.total_monitored_points }} cámaras activas</span>
                 <span class="font-bold text-emerald-700">Meta > 95%</span>
             </div>
         </div>
 
         <!-- KPI 2: MTTR (Tiempo Medio de Reparación) -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-blue-300 group">
+        <div
+            class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-blue-300 group">
             <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">MTTR (Tiempo Medio Reparación)</span>
-                <span class="p-2 rounded-xl bg-blue-50 text-blue-600 text-sm group-hover:scale-110 transition-transform">⏱️</span>
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">MTTR (Tiempo Medio
+                    Reparación)</span>
+                <span
+                    class="p-2 rounded-xl bg-blue-50 text-blue-600 text-sm group-hover:scale-110 transition-transform">⏱️</span>
             </div>
             <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-slate-900 tracking-tight" x-text="kpis.mttr_formatted || '2.8 hrs'"></span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                    SLA < 4.0h
-                </span>
+                <span class="text-3xl font-black text-slate-900 tracking-tight"
+                    x-text="kpis.mttr_formatted || '{{ stats.kpis.mttr_formatted }}'">{{ stats.kpis.mttr_formatted
+                    }}</span>
+                <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                    SLA < 4.0h </span>
             </div>
             <!-- Barra de referencia MTTR -->
             <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                <div class="bg-blue-600 h-full rounded-full transition-all duration-500" style="width: 65%"></div>
+                <div class="h-full rounded-full transition-all duration-500"
+                    :class="(kpis.mttr_hours <= 0) ? 'bg-slate-300' : ((kpis.mttr_hours <= 4.0) ? 'bg-emerald-500' : ((kpis.mttr_hours <= 8.0) ? 'bg-amber-500' : 'bg-rose-500'))"
+                    :style="'width: ' + ((kpis.mttr_hours <= 0) ? '0%' : ((kpis.mttr_hours <= 4.0) ? '100%' : ((kpis.mttr_hours <= 8.0) ? '65%' : '40%')))"
+                    style="width: {% if stats.kpis.mttr_hours <= 0 %}0%{% elif stats.kpis.mttr_hours <= 4.0 %}100%{% elif stats.kpis.mttr_hours <= 8.0 %}65%{% else %}40%{% endif %}">
+                </div>
             </div>
             <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
                 <span>Resolución técnica media</span>
-                <span class="font-bold text-blue-700">En Cumplimiento</span>
+                <span class="font-bold"
+                    :class="(kpis.mttr_hours <= 0) ? 'text-slate-500' : ((kpis.mttr_hours <= 4.0) ? 'text-emerald-700' : ((kpis.mttr_hours <= 8.0) ? 'text-amber-700' : 'text-rose-700'))"
+                    x-text="(kpis.mttr_hours <= 0) ? 'Sin fallas cerradas' : ((kpis.mttr_hours <= 4.0) ? 'En Cumplimiento' : ((kpis.mttr_hours <= 8.0) ? 'Alerta SLA' : 'Fuera de Meta SLA'))">
+                    {% if stats.kpis.mttr_hours <= 0 %}Sin fallas cerradas{% elif stats.kpis.mttr_hours <= 4.0 %}En Cumplimiento{% elif stats.kpis.mttr_hours <= 8.0 %}Alerta SLA{% else %}Fuera de Meta SLA{% endif %} </span>
             </div>
         </div>
 
         <!-- KPI 3: Ratio Preventivo vs. Correctivo (%) -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-indigo-300 group">
+        <div
+            class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md hover:border-indigo-300 group">
             <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Ratio Preventivo / Correctivo</span>
-                <span class="p-2 rounded-xl bg-indigo-50 text-indigo-600 text-sm group-hover:scale-110 transition-transform">⚖️</span>
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Ratio Preventivo /
+                    Correctivo</span>
+                <span
+                    class="p-2 rounded-xl bg-indigo-50 text-indigo-600 text-sm group-hover:scale-110 transition-transform">⚖️</span>
             </div>
             <div class="mt-2.5 flex items-baseline gap-2">
-                <span class="text-3xl font-black text-indigo-700 tracking-tight" x-text="(kpis.proactivity_ratio || 80) + '%'"></span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                    Proactivo
+                <span class="text-3xl font-black text-indigo-700 tracking-tight"
+                    x-text="(kpis.proactivity_ratio !== undefined ? kpis.proactivity_ratio : {{ stats.kpis.proactivity_ratio }}) + '%'">{{
+                    stats.kpis.proactivity_ratio }}%</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                    :class="((kpis.total_preventive || 0) === 0 && (kpis.total_corrective || 0) === 0) ? 'bg-slate-100 text-slate-600 border border-slate-200' : ((kpis.proactivity_ratio >= 60) ? 'bg-indigo-50 text-indigo-800 border border-indigo-200' : 'bg-amber-50 text-amber-800 border border-amber-200')">
+                    <span x-text="((kpis.total_preventive || 0) === 0 && (kpis.total_corrective || 0) === 0) ? 'Sin registros' : ((kpis.proactivity_ratio >= 60) ? 'Preventivo' : 'Mayoría Correctivo')">
+                        {% if stats.kpis.total_preventive == 0 and stats.kpis.total_corrective == 0 %}Sin registros{% elif stats.kpis.proactivity_ratio >= 60 %}Preventivo{% else %}Mayoría Correctivo{% endif %}
+                    </span>
                 </span>
             </div>
             <!-- Barra segmentada bicolor: Verde Preventivo / Azul Correctivo -->
             <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden flex">
-                <div class="bg-emerald-500 h-full transition-all duration-500" :style="'width: ' + (kpis.proactivity_ratio || 80) + '%'"></div>
-                <div class="bg-blue-500 h-full transition-all duration-500" :style="'width: ' + (100 - (kpis.proactivity_ratio || 80)) + '%'"></div>
+                <div class="bg-emerald-500 h-full transition-all duration-500"
+                    :style="'width: ' + (((kpis.total_preventive || 0) === 0 && (kpis.total_corrective || 0) === 0) ? 0 : (kpis.proactivity_ratio !== undefined ? kpis.proactivity_ratio : {{ stats.kpis.proactivity_ratio }})) + '%'"
+                    style="width: {% if stats.kpis.total_preventive == 0 and stats.kpis.total_corrective == 0 %}0%{% else %}{{ stats.kpis.proactivity_ratio }}%{% endif %}"></div>
+                <div class="bg-blue-500 h-full transition-all duration-500"
+                    :style="'width: ' + (((kpis.total_preventive || 0) === 0 && (kpis.total_corrective || 0) === 0) ? 0 : (100 - (kpis.proactivity_ratio !== undefined ? kpis.proactivity_ratio : {{ stats.kpis.proactivity_ratio }}))) + '%'"
+                    style="width: {% if stats.kpis.total_preventive == 0 and stats.kpis.total_corrective == 0 %}0%{% else %}{{ 100 - stats.kpis.proactivity_ratio }}%{% endif %}"></div>
             </div>
             <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
-                <span class="font-bold text-emerald-700" x-text="(kpis.total_preventive || 0) + ' Preventivos'"></span>
-                <span class="font-bold text-blue-700" x-text="(kpis.total_corrective || 0) + ' Correctivos'"></span>
+                <span class="font-bold text-emerald-700" x-text="(kpis.total_preventive || 0) + ' Preventivos'">{{
+                    stats.kpis.total_preventive }} Preventivos</span>
+                <span class="font-bold text-blue-700" x-text="(kpis.total_corrective || 0) + ' Correctivos'">{{
+                    stats.kpis.total_corrective }} Correctivos</span>
             </div>
         </div>
 
         <!-- KPI 4: Sitios Críticos / Alertas Activas -->
         <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm relative overflow-hidden transition-all duration-300 hover:shadow-md group"
-             :class="(kpis.critical_sites_count > 0) ? 'hover:border-amber-400' : 'hover:border-emerald-300'">
+            :class="(kpis.critical_sites_count > 0) ? 'hover:border-amber-400' : 'hover:border-emerald-300'">
             <div class="flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sitios Críticos / Alertas</span>
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sitios Críticos /
+                    Alertas</span>
                 <span class="p-2 rounded-xl text-sm group-hover:scale-110 transition-transform"
-                      :class="(kpis.critical_sites_count > 0) ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'">🚨</span>
+                    :class="(kpis.critical_sites_count > 0) ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'">🚨</span>
             </div>
             <div class="mt-2.5 flex items-baseline gap-2">
                 <span class="text-3xl font-black tracking-tight"
-                      :class="(kpis.critical_sites_count > 0) ? 'text-amber-600' : 'text-slate-900'"
-                      x-text="kpis.critical_sites_count || 0"></span>
+                    :class="(kpis.critical_sites_count > 0) ? 'text-amber-600' : 'text-slate-900'"
+                    x-text="kpis.critical_sites_count || 0">{{ stats.kpis.critical_sites_count }}</span>
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                      :class="(kpis.critical_sites_count > 0) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">
+                    :class="(kpis.critical_sites_count > 0) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">
                     <span class="w-1.5 h-1.5 rounded-full"
-                          :class="(kpis.critical_sites_count > 0) ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'"></span>
-                    <span x-text="(kpis.critical_sites_count > 0) ? 'Atención Requerida' : 'Circuito Normal'"></span>
+                        :class="(kpis.critical_sites_count > 0) ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'"></span>
+                    <span x-text="(kpis.critical_sites_count > 0) ? 'Atención Requerida' : 'Circuito Normal'">{% if
+                        stats.kpis.critical_sites_count > 0 %}Atención Requerida{% else %}Circuito Normal{% endif
+                        %}</span>
                 </span>
             </div>
             <!-- Micro-barra de alertas -->
             <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                 <div class="h-full rounded-full transition-all duration-500"
-                     :class="(kpis.critical_sites_count > 0) ? 'bg-amber-500' : 'bg-emerald-500'"
-                     :style="'width: ' + ((kpis.critical_sites_count || 0) > 0 ? Math.min(100, (kpis.critical_sites_count || 1) * 25) : 100) + '%'"></div>
+                    :class="(kpis.critical_sites_count > 0) ? 'bg-amber-500' : 'bg-emerald-500'"
+                    :style="'width: ' + ((kpis.critical_sites_count || 0) > 0 ? Math.min(100, (kpis.critical_sites_count || 1) * 25) : 100) + '%'">
+                </div>
             </div>
             <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-500">
-                <span x-text="(kpis.in_fail_count || 0) + ' fallas en campo'"></span>
-                <span class="font-bold"
-                      :class="(kpis.critical_sites_count > 0) ? 'text-amber-700' : 'text-emerald-700'"
-                      x-text="(kpis.critical_sites_count > 0) ? 'Puntos con incidencia' : 'Control óptimo'"></span>
+                <span x-text="(kpis.in_fail_count || 0) + ' fallas en campo'">{{ stats.kpis.in_fail_count }} fallas en
+                    campo</span>
+                <span class="font-bold" :class="(kpis.critical_sites_count > 0) ? 'text-amber-700' : 'text-emerald-700'"
+                    x-text="(kpis.critical_sites_count > 0) ? 'Puntos con incidencia' : 'Control óptimo'">{% if
+                    stats.kpis.critical_sites_count > 0 %}Puntos con incidencia{% else %}Control óptimo{% endif
+                    %}</span>
             </div>
         </div>
 
@@ -218,15 +292,18 @@
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
         <!-- Gráfico 1: Curva de Evolución Temporal (Área Sombreada Suave) -->
-        <div class="lg:col-span-7 xl:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4">
+        <div
+            class="lg:col-span-7 xl:col-span-8 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
                         <span>📈 Evolución Temporal: Correctivos vs. Preventivos</span>
                     </h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Curva suave de incidencias correctivas y mantenimientos preventivos en los últimos 30 días</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Curva suave de incidencias correctivas y mantenimientos
+                        preventivos en los últimos 30 días</p>
                 </div>
-                <div class="flex items-center gap-3 text-xs bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
+                <div
+                    class="flex items-center gap-3 text-xs bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/80">
                     <span class="flex items-center gap-1.5 font-bold text-emerald-700">
                         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Preventivos
                     </span>
@@ -241,7 +318,8 @@
         </div>
 
         <!-- Gráfico 2: Estado de Puntos de Monitoreo (Donut Semántico Estricto) -->
-        <div class="lg:col-span-5 xl:col-span-4 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4 flex flex-col justify-between">
+        <div
+            class="lg:col-span-5 xl:col-span-4 bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4 flex flex-col justify-between">
             <div>
                 <div class="flex items-center justify-between">
                     <div>
@@ -250,7 +328,8 @@
                         </h3>
                         <p class="text-xs text-slate-500 mt-0.5">Semáforo operativo de cámaras en campo</p>
                     </div>
-                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                    <span
+                        class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
                         En Vivo
                     </span>
                 </div>
@@ -260,9 +339,14 @@
                     <canvas id="chartSiteStatus"></canvas>
                     <!-- Centro del Donut con Porcentaje de Disponibilidad -->
                     <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Disponibilidad</span>
-                        <span class="text-2xl font-black text-slate-900" x-text="(kpis.circuit_availability || 98.5) + '%'"></span>
-                        <span class="text-[10px] font-bold text-emerald-600" x-text="(kpis.total_monitored_points || 0) + ' cámaras'"></span>
+                        <span
+                            class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Disponibilidad</span>
+                        <span class="text-2xl font-black text-slate-900"
+                            x-text="(kpis.circuit_availability || 98.5) + '%'">{{ stats.kpis.circuit_availability
+                            }}%</span>
+                        <span class="text-[10px] font-bold text-emerald-600"
+                            x-text="(kpis.total_monitored_points || 0) + ' cámaras'">{{
+                            stats.kpis.total_monitored_points }} cámaras</span>
                     </div>
                 </div>
             </div>
@@ -273,28 +357,34 @@
                     <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold text-slate-500 uppercase leading-none">Operativos</p>
-                        <p class="text-xs font-black text-emerald-700 mt-0.5" x-text="(kpis.operatives_count || 0) + ' puntos'"></p>
+                        <p class="text-xs font-black text-emerald-700 mt-0.5"
+                            x-text="(kpis.operatives_count || 0) + ' puntos'">{{ stats.kpis.operatives_count }} puntos
+                        </p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-amber-50/60 border border-amber-100">
                     <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold text-slate-500 uppercase leading-none">Mantenimiento</p>
-                        <p class="text-xs font-black text-amber-700 mt-0.5" x-text="(kpis.in_maint_count || 0) + ' puntos'"></p>
+                        <p class="text-xs font-black text-amber-700 mt-0.5"
+                            x-text="(kpis.in_maint_count || 0) + ' puntos'">{{ stats.kpis.in_maint_count }} puntos</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-rose-50/60 border border-rose-100">
                     <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold text-slate-500 uppercase leading-none">Fuera Servicio</p>
-                        <p class="text-xs font-black text-rose-700 mt-0.5" x-text="(kpis.in_fail_count || 0) + ' puntos'"></p>
+                        <p class="text-xs font-black text-rose-700 mt-0.5"
+                            x-text="(kpis.in_fail_count || 0) + ' puntos'">{{ stats.kpis.in_fail_count }} puntos</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 p-2 rounded-xl bg-purple-50/60 border border-purple-100">
                     <span class="w-2.5 h-2.5 rounded-full bg-purple-500 shrink-0"></span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold text-slate-500 uppercase leading-none">Validación Policial</p>
-                        <p class="text-xs font-black text-purple-700 mt-0.5" x-text="(kpis.pending_val_count || 0) + ' puntos'"></p>
+                        <p class="text-xs font-black text-purple-700 mt-0.5"
+                            x-text="(kpis.pending_val_count || 0) + ' puntos'">{{ stats.kpis.pending_val_count }} puntos
+                        </p>
                     </div>
                 </div>
             </div>
@@ -310,12 +400,14 @@
                     <span>📍 Análisis de Criticidad: Top 5 Puntos de Monitoreo & Desglose de Fallas</span>
                 </h3>
                 <p class="text-xs text-slate-500 mt-0.5">
-                    Puntos con mayor frecuencia de intervenciones, desglosados visualmente en barras apiladas por subtipos de fallas
+                    Puntos con mayor frecuencia de intervenciones, desglosados visualmente en barras apiladas por
+                    subtipos de fallas
                 </p>
             </div>
-            
+
             <!-- Leyenda de Subtipos de Fallas Apiladas -->
-            <div class="flex flex-wrap items-center gap-3 text-xs bg-slate-50 p-2 rounded-xl border border-slate-200/80">
+            <div
+                class="flex flex-wrap items-center gap-3 text-xs bg-slate-50 p-2 rounded-xl border border-slate-200/80">
                 <span class="flex items-center gap-1.5 font-bold text-rose-700">
                     <span class="w-3 h-3 rounded bg-rose-500"></span> Daño Físico / Hardware
                 </span>
@@ -347,13 +439,17 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
+
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-1.5">
                 <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
                     <span class="text-emerald-600">✔</span> Continuidad del Circuito CCTV
                 </div>
                 <p class="text-[11px] text-slate-600 leading-relaxed">
-                    El sistema mantiene una disponibilidad global del <strong class="text-emerald-700" x-text="(kpis.circuit_availability || 98.5) + '%'"></strong>, con <strong class="text-slate-800" x-text="(kpis.operatives_count || 0) + ' cámaras operativas'"></strong> en vigilancia ciudadana continua.
+                    El sistema mantiene una disponibilidad global del <strong class="text-emerald-700"
+                        x-text="(kpis.circuit_availability || 98.5) + '%'">{{ stats.kpis.circuit_availability
+                        }}%</strong>, con <strong class="text-slate-800"
+                        x-text="(kpis.operatives_count || 0) + ' cámaras operativas'">{{ stats.kpis.operatives_count }}
+                        cámaras operativas</strong> en vigilancia ciudadana continua.
                 </p>
             </div>
 
@@ -362,7 +458,11 @@
                     <span class="text-blue-600">✔</span> Velocidad de Respuesta (MTTR)
                 </div>
                 <p class="text-[11px] text-slate-600 leading-relaxed">
-                    El tiempo medio de reparación se sitúa en <strong class="text-blue-700" x-text="kpis.mttr_formatted || '2.8 hrs'"></strong>, superando el estándar contractual con una tasa de resolución dentro de ventana de SLA del <strong class="text-slate-900" x-text="kpis.resolution_rate + '%'"></strong>.
+                    El tiempo medio de reparación se sitúa en <strong class="text-blue-700"
+                        x-text="kpis.mttr_formatted || '{{ stats.kpis.mttr_formatted }}'">{{ stats.kpis.mttr_formatted }}</strong>, superando el
+                    estándar contractual con una tasa de resolución dentro de ventana de SLA del <strong
+                        class="text-slate-900" x-text="kpis.resolution_rate + '%'">{{ stats.kpis.resolution_rate
+                        }}%</strong>.
                 </p>
             </div>
 
@@ -371,7 +471,9 @@
                     <span class="text-purple-600">✔</span> Conformidad Policial Certificada
                 </div>
                 <p class="text-[11px] text-slate-600 leading-relaxed">
-                    <strong class="text-purple-700" x-text="(kpis.total_validated || 0) + ' actas oficiales'"></strong> han sido dictaminadas por la Policía Nacional con número de placa y sello de tiempo digital inviolable.
+                    <strong class="text-purple-700" x-text="(kpis.total_validated || 0) + ' actas oficiales'">{{
+                        stats.kpis.total_validated }} actas oficiales</strong> han sido dictaminadas por la Policía
+                    Nacional con número de placa y sello de tiempo digital inviolable.
                 </p>
             </div>
 
@@ -380,314 +482,365 @@
 
 </div>
 
-<!-- Chart.js CDN Oficial -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- Chart.js Local con Fallback a CDN Oficial -->
+<script src="/static/js/chart.umd.min.js"></script>
+<script>
+    if (typeof Chart === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>');
+    }
+</script>
 
 <!-- Alpine.js Component Script Desacoplado y Robusto -->
 <script type="application/json" id="reports-chart-data">{{ chart_json|safe }}</script>
 <script>
-const reportsDataEl = document.getElementById('reports-chart-data');
-window.__REPORTS_DATA__ = reportsDataEl ? JSON.parse(reportsDataEl.textContent || '{}') : {};
+    // Instancias de Chart.js almacenadas fuera del Proxy reactivo de Alpine.js
+    window.__CCTV_REPORT_CHARTS__ = window.__CCTV_REPORT_CHARTS__ || {};
 
-function reportsComponent() {
-    return {
-        reportsData: window.__REPORTS_DATA__ || {},
-        kpis: (window.__REPORTS_DATA__ && window.__REPORTS_DATA__.kpis) ? window.__REPORTS_DATA__.kpis : {},
-        chartsData: (window.__REPORTS_DATA__ && window.__REPORTS_DATA__.charts) ? window.__REPORTS_DATA__.charts : {},
-        currentPeriod: '{{ period }}' || 'weekly',
-        periodLabel: '{{ period_label }}' || 'Semanal',
-        startDateStr: '{{ start_date }}',
-        endDateStr: '{{ end_date }}',
-        customMode: false,
-        customStart: '{{ start_date }}',
-        customEnd: '{{ end_date }}',
-        chartInstances: {},
+    function getReportsPayload() {
+        const reportsDataEl = document.getElementById('reports-chart-data');
+        if (reportsDataEl && reportsDataEl.textContent) {
+            try {
+                window.__REPORTS_DATA__ = JSON.parse(reportsDataEl.textContent);
+            } catch (e) { }
+        }
+        return window.__REPORTS_DATA__ || {};
+    }
 
-        init() {
-            this.$nextTick(() => {
-                this.renderAllCharts();
-            });
-        },
+    window.__REPORTS_DATA__ = getReportsPayload();
 
-        changePeriod(period) {
-            window.location.href = '/reports?period=' + encodeURIComponent(period);
-        },
+    window.renderReportsCharts = function () {
+        if (typeof Chart === 'undefined') return;
 
-        applyCustomRange() {
-            if (!this.customStart || !this.customEnd) {
-                alert('Por favor selecciona las fechas de inicio y fin.');
-                return;
+        const dataPayload = getReportsPayload();
+        const chartsData = dataPayload.charts || {};
+        const kpisData = dataPayload.kpis || {};
+
+        // 1. FILA CENTRAL - EVOLUCIÓN TEMPORAL (LÍNEAS)
+        const ctxTimeline = document.getElementById('chartTimeline');
+        if (ctxTimeline) {
+            const existing = Chart.getChart(ctxTimeline) || window.__CCTV_REPORT_CHARTS__.timeline;
+            if (existing) {
+                try { existing.destroy(); } catch (e) { }
+                window.__CCTV_REPORT_CHARTS__.timeline = null;
             }
-            window.location.href = '/reports?period=custom&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
-        },
 
-        getPdfUrl() {
-            let base = '/reports/export/pdf?period=' + encodeURIComponent(this.currentPeriod);
-            if (this.currentPeriod === 'custom' && this.customStart && this.customEnd) {
-                base += '&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+            const timelineData = chartsData.timeline || { labels: [], correctives: [], preventives: [] };
+            const ctx2d = ctxTimeline.getContext('2d');
+            let gradientGreen = 'rgba(16, 185, 129, 0.12)';
+            let gradientBlue = 'rgba(59, 130, 246, 0.12)';
+            if (ctx2d) {
+                const g1 = ctx2d.createLinearGradient(0, 0, 0, 280);
+                g1.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+                g1.addColorStop(1, 'rgba(16, 185, 129, 0.01)');
+                gradientGreen = g1;
+
+                const g2 = ctx2d.createLinearGradient(0, 0, 0, 280);
+                g2.addColorStop(0, 'rgba(59, 130, 246, 0.22)');
+                g2.addColorStop(1, 'rgba(59, 130, 246, 0.01)');
+                gradientBlue = g2;
             }
-            return base;
-        },
 
-        renderAllCharts() {
-            if (!this.chartsData) return;
-
-            // Destrucción previa limpia de instancias activas de Chart.js
-            ['timeline', 'siteStatus', 'criticalSites'].forEach(key => {
-                if (this.chartInstances && this.chartInstances[key]) {
-                    try {
-                        this.chartInstances[key].destroy();
-                    } catch (e) {
-                        console.warn('Error al destruir gráfico previo:', e);
-                    }
-                    this.chartInstances[key] = null;
-                }
-            });
-
-            // -------------------------------------------------------------
-            // 1. FILA CENTRAL - GRÁFICO DE LÍNEAS MINIMALISTA (EVOLUCIÓN TEMPORAL)
-            // -------------------------------------------------------------
-            const ctxTimeline = document.getElementById('chartTimeline');
-            if (ctxTimeline) {
-                const timelineData = this.chartsData.timeline || { labels: [], correctives: [], preventives: [] };
-                
-                // Creación de gradientes verticales suaves
-                const ctx2d = ctxTimeline.getContext('2d');
-                let gradientGreen = 'rgba(16, 185, 129, 0.12)';
-                let gradientBlue = 'rgba(59, 130, 246, 0.12)';
-                if (ctx2d) {
-                    const g1 = ctx2d.createLinearGradient(0, 0, 0, 280);
-                    g1.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
-                    g1.addColorStop(1, 'rgba(16, 185, 129, 0.01)');
-                    gradientGreen = g1;
-
-                    const g2 = ctx2d.createLinearGradient(0, 0, 0, 280);
-                    g2.addColorStop(0, 'rgba(59, 130, 246, 0.22)');
-                    g2.addColorStop(1, 'rgba(59, 130, 246, 0.01)');
-                    gradientBlue = g2;
-                }
-
-                this.chartInstances.timeline = new Chart(ctxTimeline, {
-                    type: 'line',
-                    data: {
-                        labels: timelineData.labels,
-                        datasets: [
-                            {
-                                label: 'Preventivos',
-                                data: timelineData.preventives,
-                                borderColor: '#10B981',
-                                backgroundColor: gradientGreen,
-                                fill: true,
-                                tension: 0.38,
-                                pointRadius: 3,
-                                pointHoverRadius: 6,
-                                pointBackgroundColor: '#10B981',
-                                pointBorderColor: '#ffffff',
-                                pointBorderWidth: 1.5,
-                                borderWidth: 2.5
-                            },
-                            {
-                                label: 'Correctivos',
-                                data: timelineData.correctives,
-                                borderColor: '#3B82F6',
-                                backgroundColor: gradientBlue,
-                                fill: true,
-                                tension: 0.38,
-                                pointRadius: 3,
-                                pointHoverRadius: 6,
-                                pointBackgroundColor: '#3B82F6',
-                                pointBorderColor: '#ffffff',
-                                pointBorderWidth: 1.5,
-                                borderWidth: 2.5
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
+            window.__CCTV_REPORT_CHARTS__.timeline = new Chart(ctxTimeline, {
+                type: 'line',
+                data: {
+                    labels: timelineData.labels,
+                    datasets: [
+                        {
+                            label: 'Preventivos',
+                            data: timelineData.preventives,
+                            borderColor: '#10B981',
+                            backgroundColor: gradientGreen,
+                            fill: true,
+                            tension: 0.38,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#10B981',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1.5,
+                            borderWidth: 2.5
                         },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                                titleFont: { size: 11, weight: 'bold' },
-                                bodyFont: { size: 11 },
-                                padding: 10,
-                                cornerRadius: 8,
-                                displayColors: true,
-                                boxWidth: 8,
-                                boxHeight: 8
-                            }
-                        },
-                        scales: {
-                            y: { 
-                                beginAtZero: true, 
-                                ticks: { 
-                                    precision: 0, 
-                                    font: { size: 10, family: 'Inter, sans-serif' },
-                                    color: '#64748B'
-                                },
-                                grid: { color: '#F1F5F9' },
-                                border: { dash: [4, 4] }
-                            },
-                            x: {
-                                ticks: { 
-                                    font: { size: 10, family: 'Inter, sans-serif' },
-                                    color: '#64748B'
-                                },
-                                grid: { display: false }
-                            }
+                        {
+                            label: 'Correctivos',
+                            data: timelineData.correctives,
+                            borderColor: '#3B82F6',
+                            backgroundColor: gradientBlue,
+                            fill: true,
+                            tension: 0.38,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#3B82F6',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 1.5,
+                            borderWidth: 2.5
                         }
-                    }
-                });
-            }
-
-            // -------------------------------------------------------------
-            // 2. FILA CENTRAL - GRÁFICO DE ESTADO DE SITIOS (DONUT SEMÁFORO ESTRICTO)
-            // -------------------------------------------------------------
-            const ctxSiteStatus = document.getElementById('chartSiteStatus');
-            if (ctxSiteStatus) {
-                const statusData = this.chartsData.site_statuses || {
-                    labels: ['Operativos', 'En Mantenimiento', 'Fuera de Servicio', 'Pendiente de Validación'],
-                    data: [
-                        this.kpis.operatives_count || 1,
-                        this.kpis.in_maint_count || 0,
-                        this.kpis.in_fail_count || 0,
-                        this.kpis.pending_val_count || 0
-                    ],
-                    colors: ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
-                };
-
-                const sumData = statusData.data.reduce((a, b) => a + b, 0);
-                const chartData = sumData > 0 ? statusData.data : [1, 0, 0, 0];
-                const chartColors = sumData > 0 ? statusData.colors : ['#CBD5E1', '#E2E8F0', '#F1F5F9', '#94A3B8'];
-
-                this.chartInstances.siteStatus = new Chart(ctxSiteStatus, {
-                    type: 'doughnut',
-                    data: {
-                        labels: statusData.labels,
-                        datasets: [{
-                            data: chartData,
-                            backgroundColor: chartColors,
-                            borderWidth: 2.5,
-                            borderColor: '#ffffff',
-                            hoverOffset: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '72%',
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                                titleFont: { size: 11, weight: 'bold' },
-                                bodyFont: { size: 11 },
-                                padding: 10,
-                                cornerRadius: 8,
-                                callbacks: {
-                                    label: function(context) {
-                                        const label = context.label || '';
-                                        const val = context.raw || 0;
-                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                        const pct = total > 0 ? Math.round((val / total) * 100) : 0;
-                                        return `${label}: ${val} (${pct}%)`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-
-            // -------------------------------------------------------------
-            // 3. FILA INFERIOR - ANÁLISIS DE CRITICIDAD (TOP 5 BARRAS APILADAS)
-            // -------------------------------------------------------------
-            const ctxCritical = document.getElementById('chartCriticalSites');
-            if (ctxCritical) {
-                const critData = this.chartsData.top_critical_sites || {
-                    labels: ['Estación de Policía', 'Terminal de Transportes', 'Carabineros', 'Cuatro Vientos', 'Parque Principal'],
-                    categories: [
-                        { label: 'Daño Físico / Hardware Cámara', data: [3, 1, 1, 0, 0], color: '#EF4444' },
-                        { label: 'Enlace de Red / Conectividad IP', data: [2, 2, 1, 1, 0], color: '#F59E0B' },
-                        { label: 'Fuente de Poder / Eléctrico', data: [2, 1, 1, 1, 1], color: '#3B82F6' },
-                        { label: 'Mantenimiento / Calibración', data: [4, 2, 3, 2, 2], color: '#10B981' }
                     ]
-                };
-
-                const datasets = (critData.categories || []).map(cat => ({
-                    label: cat.label,
-                    data: cat.data,
-                    backgroundColor: cat.color,
-                    borderRadius: 4,
-                    borderSkipped: false,
-                    barThickness: 20
-                }));
-
-                this.chartInstances.criticalSites = new Chart(ctxCritical, {
-                    type: 'bar',
-                    data: {
-                        labels: critData.labels,
-                        datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
                     },
-                    options: {
-                        indexAxis: 'y',
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                backgroundColor: 'rgba(15, 23, 42, 0.92)',
-                                titleFont: { size: 11, weight: 'bold' },
-                                bodyFont: { size: 11 },
-                                padding: 10,
-                                cornerRadius: 8,
-                                displayColors: true,
-                                boxWidth: 8,
-                                boxHeight: 8,
-                                callbacks: {
-                                    footer: function(tooltipItems) {
-                                        let sum = 0;
-                                        tooltipItems.forEach(item => { sum += item.raw || 0; });
-                                        return 'Total Intervenciones: ' + sum;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                stacked: true,
-                                beginAtZero: true,
-                                ticks: { 
-                                    precision: 0, 
-                                    font: { size: 10, family: 'Inter, sans-serif' },
-                                    color: '#64748B'
-                                },
-                                grid: { color: '#F1F5F9' },
-                                border: { dash: [4, 4] }
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                            titleFont: { size: 11, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            boxWidth: 8,
+                            boxHeight: 8
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                font: { size: 10, family: 'Inter, sans-serif' },
+                                color: '#64748B'
                             },
-                            y: {
-                                stacked: true,
-                                ticks: { 
-                                    font: { size: 11, weight: '600', family: 'Inter, sans-serif' },
-                                    color: '#1E293B'
-                                },
-                                grid: { display: false }
+                            grid: { color: '#F1F5F9' },
+                            border: { dash: [4, 4] }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 10, family: 'Inter, sans-serif' },
+                                color: '#64748B'
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. FILA CENTRAL - ESTADO DE SITIOS (DONUT SEMÁFORO)
+        const ctxSiteStatus = document.getElementById('chartSiteStatus');
+        if (ctxSiteStatus) {
+            const existing = Chart.getChart(ctxSiteStatus) || window.__CCTV_REPORT_CHARTS__.siteStatus;
+            if (existing) {
+                try { existing.destroy(); } catch (e) { }
+                window.__CCTV_REPORT_CHARTS__.siteStatus = null;
+            }
+
+            const statusData = chartsData.site_statuses || {
+                labels: ['Operativos', 'En Mantenimiento', 'Fuera de Servicio', 'Pendiente de Validación'],
+                data: [
+                    kpisData.operatives_count || 1,
+                    kpisData.in_maint_count || 0,
+                    kpisData.in_fail_count || 0,
+                    kpisData.pending_val_count || 0
+                ],
+                colors: ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+            };
+
+            const sumData = statusData.data.reduce((a, b) => a + b, 0);
+            const chartData = sumData > 0 ? statusData.data : [1, 0, 0, 0];
+            const chartColors = sumData > 0 ? statusData.colors : ['#CBD5E1', '#E2E8F0', '#F1F5F9', '#94A3B8'];
+
+            window.__CCTV_REPORT_CHARTS__.siteStatus = new Chart(ctxSiteStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: statusData.labels,
+                    datasets: [{
+                        data: chartData,
+                        backgroundColor: chartColors,
+                        borderWidth: 2.5,
+                        borderColor: '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                            titleFont: { size: 11, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function (context) {
+                                    const label = context.label || '';
+                                    const val = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                    return `${label}: ${val} (${pct}%)`;
+                                }
                             }
                         }
                     }
-                });
+                }
+            });
+        }
+
+        // 3. FILA INFERIOR - ANÁLISIS DE CRITICIDAD (BARRAS HORIZONTALES APILADAS)
+        const ctxCritical = document.getElementById('chartCriticalSites');
+        if (ctxCritical) {
+            const existing = Chart.getChart(ctxCritical) || window.__CCTV_REPORT_CHARTS__.criticalSites;
+            if (existing) {
+                try { existing.destroy(); } catch (e) { }
+                window.__CCTV_REPORT_CHARTS__.criticalSites = null;
             }
+
+            const critData = chartsData.top_critical_sites || {
+                labels: ['Estación de Policía', 'Terminal de Transportes', 'Carabineros', 'Cuatro Vientos', 'Parque Principal'],
+                categories: [
+                    { label: 'Daño Físico / Hardware Cámara', data: [3, 1, 1, 0, 0], color: '#EF4444' },
+                    { label: 'Enlace de Red / Conectividad IP', data: [2, 2, 1, 1, 0], color: '#F59E0B' },
+                    { label: 'Fuente de Poder / Eléctrico', data: [2, 1, 1, 1, 1], color: '#3B82F6' },
+                    { label: 'Mantenimiento / Calibración', data: [4, 2, 3, 2, 2], color: '#10B981' }
+                ]
+            };
+
+            const datasets = (critData.categories || []).map(cat => ({
+                label: cat.label,
+                data: cat.data,
+                backgroundColor: cat.color,
+                borderRadius: 4,
+                borderSkipped: false,
+                barThickness: 20
+            }));
+
+            window.__CCTV_REPORT_CHARTS__.criticalSites = new Chart(ctxCritical, {
+                type: 'bar',
+                data: {
+                    labels: critData.labels,
+                    datasets: datasets
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                            titleFont: { size: 11, weight: 'bold' },
+                            bodyFont: { size: 11 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            boxWidth: 8,
+                            boxHeight: 8,
+                            callbacks: {
+                                footer: function (tooltipItems) {
+                                    let sum = 0;
+                                    tooltipItems.forEach(item => { sum += item.raw || 0; });
+                                    return 'Total Intervenciones: ' + sum;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                font: { size: 10, family: 'Inter, sans-serif' },
+                                color: '#64748B'
+                            },
+                            grid: { color: '#F1F5F9' },
+                            border: { dash: [4, 4] }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: {
+                                font: { size: 11, weight: '600', family: 'Inter, sans-serif' },
+                                color: '#1E293B'
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
         }
     };
-}
+
+    function reportsComponent() {
+        const rawData = getReportsPayload();
+        return {
+            reportsData: rawData || {},
+            kpis: rawData.kpis || {},
+            chartsData: rawData.charts || {},
+            currentPeriod: '{{ period }}' || 'weekly',
+            periodLabel: '{{ period_label }}' || 'Semanal',
+            startDateStr: '{{ start_date }}',
+            endDateStr: '{{ end_date }}',
+            customMode: false,
+            customStart: '{{ start_date }}',
+            customEnd: '{{ end_date }}',
+
+            init() {
+                this.$nextTick(() => {
+                    window.renderReportsCharts();
+                });
+            },
+
+            changePeriod(period) {
+                window.location.href = '/reports?period=' + encodeURIComponent(period);
+            },
+
+            applyCustomRange() {
+                if (!this.customStart || !this.customEnd) {
+                    alert('Por favor selecciona las fechas de inicio y fin.');
+                    return;
+                }
+                window.location.href = '/reports?period=custom&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+            },
+
+            getPdfUrl() {
+                let base = '/reports/export/pdf?period=' + encodeURIComponent(this.currentPeriod);
+                if (this.currentPeriod === 'custom' && this.customStart && this.customEnd) {
+                    base += '&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+                }
+                return base;
+            },
+
+            getExecutivePdfUrl() {
+                let base = '/reports/export/executive-pdf?period=' + encodeURIComponent(this.currentPeriod);
+                if (this.currentPeriod === 'custom' && this.customStart && this.customEnd) {
+                    base += '&start_date=' + encodeURIComponent(this.customStart) + '&end_date=' + encodeURIComponent(this.customEnd);
+                }
+                return base;
+            },
+
+            renderAllCharts() {
+                window.renderReportsCharts();
+            }
+        };
+    }
+
+    // Inicialización garantizada en carga, retorno de navegación (BFCache / pageshow) y cambio de visibilidad de pestaña
+    window.addEventListener('pageshow', function () {
+        setTimeout(window.renderReportsCharts, 50);
+    });
+
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && document.getElementById('chartTimeline')) {
+            setTimeout(window.renderReportsCharts, 50);
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(window.renderReportsCharts, 60);
+        });
+    } else {
+        setTimeout(window.renderReportsCharts, 60);
+    }
+</script>
 </script>
 {% endblock %}

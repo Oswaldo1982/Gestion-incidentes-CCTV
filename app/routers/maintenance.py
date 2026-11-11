@@ -29,9 +29,18 @@ def create_maintenance(
     license_payload: dict = Depends(verify_license_dependency)
 ):
     """
-    Programa un nuevo mantenimiento preventivo o proactivo (Administradores y Técnicos).
+    Programa un nuevo mantenimiento preventivo (Administradores y Técnicos).
     Verifica licencia activa.
     """
+    sched_dt = maint_in.scheduled_date
+    if sched_dt.tzinfo is not None:
+        sched_dt = sched_dt.replace(tzinfo=None)
+    if sched_dt.date() < get_local_now().date():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se permite programar una inspección rutinaria o un mantenimiento preventivo con fecha anterior a la fecha actual."
+        )
+
     # Generar protocol_code si no viene especificado
     protocol_code = maint_in.protocol_code
     if not protocol_code:
@@ -140,7 +149,7 @@ def update_maintenance(
         )
 
     # 0. Bloqueo de edición técnica si está pendiente de validación o validado conforme
-    if maint.status in ["Pendiente de Validación", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
+    if maint.status in ["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado"] and current_user.role not in ["Admin", "Validador"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"La orden de trabajo está en estado '{maint.status}' y la edición técnica se encuentra bloqueada."
@@ -191,6 +200,14 @@ def update_maintenance(
         maint.description = maint_in.description
         changes.append("description updated")
     if maint_in.scheduled_date and maint_in.scheduled_date != maint.scheduled_date:
+        sched_dt = maint_in.scheduled_date
+        if sched_dt.tzinfo is not None:
+            sched_dt = sched_dt.replace(tzinfo=None)
+        if sched_dt.date() < get_local_now().date():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No se permite programar una inspección rutinaria o un mantenimiento preventivo con fecha anterior a la fecha actual."
+            )
         old_date = maint.scheduled_date
         maint.scheduled_date = maint_in.scheduled_date
         changes.append(f"scheduled_date: {old_date} -> {maint_in.scheduled_date}")
@@ -253,7 +270,7 @@ def validate_maintenance(
     now = get_local_now()
 
     if val_in.action == "approve":
-        maint.status = "Conforme / Validado"
+        maint.status = "Validado / Conforme"
         maint.validation_status = "Conforme"
         maint.validator_id = current_user.id
         maint.validated_at = now

@@ -88,7 +88,7 @@ def generate_default_cursive_signature(display_name: str, filename: str) -> str:
     if os.path.exists(filepath):
         return f"/static/uploads/signatures/{filename}"
 
-    width, height = 480, 160
+    width, height = 680, 160
     img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(img)
 
@@ -99,11 +99,13 @@ def generate_default_cursive_signature(display_name: str, filename: str) -> str:
         "C:\\Windows\\Fonts\\FREESCPT.TTF",
         "C:\\Windows\\Fonts\\arial.ttf"
     ]
+    sig_text = display_name if display_name else "Firma Digital"
+    font_size = 38 if len(sig_text) > 18 else 46
     font = None
     for fp in font_paths:
         if os.path.exists(fp):
             try:
-                font = ImageFont.truetype(fp, 46)
+                font = ImageFont.truetype(fp, font_size)
                 break
             except Exception:
                 continue
@@ -114,12 +116,11 @@ def generate_default_cursive_signature(display_name: str, filename: str) -> str:
     ink_color = (15, 41, 66, 240)  # Azul noche institucional
 
     # Nombre caligráfico
-    sig_text = display_name if display_name else "Firma Digital"
     draw.text((30, 40), sig_text, font=font, fill=ink_color)
 
     # Rúbrica / Trazo inferior fluido
-    draw.arc([20, 80, 440, 140], start=180, end=360, fill=ink_color, width=3)
-    draw.line([(50, 125), (420, 115)], fill=ink_color, width=2)
+    draw.arc([20, 80, 560, 140], start=180, end=360, fill=ink_color, width=3)
+    draw.line([(50, 125), (540, 115)], fill=ink_color, width=2)
 
     img = clean_and_make_transparent(img)
     img.save(filepath, format="PNG")

@@ -71,6 +71,16 @@
 
     <div class="max-w-md w-full bg-slate-900/90 border border-slate-800 backdrop-blur-xl p-8 sm:p-10 rounded-3xl shadow-2xl relative z-10">
         
+        <!-- Botón Superior: Volver a la interfaz inicial -->
+        <div class="mb-4 flex items-center justify-start">
+            <a href="/" class="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 font-medium transition group" title="Volver a la interfaz inicial de la solución web">
+                <svg class="w-4 h-4 text-slate-500 group-hover:text-cyan-300 transition-transform group-hover:-translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                <span>Volver a la interfaz inicial</span>
+            </a>
+        </div>
+
         <!-- Header & Logo -->
         <div class="text-center mb-6">
             <div class="mx-auto w-14 h-14 bg-blue-600/20 border border-blue-500/30 rounded-2xl flex items-center justify-center text-blue-400 shadow-inner mb-3.5">
@@ -163,7 +173,7 @@
                     </button>
                 </div>
                 <div class="relative">
-                    <input id="password" name="password" :type="showPassword ? 'text' : 'password'" required x-model="password"
+                    <input id="password" name="password" :type="showPassword ? 'text' : 'password'" x-model="password"
                            autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false"
                            placeholder="••••••••"
                            class="block w-full px-3.5 py-3 pr-11 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
@@ -207,7 +217,7 @@
 
         <!-- Footer Notice -->
         <div class="text-center pt-5 border-t border-slate-800/80 mt-6 flex items-center justify-between text-[11px] text-slate-500">
-            <a href="/" class="hover:text-slate-300 transition">&larr; Portal Principal</a>
+            <a href="/" class="hover:text-cyan-300 transition flex items-center gap-1">&larr; Volver a la interfaz inicial</a>
             <span>Seguridad CCTV &copy; 2026</span>
         </div>
 

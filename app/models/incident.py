@@ -1,3 +1,13 @@
+from typing import Optional
+
+def _clean_str(s: Optional[str]) -> str:
+    if not s:
+        return ""
+    if s.startswith("deleted_") or s.startswith("del_"):
+        parts = s.split("_", 2)
+        return parts[-1] if len(parts) > 2 else s
+    return s
+
 import datetime
 from typing import Optional
 from sqlalchemy import Integer, String, Text, DateTime, ForeignKey
@@ -71,7 +81,16 @@ class Incident(Base):
     @property
     def is_technically_closed(self) -> bool:
         """Indica si el equipo técnico completó la intervención y remitió la orden."""
-        return self.closed_at is not None or self.root_cause is not None
+        if self.status in ["Abierto", "En Proceso", "Rechazado"]:
+            return False
+        return self.closed_at is not None or self.status in [
+            "Pendiente de Validación",
+            "Pendiente de Validación Policial",
+            "Validado / Conforme",
+            "Conforme / Validado",
+            "Cerrado",
+            "Resuelto"
+        ]
 
     @property
     def is_validated(self) -> bool:
@@ -97,11 +116,14 @@ class Incident(Base):
 
     @property
     def is_overtime(self) -> bool:
-        """Determina si el ticket fue resuelto en extra tiempo (superando la meta SLA)."""
+        """Determina si el ticket superó la meta SLA (resuelto en extra tiempo o vencido en curso)."""
         target_h = self.sla_target_hours
         now = get_local_now()
         start_time = self.timer_reset_at or self.created_at or now
-        end_time = self.validated_at or self.closed_at or self.updated_at or now
+        if self.is_resolved:
+            end_time = self.validated_at or self.closed_at or self.updated_at or now
+        else:
+            end_time = now
         elapsed_h = max(0.0, (end_time - start_time).total_seconds() / 3600.0)
         return elapsed_h > target_h
 
@@ -272,6 +294,92 @@ class Incident(Base):
                 "is_overtime": False,
                 "detail": f"Restan {int(remaining_h)}h {int((remaining_h%1)*60)}m"
             }
+
+    def to_trace_dict(self) -> dict:
+        creator_name = _clean_str(self.creator.full_name or self.creator.username) if self.creator else 'Sistema'
+        creator_role = (self.creator.role or 'Usuario') if self.creator else 'Sistema'
+        creator_doc = (self.creator.document_id or '') if self.creator else ''
+        creator_sig = (self.creator.signature_path or '') if self.creator else ''
+        closed_by_name = _clean_str(self.closed_by.full_name or self.closed_by.username) if (self.is_technically_closed and self.closed_by) else ('Técnico de Mantenimiento' if self.is_technically_closed else 'Pendiente de Cierre')
+        closed_by_role = (self.closed_by.role or 'Empresa de Mantenimiento') if (self.is_technically_closed and self.closed_by) else ('Empresa de Mantenimiento' if self.is_technically_closed else '')
+        closed_by_doc = (self.closed_by.document_id or '') if (self.is_technically_closed and self.closed_by) else ''
+        closed_by_sig = (self.closed_by.signature_path or '') if (self.is_technically_closed and self.closed_by) else ''
+        val_user = self.validator
+        if self.is_validated:
+            validator_name = _clean_str(val_user.full_name or val_user.username) if val_user else 'Oficial Validador Policial'
+            validator_badge = _clean_str(val_user.badge_number or '1234') if val_user else '1234'
+            validator_doc = (val_user.document_id or '') if val_user else ''
+            validator_role = (val_user.role or 'Validador') if val_user else 'Validador'
+            validator_sig = (val_user.signature_path or '') if val_user else ''
+        else:
+            validator_name = ''
+            validator_badge = ''
+            validator_doc = ''
+            validator_role = ''
+            validator_sig = ''
+        val_notes = (self.validation_notes or '') if (self.is_validated or self.status == 'Rechazado' or self.validation_status == 'Rechazado') else ''
+
+        dev_type = self.device.device_type if self.device else 'CCTV'
+        dev_brand = f"{self.device.brand or ''} {self.device.model or ''}".strip() if self.device else ''
+        dev_serial = (self.device.serial_number or '') if self.device else ''
+
+        return {
+            "id": self.id,
+            "type": "incident",
+            "ticket": self.ticket_code,
+            "code": self.ticket_code,
+            "title": self.title or '',
+            "description": self.description or '',
+            "fault_type": self.fault_type or 'Falla Menor',
+            "priority": self.priority or 'Media',
+            "location": self.location_detail or (self.sede or 'Estación de Policía'),
+            "device": self.device.name if self.device else 'General',
+            "device_type": dev_type,
+            "device_brand": dev_brand,
+            "device_serial": dev_serial,
+            "device_ip": self.device.ip_address if self.device else '',
+            "created_by": creator_name,
+            "created_by_role": creator_role,
+            "created_by_doc": creator_doc,
+            "created_by_sig": creator_sig,
+            "created_at": self.created_at.strftime('%d/%m/%Y %H:%M') if self.created_at else '',
+            "attended_at": self.attended_at.strftime('%d/%m/%Y %H:%M') if self.attended_at else 'Inmediato',
+            "closed_by": closed_by_name,
+            "closed_by_role": closed_by_role,
+            "closed_by_doc": closed_by_doc,
+            "closed_by_sig": closed_by_sig,
+            "completed_by": closed_by_name,
+            "closed_at": self.closed_at.strftime('%d/%m/%Y %H:%M') if (self.is_technically_closed and self.closed_at) else 'Pendiente',
+            "completed_date": self.closed_at.strftime('%d/%m/%Y %H:%M') if (self.is_technically_closed and self.closed_at) else 'Pendiente',
+            "elapsed": self.elapsed_text or '0h 0m',
+            "root_cause": self.root_cause or 'Sin registrar',
+            "findings": self.root_cause or 'Sin registrar',
+            "solution": self.solution or 'Sin registrar',
+            "actions": self.solution or 'Sin registrar',
+            "recommendations": '',
+            "status": self.status or 'Abierto',
+            "validation_status": self.validation_status or '',
+            "is_technically_closed": bool(self.is_technically_closed),
+            "is_validated": bool(self.is_validated),
+            "is_pending_validation": bool(self.status in ["Pendiente de Validación", "Pendiente de Validación Policial"]),
+            "is_resolved": bool(self.is_resolved),
+            "is_rejected": bool(self.status == 'Rechazado' or self.validation_status == 'Rechazado'),
+            "is_overtime": bool(self.is_overtime),
+            "resolution_label": self.resolution_label or '',
+            "proactive_label": self.resolution_label or '',
+            "validator": validator_name,
+            "validator_badge": validator_badge,
+            "validator_document": validator_doc,
+            "validator_role": validator_role,
+            "validator_sig": validator_sig,
+            "validator_rank": 'Validador Policial - SIGMC' if self.is_validated else '',
+            "validator_unit": 'Sistema Integral de Gestión de Mantenimiento CCTV - SIGMC' if self.is_validated else '',
+            "validated_at": self.validated_at.strftime('%d/%m/%Y %H:%M') if (self.is_validated and self.validated_at) else '',
+            "validation_notes": val_notes,
+            "initial_img": self.image_path or '',
+            "closing_img": self.closing_image_path or '',
+            "rejection_img": self.rejection_photo or ''
+        }
 
     def __repr__(self):
         return f"<Incident id={self.id} ticket={self.ticket_number} title={self.title} status={self.status}>"

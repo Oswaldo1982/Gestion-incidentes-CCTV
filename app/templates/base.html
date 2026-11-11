@@ -1,64 +1,128 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-gray-100">
+<html lang="es" class="h-full bg-[#eef2f6]">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="color-scheme" content="light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
     <title>{% block title %}CCTV Incidentes{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/js/tailwind.js"></script>
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af' }
+        if (typeof tailwind === 'undefined') {
+            document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+        }
+    </script>
+    <script>
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            brand: { 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af' }
+                        }
                     }
                 }
-            }
+            };
         }
     </script>
     <style>
         [x-cloak] { display: none !important; }
+        /* Asegurar visibilidad nítida de controles de fecha en cualquier tema */
+        input[type="date"] { color-scheme: light; }
+        /* Protección anti-desbordamiento visual para SVG e iconos */
+        svg { max-width: 100%; }
+        header svg, aside svg, .w-4, .w-5, .w-6, .w-7, .w-8, .w-10, .w-11 { display: inline-block; }
+        .w-4 { width: 1rem; height: 1rem; }
+        .w-5 { width: 1.25rem; height: 1.25rem; }
+        .w-6 { width: 1.5rem; height: 1.5rem; }
+        .w-7 { width: 1.75rem; height: 1.75rem; }
+        .w-8 { width: 2rem; height: 2rem; }
+        .w-10 { width: 2.5rem; height: 2.5rem; }
+        .w-11 { width: 2.75rem; height: 2.75rem; }
 
-        /* Escala y densidad óptima para monitoreo de escritorio y prevención de Font Boosting */
+        /* Normalización multi-navegador (Chrome, Brave, Opera, Safari, Edge, Firefox) */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Escala proporcional homogénea en todos los navegadores y densidades de pantalla (DPI) */
         html {
-            font-size: 14.5px;
+            font-size: 13.5px;
             -webkit-text-size-adjust: 100%;
             -moz-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
             text-size-adjust: 100%;
+            text-rendering: optimizeLegibility;
+        }
+
+        /* Pantallas de escritorio y portátiles: proporción compacta idéntica a Edge en Chrome/Brave/Opera/Safari */
+        @media (min-width: 1024px) {
+            html {
+                font-size: 13px;
+            }
+        }
+        /* Compensación automática para pantallas con escalado de sistema (125% / 150% DPI en Windows/macOS) */
+        @media (min-width: 1024px) and (max-width: 1600px) and (-webkit-min-device-pixel-ratio: 1.2),
+               (min-width: 1024px) and (max-width: 1600px) and (min-resolution: 115dpi) {
+            html {
+                font-size: 12.25px;
+            }
         }
         @media (min-width: 1536px) {
             html {
-                font-size: 15px;
+                font-size: 13.5px;
             }
         }
         @media (min-width: 1920px) {
             html {
-                font-size: 16px;
+                font-size: 14.25px;
             }
         }
 
-        /* Prevención del auto-zoom solo en pantallas táctiles móviles reales */
-        @media screen and (max-width: 768px) and (hover: none) and (pointer: coarse) {
+        /* Prevención del auto-zoom al enfocar campos en celulares y tabletas (iOS Safari y Android Chrome) */
+        @media screen and (max-width: 1024px) and (hover: none) and (pointer: coarse) {
             input, select, textarea {
                 font-size: 16px !important;
             }
         }
 
-        /* Viewport dinámico para iOS Safari y Android Chrome */
+        /* Viewport dinámico real para iOS Safari, iPadOS y Android (evita corte por barra de navegación móvil) */
         html, body {
+            width: 100%;
             min-height: 100vh;
             min-height: -webkit-fill-available;
             min-height: 100dvh;
+            overflow-x: hidden;
             -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
         }
 
-        /* Soporte para Safe Areas en iPhone (Notch / Dynamic Island) */
-        .safe-pb { padding-bottom: env(safe-area-inset-bottom, 16px); }
-        .safe-pt { padding-top: env(safe-area-inset-top, 16px); }
+        .app-viewport-shell {
+            height: 100vh;
+            height: -webkit-fill-available;
+            height: 100dvh;
+        }
 
-        /* Scrollbars elegantes y homogéneas (Firefox + WebKit/Blink) */
+        /* Desplazamiento táctil fluido en tablas y contenedores para Android e iOS */
+        .overflow-x-auto, .overflow-y-auto, main {
+            -webkit-overflow-scrolling: touch;
+        }
+        .overflow-x-auto {
+            max-width: 100%;
+            overscroll-behavior-x: contain;
+        }
+
+        /* Soporte para Safe Areas en iPhone / iPad (Notch / Dynamic Island / Home Indicator) */
+        .safe-pb { padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem); }
+        .safe-pt { padding-top: max(env(safe-area-inset-top, 0px), 0.5rem); }
+
+        /* Scrollbars elegantes y homogéneas (Firefox + WebKit/Blink: Chrome, Brave, Opera, Safari, Edge) */
         * {
             scrollbar-width: thin;
             scrollbar-color: #475569 #0f172a;
@@ -78,10 +142,137 @@
             background: #64748b;
         }
 
-        /* Prefijo explícito de desenfoque de fondo para Safari <= 15.6 */
-        .backdrop-blur-xl, .backdrop-blur-lg, .backdrop-blur-sm, .backdrop-blur-md {
-            -webkit-backdrop-filter: blur(16px);
-            backdrop-filter: blur(16px);
+        /* Prefijo explícito de desenfoque de fondo para Safari (macOS / iOS) */
+        .backdrop-blur-xl, .backdrop-blur-lg, .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-xs {
+            -webkit-backdrop-filter: blur(12px);
+            backdrop-filter: blur(12px);
+        }
+
+        /* Retícula técnica de fondo de alta precisión sobre gris platino/azulado limpio */
+        .cctv-dashboard-grid {
+            background-color: #eef2f6;
+            background-image: 
+                /* Gradientes difuminados ambientales SOC en esquinas (opacidad < 5%) */
+                radial-gradient(circle at 100% 0%, rgba(6, 182, 212, 0.045) 0%, transparent 45%),
+                radial-gradient(circle at 0% 100%, rgba(37, 99, 235, 0.038) 0%, transparent 40%),
+                radial-gradient(ellipse at 50% -5%, rgba(59, 130, 246, 0.035) 0%, transparent 45%),
+                /* Micro-retícula geométrica de alta precisión */
+                linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+        }
+
+        /* Elevación flotante suave y elegante para contenedores sobre el fondo tecnológico */
+        main .bg-white,
+        main .bg-white\/95 {
+            box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.025);
+        }
+
+        /* ───── BARRA LATERAL AZUL PROFUNDO SOC / RADAR (#0A1128 a #0F172A) ───── */
+        .soc-sidebar {
+            background-color: #0A1128;
+            background-image: 
+                /* Resplandor ambiental de radar cian y azul eléctrico en las esquinas */
+                radial-gradient(circle at 100% 0%, rgba(0, 240, 255, 0.12) 0%, transparent 45%),
+                radial-gradient(circle at 0% 100%, rgba(37, 99, 235, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.05) 0%, transparent 60%),
+                /* Rejilla técnica semitransparente tipo radar idéntica a la pantalla de acceso */
+                linear-gradient(to right, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(56, 189, 248, 0.04) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+            /* Borde derecho iluminado con resplandor cian brillante (#00F0FF) */
+            border-right: 1px solid rgba(0, 240, 255, 0.28);
+            box-shadow: 4px 0 25px rgba(0, 240, 255, 0.12), 10px 0 40px rgba(10, 17, 40, 0.7);
+        }
+
+        .soc-nav-item {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            border-radius: 0.85rem;
+            overflow: hidden;
+        }
+
+        /* Hover dinámico: Cristal oscuro con micro-grilla técnica de monitoreo y brillo perimetral cian */
+        .soc-nav-item:hover:not(.active-soc):not(.soc-validation-active) {
+            transform: translateX(4px);
+            background-color: rgba(10, 25, 55, 0.7);
+            background-image: 
+                /* Micro-grilla técnica de centro de control CCTV */
+                linear-gradient(to right, rgba(0, 240, 255, 0.08) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 240, 255, 0.08) 1px, transparent 1px),
+                /* Gradiente sutil de iluminación horizontal */
+                linear-gradient(90deg, rgba(6, 182, 212, 0.18) 0%, rgba(37, 99, 235, 0.12) 60%, transparent 100%);
+            background-size: 10px 10px, 10px 10px, 100% 100%;
+            border: 1px solid rgba(0, 240, 255, 0.45);
+            color: #ffffff;
+            box-shadow: 0 0 16px rgba(0, 240, 255, 0.2), inset 0 0 12px rgba(0, 240, 255, 0.08);
+        }
+        .soc-nav-item:hover:not(.active-soc) svg {
+            color: #00F0FF;
+            filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.85));
+        }
+
+        /* Ítem Activo: Textura tecnológica de visor CCTV / SOC con micro-malla, scanline y neón cian */
+        .soc-nav-item.active-soc {
+            transform: translateX(4px);
+            background-color: #0c1a38;
+            background-image: 
+                /* Micro-retícula geométrica de precisión CCTV (10x10px) */
+                linear-gradient(to right, rgba(0, 240, 255, 0.12) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 240, 255, 0.12) 1px, transparent 1px),
+                /* Efecto scanline sutil tipo telemetría de monitoreo */
+                linear-gradient(180deg, rgba(0, 240, 255, 0.06) 50%, transparent 50%),
+                /* Gradiente de profundidad azul noche / cian eléctrico */
+                linear-gradient(90deg, rgba(14, 165, 233, 0.32) 0%, rgba(30, 58, 138, 0.4) 60%, rgba(6, 182, 212, 0.2) 100%);
+            background-size: 10px 10px, 10px 10px, 100% 4px, 100% 100%;
+            border: 1px solid rgba(0, 240, 255, 0.75);
+            color: #ffffff;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.35), inset 0 0 16px rgba(0, 240, 255, 0.15), 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+        .soc-nav-item.active-soc svg {
+            filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.95));
+            color: #00F0FF;
+        }
+        .soc-nav-item.active-soc::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 4px;
+            bottom: 4px;
+            width: 4px;
+            border-radius: 0 4px 4px 0;
+            background: #00F0FF;
+            box-shadow: 0 0 12px #00F0FF, 0 0 20px rgba(0, 240, 255, 0.95);
+        }
+
+        /* Validación Policial Activa con Textura de Seguridad y Telemetría */
+        .soc-validation-active {
+            transform: translateX(4px);
+            background-color: #171033 !important;
+            background-image: 
+                linear-gradient(to right, rgba(216, 180, 254, 0.12) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(216, 180, 254, 0.12) 1px, transparent 1px),
+                linear-gradient(180deg, rgba(245, 158, 11, 0.06) 50%, transparent 50%),
+                linear-gradient(90deg, rgba(147, 51, 234, 0.35) 0%, rgba(88, 28, 135, 0.4) 60%, rgba(245, 158, 11, 0.2) 100%) !important;
+            background-size: 10px 10px, 10px 10px, 100% 4px, 100% 100% !important;
+            border: 1px solid rgba(216, 180, 254, 0.75) !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), inset 0 0 16px rgba(216, 180, 254, 0.15) !important;
+        }
+        .soc-validation-active svg {
+            filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.95)) !important;
+            color: #fbbf24 !important;
+        }
+        .soc-validation-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 4px;
+            bottom: 4px;
+            width: 4px;
+            border-radius: 0 4px 4px 0;
+            background: #fbbf24;
+            box-shadow: 0 0 12px #fbbf24, 0 0 20px rgba(245, 158, 11, 0.95);
         }
     </style>
 
@@ -120,176 +311,220 @@
             }
         };
     </script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="/static/js/alpine.min.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof Alpine === 'undefined') {
+                const s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js';
+                s.defer = true;
+                document.head.appendChild(s);
+            }
+        });
+    </script>
 </head>
-<body class="h-full font-sans">
+<body class="h-full font-sans bg-[#eef2f6] text-slate-800">
 
 {% if current_user and not current_user.must_change_password %}
 <!-- ───── SIDEBAR + LAYOUT ───── -->
-<div class="flex h-full" x-data="{ sidebarOpen: false }">
+<div class="flex app-viewport-shell w-full overflow-hidden bg-[#eef2f6]" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
 
-    <!-- Mobile overlay -->
+    <!-- Mobile & Tablet overlay -->
     <div x-show="sidebarOpen" x-cloak @click="sidebarOpen=false"
-         class="fixed inset-0 z-20 bg-black/50 lg:hidden"></div>
+         x-transition:enter="transition-opacity ease-linear duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity ease-linear duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-30 bg-slate-950/70 backdrop-blur-xs lg:hidden"></div>
 
-    <!-- Sidebar -->
+    <!-- Sidebar Cyberpunk / SOC de Última Generación -->
     <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
-           class="fixed inset-y-0 left-0 z-30 w-64 bg-gray-900 text-white flex flex-col transition-transform duration-200 lg:relative lg:translate-x-0 lg:flex">
+           class="soc-sidebar fixed inset-y-0 left-0 z-40 w-64 max-w-[82vw] text-white flex flex-col transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:flex shrink-0 safe-pt safe-pb">
 
-        <!-- Logo -->
-        <div class="flex items-center gap-3 px-6 py-5 border-b border-gray-700">
-            <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-            </svg>
-            <div>
-                <p class="font-bold text-sm leading-tight">CCTV Gestión</p>
-                <p class="text-xs text-gray-400">Incidentes & Mantenimiento</p>
+        <!-- Logo Header Cyberpunk / SOC -->
+        <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-cyan-500/20 bg-[#0A1128]/80 relative overflow-hidden shrink-0">
+            <!-- Destello cian tenue en esquina -->
+            <div class="absolute -top-6 -left-6 w-20 h-20 bg-cyan-500/15 rounded-full blur-xl pointer-events-none"></div>
+
+            <div class="flex items-center gap-3 min-w-0 relative z-10">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600/30 via-indigo-600/20 to-cyan-500/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shrink-0 shadow-[0_0_15px_rgba(0,240,255,0.3)] transition-transform hover:scale-105">
+                    <svg class="w-5 h-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(0,240,255,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <p class="font-black text-sm leading-tight text-white tracking-wider font-mono drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">CCTV GESTIÓN</p>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="relative flex h-2 w-2">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_#10B981]"></span>
+                        </span>
+                        <p class="text-[10px] text-cyan-400 font-mono tracking-widest uppercase font-bold">SOC OPERATIVO</p>
+                    </div>
+                </div>
             </div>
+            <button type="button" @click="sidebarOpen = false" class="lg:hidden text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/80 transition" aria-label="Cerrar menú">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
         </div>
 
-        <!-- Nav Links -->
-        <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+        <!-- Nav Links con micro-interacciones Cyberpunk / SOC -->
+        <nav class="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
             <a href="/dashboard"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'dashboard' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'dashboard' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
                 </svg>
-                Dashboard
+                <span class="font-bold">Dashboard</span>
             </a>
 
             <a href="/incidents"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'incidents' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'incidents' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-                Incidentes
+                <span class="font-bold">Incidentes</span>
             </a>
 
             <a href="/maintenance"
-               class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'maintenance' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
+               class="soc-nav-item flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'maintenance' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
                 <div class="flex items-center gap-3">
                     <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
-                    <span>Mantenimientos</span>
+                    <span class="font-bold">Mantenimientos</span>
                 </div>
             </a>
 
-            {% if current_user.role in ['Validador', 'Admin', 'Supervisor'] %}
+            {% if current_user.role in ['Validador', 'Admin', 'Supervisor', 'Empresa de Mantenimiento', 'Operario'] %}
             <a href="/validation"
-               class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'validation' %}bg-purple-700 text-white shadow-md shadow-purple-900/30{% else %}text-purple-200 hover:bg-purple-900/40 hover:text-white{% endif %} transition border border-purple-500/20">
+               class="soc-nav-item flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border {% if active_page == 'validation' %}soc-validation-active{% else %}border-purple-500/25 bg-purple-950/20 text-purple-200 hover:bg-purple-900/35 hover:border-purple-400/50 hover:text-white{% endif %}">
                 <div class="flex items-center gap-3">
-                    <svg class="w-5 h-5 shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 shrink-0 text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.6)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
-                    <span>Validación Policial</span>
+                    <span class="font-bold">Validación Policial</span>
                 </div>
                 {% if pending_validation_count and pending_validation_count > 0 %}
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 animate-pulse" title="Órdenes pendientes de dictamen policial">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black font-mono bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.6)] animate-pulse" title="Órdenes pendientes de dictamen policial">
                     {{ pending_validation_count }}
                 </span>
                 {% endif %}
             </a>
             {% else %}
-            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
+            <div class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-500 bg-slate-950/40 border border-slate-800/80 cursor-not-allowed opacity-50"
                  title="Acceso restringido: Exclusivo para Validador Policial, Administrador y Supervisión">
                 <div class="flex items-center gap-3">
-                    <svg class="w-5 h-5 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 shrink-0 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
                     <span>Validación Policial</span>
                 </div>
-                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Sin Acceso</span>
+                <span class="text-[9px] uppercase font-bold text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">🔒 Sin Acceso</span>
             </div>
             {% endif %}
 
             <a href="/devices"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'devices' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'devices' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
                 </svg>
-                Equipos CCTV
+                <span class="font-bold">Equipos CCTV</span>
             </a>
 
             <a href="/reports"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'reports' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'reports' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                 </svg>
-                Estadísticas e Informes
+                <span class="font-bold">Estadísticas e Informes</span>
             </a>
 
-            {% if current_user.role == 'Admin' %}
+            {% set is_demo_env = demo_mode or request.cookies.get('is_demo_session') == 'true' or (current_site and current_site.id == 'sitio-prueba') or current_user.username == 'admin_demo' %}
+
+            {% if current_user.role == 'Admin' and not is_demo_env %}
             <a href="/users"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'users' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'users' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                 </svg>
-                Usuarios
+                <span class="font-bold">Usuarios</span>
             </a>
             {% else %}
-            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
-                 title="Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de usuarios">
+            <div class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-500 bg-slate-950/40 border border-slate-800/80 cursor-not-allowed opacity-50"
+                 title="{% if is_demo_env %}Opción deshabilitada por seguridad en el entorno Demo{% else %}Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de usuarios{% endif %}">
                 <div class="flex items-center gap-3">
-                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 shrink-0 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
                     <span>Usuarios</span>
                 </div>
-                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Solo Admin</span>
+                <span class="text-[9px] uppercase font-bold text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">{% if is_demo_env %}🔒 Deshabilitado{% else %}🔒 Solo Admin{% endif %}</span>
             </div>
             {% endif %}
 
-            {% if current_user.role == 'Admin' %}
+            {% if current_user.role == 'Admin' and not is_demo_env %}
             <a href="/license"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium {% if active_page == 'license' %}bg-blue-600 text-white{% else %}text-gray-300 hover:bg-gray-700{% endif %} transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               class="soc-nav-item flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-mono tracking-wide border border-transparent {% if active_page == 'license' %}active-soc{% else %}text-slate-300 hover:text-cyan-200{% endif %}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                 </svg>
-                Licencia
+                <span class="font-bold">Licencia</span>
             </a>
             {% else %}
-            <div class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-500 bg-gray-800/30 border border-gray-800 cursor-not-allowed opacity-50"
-                 title="Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de licencias">
+            <div class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-mono text-slate-500 bg-slate-950/40 border border-slate-800/80 cursor-not-allowed opacity-50"
+                 title="{% if is_demo_env %}Opción deshabilitada por seguridad en el entorno Demo{% else %}Acceso restringido: Solo el Administrador Principal puede acceder a la gestión de licencias{% endif %}">
                 <div class="flex items-center gap-3">
-                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-5 h-5 shrink-0 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
                     <span>Licencia</span>
                 </div>
-                <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-700/50 px-1.5 py-0.5 rounded">🔒 Solo Admin</span>
+                <span class="text-[9px] uppercase font-bold text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">{% if is_demo_env %}🔒 Deshabilitado{% else %}🔒 Solo Admin{% endif %}</span>
             </div>
             {% endif %}
         </nav>
 
-        <!-- User info at bottom -->
-        <div class="px-4 py-4 border-t border-gray-700">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-sm font-bold">
+        <!-- Tarjeta de Perfil Cyberpunk / SOC en Pie de Barra (Consistente con la Interfaz Inicial) -->
+        <div class="p-3 m-3 rounded-2xl bg-gradient-to-br from-[#0c1736]/95 via-[#0A1128]/95 to-[#0F172A]/95 border border-cyan-400/35 shadow-[0_10px_25px_rgba(0,0,0,0.5),0_0_15px_rgba(0,240,255,0.12)] backdrop-blur-2xl relative overflow-hidden group shrink-0">
+            <!-- Micro resplandor perimetral cian -->
+            <div class="absolute -right-6 -bottom-6 w-20 h-20 bg-cyan-400/15 rounded-full blur-xl pointer-events-none group-hover:bg-cyan-400/25 transition-all duration-300"></div>
+
+            <div class="flex items-center gap-2.5 relative z-10">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 border border-cyan-300/50 flex items-center justify-center text-sm font-black font-mono text-white shrink-0 shadow-[0_0_15px_rgba(0,240,255,0.45)]">
                     {{ (current_user.full_name[0] if current_user.full_name else current_user.username[0]) | upper }}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium truncate">{{ current_user.full_name if current_user.full_name else current_user.username }}</p>
-                    <div class="flex items-center gap-1.5 mt-0.5">
-                        <span class="text-xs text-gray-400">{{ current_user.role }}</span>
-                        {% if current_user.role == 'Admin' %}
-                        <span class="text-gray-600">&bull;</span>
-                        <a href="/users?edit_profile=1" title="Editar mis datos y firma digital" class="text-[10px] text-purple-400 hover:text-purple-300 font-semibold underline">Editar mis datos</a>
+                    <p class="text-xs font-bold text-white truncate font-mono tracking-wide" title="{{ current_user.full_name if current_user.full_name else current_user.username }}">
+                        {{ current_user.full_name if current_user.full_name else current_user.username }}
+                    </p>
+                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span class="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold tracking-wider uppercase bg-cyan-950/90 text-cyan-300 border border-cyan-400/40 shadow-[0_0_8px_rgba(0,240,255,0.15)]">
+                            {{ current_user.role }}
+                        </span>
+                        {% if current_user.role == 'Admin' and not is_demo_env %}
+                        <a href="/users?edit_profile=1" title="Editar mis datos y firma digital" class="text-[9.5px] text-cyan-300 hover:text-cyan-100 font-mono font-semibold underline whitespace-nowrap transition">
+                            Editar
+                        </a>
                         {% endif %}
                     </div>
                 </div>
                 <a href="/logout" title="Cerrar sesión"
-                   class="text-gray-400 hover:text-white transition">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   class="w-8 h-8 rounded-xl bg-slate-900/80 hover:bg-rose-500/25 border border-slate-700/80 hover:border-rose-400/60 text-slate-400 hover:text-rose-200 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 shadow-xs cursor-pointer shrink-0">
+                    <svg class="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                     </svg>
@@ -341,27 +576,29 @@
         </div>
         {% endif %}
 
-        <!-- Top bar (Desktop & Mobile) -->
-        <header class="bg-white border-b border-slate-200/90 px-6 py-3 shadow-sm flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-                <button @click="sidebarOpen=!sidebarOpen" class="lg:hidden text-slate-600 hover:text-slate-900 p-1.5 rounded-lg border border-slate-200">
+        <!-- Top bar (Desktop, Tablet & Mobile) con Estilo Azul Claro Tecnológico -->
+        <header class="bg-white/95 border-b border-blue-100/90 px-3 sm:px-5 lg:px-6 py-2.5 sm:py-3 shadow-xs backdrop-blur-md flex items-center justify-between gap-2 sm:gap-4 shrink-0 z-20">
+            <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <button @click="sidebarOpen=!sidebarOpen" class="lg:hidden text-slate-600 hover:text-slate-900 p-2 rounded-lg border border-slate-200 shrink-0 active:bg-slate-100 transition" aria-label="Abrir menú">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                     </svg>
                 </button>
-                <div>
-                    <h2 class="font-bold text-base text-slate-900 leading-tight">{% block page_title %}{% endblock %}</h2>
-                    <span class="text-[11px] text-slate-500 font-medium hidden sm:inline">Monitoreo CCTV &amp; Control Operativo</span>
+                <div class="min-w-0">
+                    <h2 class="font-extrabold text-sm sm:text-base text-slate-900 leading-tight truncate tracking-tight">{% block page_title %}{% endblock %}</h2>
+                    <span class="text-[11px] text-blue-600 font-medium hidden sm:inline-flex items-center gap-1.5">
+                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Monitoreo CCTV &amp; Control Operativo
+                    </span>
                 </div>
             </div>
 
-            <!-- Right Controls: Fixed Authenticated Site Badge (No Switcher) -->
-            <div class="flex items-center gap-2.5">
-                <div class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/90 text-xs font-semibold text-slate-800 shadow-sm">
-                    <span class="text-base">{{ current_site.icon if current_site else '📍' }}</span>
-                    <div class="text-left">
-                        <span class="text-[9px] text-slate-500 uppercase tracking-wider block leading-none font-bold">Sede Activa</span>
-                        <span class="text-xs font-bold text-slate-900 leading-tight">{{ current_site.full_name if current_site else 'Sede Territorial' }}</span>
+            <!-- Right Controls: Fixed Authenticated Site Badge -->
+            <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-xs font-semibold text-slate-800 shadow-2xs max-w-[200px] sm:max-w-none backdrop-blur-md">
+                    <span class="text-sm sm:text-base shrink-0">{{ current_site.icon if current_site else '📍' }}</span>
+                    <div class="text-left min-w-0">
+                        <span class="text-[9px] text-blue-600 uppercase tracking-wider block leading-none font-bold">Sede Activa</span>
+                        <span class="text-[11px] sm:text-xs font-bold text-slate-900 leading-tight block truncate">{{ current_site.full_name if current_site else 'Sede Territorial' }}</span>
                     </div>
                 </div>
             </div>
@@ -369,28 +606,397 @@
 
         <!-- Flash messages -->
         {% if flash_success %}
-        <div class="mx-6 mt-4 p-3 bg-green-100 border border-green-300 text-green-800 rounded-lg text-sm flex items-center gap-2">
-            <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <div class="mx-3 sm:mx-6 mt-3 sm:mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center gap-2 shadow-xs">
+            <svg class="w-4 h-4 shrink-0 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
             </svg>
             {{ flash_success }}
         </div>
         {% endif %}
         {% if flash_error %}
-        <div class="mx-6 mt-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg text-sm flex items-center gap-2">
-            <svg class="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <div class="mx-3 sm:mx-6 mt-3 sm:mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-sm flex items-center gap-2 shadow-xs">
+            <svg class="w-4 h-4 shrink-0 text-rose-600" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
             </svg>
             {{ flash_error }}
         </div>
         {% endif %}
 
-        <!-- Page content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <!-- Page content con Fondo Azul Claro Tecnológico CCTV -->
+        <main id="realtime-main-content" class="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-6 safe-pb cctv-dashboard-grid relative">
             {% block content %}{% endblock %}
         </main>
     </div>
 </div>
+
+<!-- Motor de Sincronización en Tiempo Real (SSE + WebSocket Fallback) -->
+<script>
+(function() {
+    if (window.__cctvRealtimeInitialized) return;
+    window.__cctvRealtimeInitialized = true;
+
+    let eventSource = null;
+    let wsConnection = null;
+    let syncTimeout = null;
+    let deferredCheckInterval = null;
+    let isSyncing = false;
+    let pendingSync = false;
+    let lastKnownVersion = -1;
+
+    const MODAL_STATE_KEYS = [
+        'openModal', 'closeModal', 'traceModal', 'validateModal',
+        'imagePreviewModal', 'reviewModal', 'imageModal', 'obsModal',
+        'completeModal', 'openRelocateModal', 'openDeleteModal',
+        'openProfileModal', 'openCredsModal'
+    ];
+
+    const PRESERVED_FILTER_KEYS = [
+        'searchQuery', 'selectedStatus', 'selectedFault', 'selectedPriority',
+        'selectedPoint', 'activeTab', 'filterType', 'selectedSitio',
+        'selectedType', 'pointFilter', 'viewMode', 'selectedFrequency',
+        'roleFilter', 'statusFilter', 'currentPeriod', 'customMode',
+        'customStart', 'customEnd', 'selectedDate'
+    ];
+
+    function getMainRootXData() {
+        const mainEl = document.getElementById('realtime-main-content');
+        if (!mainEl) return null;
+        return mainEl.querySelector('[x-data]');
+    }
+
+    function isUserInteractingWithModalOrForm() {
+        const rootEl = getMainRootXData();
+        if (rootEl && window.Alpine && typeof window.Alpine.$data === 'function') {
+            try {
+                const state = window.Alpine.$data(rootEl);
+                if (state) {
+                    for (const key of MODAL_STATE_KEYS) {
+                        if (Boolean(state[key])) return true;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        const active = document.activeElement;
+        if (active && active.tagName && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) {
+            if (active.closest('form')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    async function performRealtimeDomSync() {
+        if (isSyncing) {
+            pendingSync = true;
+            return;
+        }
+        if (isUserInteractingWithModalOrForm()) {
+            pendingSync = true;
+            startDeferredSyncWatcher();
+            return;
+        }
+
+        const mainEl = document.getElementById('realtime-main-content');
+        if (!mainEl) return;
+
+        isSyncing = true;
+        pendingSync = false;
+
+        try {
+            const fetchUrl = new URL(window.location.href);
+            fetchUrl.searchParams.delete('msg');
+            fetchUrl.searchParams.delete('error');
+
+            const response = await fetch(fetchUrl.toString(), {
+                method: 'GET',
+                headers: {
+                    'X-Realtime-Sync': '1',
+                    'Accept': 'text/html'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+
+            if (!response.ok || response.redirected) {
+                isSyncing = false;
+                return;
+            }
+
+            const htmlText = await response.text();
+            const parser = new DOMParser();
+            const parsedDoc = parser.parseFromString(htmlText, 'text/html');
+            const newMainEl = parsedDoc.getElementById('realtime-main-content');
+            if (!newMainEl) {
+                isSyncing = false;
+                return;
+            }
+
+            if (isUserInteractingWithModalOrForm()) {
+                pendingSync = true;
+                startDeferredSyncWatcher();
+                isSyncing = false;
+                return;
+            }
+
+            // 1. Actualizar contador de Validación Policial en la barra lateral
+            const currentValLink = document.querySelector('aside a[href="/validation"]');
+            const newValLink = parsedDoc.querySelector('aside a[href="/validation"]');
+            if (currentValLink && newValLink) {
+                currentValLink.innerHTML = newValLink.innerHTML;
+            }
+
+            // 2. Preservar estado de filtros, scroll y foco de búsqueda
+            const scrollTop = mainEl.scrollTop;
+            const currentRootEl = getMainRootXData();
+            const savedFilterState = {};
+
+            if (currentRootEl && window.Alpine && typeof window.Alpine.$data === 'function') {
+                try {
+                    const currentData = window.Alpine.$data(currentRootEl);
+                    if (currentData) {
+                        for (const k of PRESERVED_FILTER_KEYS) {
+                            if (currentData[k] !== undefined) {
+                                savedFilterState[k] = currentData[k];
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            let focusedSearchModel = null;
+            let selStart = null;
+            let selEnd = null;
+            const activeEl = document.activeElement;
+            if (activeEl && mainEl.contains(activeEl) && activeEl.getAttribute('x-model')) {
+                focusedSearchModel = activeEl.getAttribute('x-model');
+                try {
+                    selStart = activeEl.selectionStart;
+                    selEnd = activeEl.selectionEnd;
+                } catch (e) {}
+            }
+
+            // 3. Sincronizar bloques JSON auxiliares si existen en la vista
+            const newDevicesJsonEl = parsedDoc.getElementById('site-devices-data');
+            if (newDevicesJsonEl) {
+                try {
+                    window.__SITE_DEVICES__ = JSON.parse(newDevicesJsonEl.textContent || '[]');
+                } catch (e) {}
+            }
+
+            const newReportsJsonEl = parsedDoc.getElementById('reports-chart-data');
+            if (newReportsJsonEl) {
+                try {
+                    window.__REPORTS_DATA__ = JSON.parse(newReportsJsonEl.textContent || '{}');
+                } catch (e) {}
+            }
+
+            // 4. Actualizar dinámicamente el contenedor principal sin recargar la página
+            const newRootEl = newMainEl.querySelector('[x-data]');
+            if (currentRootEl && newRootEl) {
+                currentRootEl.replaceWith(newRootEl);
+            } else {
+                mainEl.innerHTML = newMainEl.innerHTML;
+            }
+
+            // Actualizar scripts de datos de gráficos en Dashboard si existen
+            ['chart-operatividad-data', 'chart-puntos-data', 'site-devices-data', 'reports-chart-data'].forEach(id => {
+                const oldScript = document.getElementById(id);
+                const freshScript = parsedDoc.getElementById(id);
+                if (oldScript && freshScript) {
+                    oldScript.textContent = freshScript.textContent;
+                }
+            });
+
+            // 5. Restaurar filtros reactivos de Alpine, posición de scroll y gráficos
+            const restoreState = () => {
+                const updatedRootEl = getMainRootXData();
+                if (updatedRootEl && window.Alpine && typeof window.Alpine.$data === 'function') {
+                    try {
+                        const updatedData = window.Alpine.$data(updatedRootEl);
+                        if (updatedData) {
+                            Object.keys(savedFilterState).forEach(k => {
+                                updatedData[k] = savedFilterState[k];
+                            });
+                            if (window.__SITE_DEVICES__ && updatedData.siteDevices !== undefined) {
+                                updatedData.siteDevices = window.__SITE_DEVICES__;
+                            }
+                            if (window.__SITE_DEVICES__ && updatedData.allDevices !== undefined) {
+                                updatedData.allDevices = window.__SITE_DEVICES__;
+                            }
+                            if (window.__REPORTS_DATA__ && updatedData.reportsData !== undefined) {
+                                updatedData.reportsData = window.__REPORTS_DATA__;
+                                updatedData.kpis = window.__REPORTS_DATA__.kpis || {};
+                                updatedData.chartsData = window.__REPORTS_DATA__.charts || {};
+                                if (typeof updatedData.renderAllCharts === 'function') {
+                                    updatedData.renderAllCharts();
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                mainEl.scrollTop = scrollTop;
+
+                if (focusedSearchModel) {
+                    const inputToFocus = mainEl.querySelector(`[x-model="${focusedSearchModel}"]`);
+                    if (inputToFocus) {
+                        inputToFocus.focus({ preventScroll: true });
+                        if (selStart !== null && selEnd !== null && typeof inputToFocus.setSelectionRange === 'function') {
+                            try { inputToFocus.setSelectionRange(selStart, selEnd); } catch (e) {}
+                        }
+                    }
+                }
+
+                if (typeof window.initDashboardCharts === 'function' && document.getElementById('operatividadChart')) {
+                    window.initDashboardCharts();
+                }
+                if (typeof window.renderReportsCharts === 'function' && document.getElementById('chartTimeline')) {
+                    window.renderReportsCharts();
+                }
+            };
+
+            if (window.Alpine && typeof window.Alpine.nextTick === 'function') {
+                window.Alpine.nextTick(restoreState);
+            } else {
+                requestAnimationFrame(restoreState);
+            }
+        } catch (err) {
+            console.debug('Error en sincronización en tiempo real:', err);
+        } finally {
+            isSyncing = false;
+            if (pendingSync) {
+                scheduleRealtimeSync(200);
+            }
+        }
+    }
+
+    function startDeferredSyncWatcher() {
+        if (deferredCheckInterval) return;
+        deferredCheckInterval = setInterval(() => {
+            if (!pendingSync) {
+                clearInterval(deferredCheckInterval);
+                deferredCheckInterval = null;
+                return;
+            }
+            if (!isUserInteractingWithModalOrForm()) {
+                clearInterval(deferredCheckInterval);
+                deferredCheckInterval = null;
+                performRealtimeDomSync();
+            }
+        }, 500);
+    }
+
+    function scheduleRealtimeSync(delayMs = 140) {
+        if (syncTimeout) clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(() => {
+            performRealtimeDomSync();
+        }, delayMs);
+    }
+
+    function handleIncomingEvent(rawData) {
+        try {
+            const msg = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+            if (msg && typeof msg.version === 'number') {
+                if (lastKnownVersion !== -1 && msg.version <= lastKnownVersion) {
+                    return;
+                }
+                lastKnownVersion = msg.version;
+            }
+        } catch (e) {}
+        scheduleRealtimeSync(140);
+    }
+
+    function connectWebSocketFallback() {
+        if (wsConnection) return;
+        try {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            wsConnection = new WebSocket(`${protocol}//${window.location.host}/ws/updates`);
+            wsConnection.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.event === 'connected') {
+                        lastKnownVersion = data.version ?? -1;
+                        return;
+                    }
+                    handleIncomingEvent(data);
+                } catch (e) {}
+            };
+            wsConnection.onclose = function() {
+                wsConnection = null;
+                setTimeout(connectRealtime, 3000);
+            };
+        } catch (e) {}
+    }
+
+    function connectRealtime() {
+        if (typeof window.EventSource !== 'undefined') {
+            try {
+                if (eventSource) eventSource.close();
+                eventSource = new EventSource('/api/realtime/stream');
+                eventSource.addEventListener('connected', function(e) {
+                    try {
+                        const data = JSON.parse(e.data);
+                        if (typeof data.version === 'number') {
+                            if (lastKnownVersion !== -1 && data.version > lastKnownVersion) {
+                                scheduleRealtimeSync(100);
+                            }
+                            lastKnownVersion = data.version;
+                        }
+                    } catch (err) {}
+                });
+                eventSource.addEventListener('update', function(e) {
+                    handleIncomingEvent(e.data);
+                });
+                eventSource.onerror = function() {
+                    // EventSource gestiona la reconexión automática nativa (retry: 2000ms)
+                };
+                return;
+            } catch (e) {}
+        }
+        connectWebSocketFallback();
+    }
+
+    window.addEventListener('pagehide', function() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        if (wsConnection) {
+            wsConnection.close();
+            wsConnection = null;
+        }
+    });
+
+    window.addEventListener('pageshow', function() {
+        if (!eventSource && !wsConnection) {
+            connectRealtime();
+        }
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', connectRealtime);
+    } else {
+        connectRealtime();
+    }
+
+    // Control de cierre automático de sesión tras 20 minutos de inactividad (todos los roles incluido Admin)
+    const INACTIVITY_LIMIT_MS = 20 * 60 * 1000;
+    let inactivityTimer = null;
+
+    function resetInactivityTimer() {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+            window.location.href = '/logout';
+        }, INACTIVITY_LIMIT_MS);
+    }
+
+    ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+        window.addEventListener(evt, resetInactivityTimer, { passive: true });
+    });
+    resetInactivityTimer();
+})();
+</script>
 
 {% else %}
 <!-- Layout público para login / páginas de autenticación -->

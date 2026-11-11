@@ -209,18 +209,27 @@ def update_incident(
         
         # Transición automática a Pendiente de Validación al marcar como completado/cerrado
         if target_status in ["Cerrado", "Pendiente de Validación"]:
+            if old_status in ["Abierto", "Rechazado"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Debe iniciar primero la atención del ticket {incident.ticket_code} (estado 'En Proceso') antes de finalizar y remitir a validación."
+                )
+            resolved_root_cause = incident_in.root_cause or incident.root_cause
+            resolved_solution = incident_in.solution or incident.solution
+            if not resolved_root_cause or not resolved_solution:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Debe proporcionar el diagnóstico de causa raíz y la solución técnica aplicada para finalizar y remitir a validación."
+                )
             target_status = "Pendiente de Validación"
             incident.status = "Pendiente de Validación"
             incident.validation_status = "Pendiente"
             incident.closed_at = get_local_now()
             incident.closed_by_id = current_user.id
+            incident.root_cause = resolved_root_cause.strip()
+            incident.solution = resolved_solution.strip()
             changes.append(f"status: {old_status} -> Pendiente de Validación")
-            if incident_in.root_cause:
-                incident.root_cause = incident_in.root_cause
-                changes.append("root_cause updated")
-            if incident_in.solution:
-                incident.solution = incident_in.solution
-                changes.append("solution updated")
+            changes.append("root_cause and solution updated")
         else:
             incident.status = target_status
             changes.append(f"status: {old_status} -> {target_status}")

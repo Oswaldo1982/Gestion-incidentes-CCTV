@@ -12,8 +12,10 @@ class UserBase(BaseModel):
     badge_number: Optional[str] = None
     signature_path: Optional[str] = None
     is_active: bool = True
+    is_deleted: bool = False
     must_change_password: bool = False
     temp_expires_at: Optional[datetime] = None
+    is_executive_signatory: bool = False
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)
@@ -39,6 +41,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     must_change_password: Optional[bool] = None
     temp_expires_at: Optional[datetime] = None
+    is_executive_signatory: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=6)
 
 class UserResponse(BaseModel):
@@ -54,6 +57,8 @@ class UserResponse(BaseModel):
     is_active: bool
     must_change_password: bool = False
     temp_expires_at: Optional[datetime] = None
+    is_executive_signatory: bool = False
+    is_deleted: bool = False
     created_at: datetime
 
     class Config:

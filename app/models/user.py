@@ -20,6 +20,9 @@ class User(Base):
     temp_expires_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     badge_number: Mapped[Optional[str]] = mapped_column(String, unique=True, index=True, nullable=True)
     signature_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_executive_signatory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     def __repr__(self):

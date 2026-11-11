@@ -57,19 +57,40 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     return encoded_jwt
 
 
-def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-    """Autentica a un usuario verificando sus credenciales institucionales (correo o usuario)."""
-    clean_id = username.strip()
+def authenticate_user(db: Session, username: str, password: Optional[str] = "") -> Optional[User]:
+    """
+    Autentica rigurosamente a un usuario verificando sus credenciales institucionales (correo o usuario)
+    y su contraseña encriptada (bcrypt).
+    """
+    clean_id = (username or "").strip()
+    clean_pw = (password or "").strip()
+    
+    # Obligatoriedad estricta de usuario/correo y contraseña
+    if not clean_id or not clean_pw:
+        return None
+
     user = db.query(User).filter(
         (User.email == clean_id.lower()) | (User.username == clean_id)
     ).first()
     if not user:
         return None
+
+    # No permitir ingreso de cuentas eliminadas o inactivas
+    if (user.username and user.username.startswith("deleted_")) or (user.email and user.email.startswith("deleted_")):
+        return None
+    if not user.is_active:
+        return None
+
     # El perfil Validador solo puede ingresar obligatoriamente mediante su correo electrónico institucional
-    if user.role == "Validador" and clean_id.lower() != user.email.lower():
+    if user.role == "Validador" and clean_id.lower() != (user.email or "").lower():
         return None
-    if not verify_password(password, user.hashed_password):
+
+    # Verificación estricta de hash de contraseña
+    if not user.hashed_password:
         return None
+    if not verify_password(clean_pw, user.hashed_password):
+        return None
+
     return user
 
 

@@ -1,6 +1,7 @@
 import json
 from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
+from app.services.realtime_service import realtime_manager
 
 def create_audit_log(
     db: Session,
@@ -11,7 +12,8 @@ def create_audit_log(
     ip_address: str | None = None
 ) -> AuditLog:
     """
-    Creates and persists an audit log entry.
+    Creates and persists an audit log entry, and broadcasts a real-time event
+    for operational changes.
     """
     details_str = None
     if details:
@@ -30,4 +32,11 @@ def create_audit_log(
     db.add(log_entry)
     db.commit()
     db.refresh(log_entry)
+
+    if action and not action.startswith(("WEB_LOGIN", "DEMO_ROLE_SWITCH", "PASSWORD_RESET", "PDF_REPORT_GENERATED")):
+        realtime_manager.notify(
+            event_type=action,
+            payload={"action": action, "username": username, "details": details or {}}
+        )
+
     return log_entry

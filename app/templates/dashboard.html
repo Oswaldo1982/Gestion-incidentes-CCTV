@@ -4,58 +4,65 @@
 {% block page_title %}Dashboard Ejecutivo CCTV{% endblock %}
 
 {% block content %}
-<div class="space-y-6 max-w-7xl mx-auto" x-data="{ pointFilter: '{{ selected_sede }}', viewMode: 'cards' }">
+<div class="space-y-6 max-w-7xl mx-auto relative" x-data="{ pointFilter: '{{ selected_sede }}', viewMode: 'cards' }">
 
-    <!-- ───── 1. BANNER EJECUTIVO DE ESTADO GENERAL (SEMÁFORO INTELIGENTE) ───── -->
-    <div class="bg-gradient-to-r {{ system_health.bg_gradient }} border {{ system_health.border }} rounded-3xl p-6 sm:p-8 shadow-2xl text-white relative overflow-hidden transition-all duration-300">
-        <!-- Glow ambiental de fondo -->
-        <div class="absolute -right-10 -top-10 w-96 h-96 {% if system_health.level == 'critical' %}bg-rose-500/15{% elif system_health.level == 'warning' %}bg-amber-500/15{% else %}bg-emerald-500/15{% endif %} rounded-full blur-3xl pointer-events-none"></div>
+    <!-- Luces Ambientales de Fondo (Luminous Tech Glows con opacidad < 5%) -->
+    <div class="absolute -top-12 -right-12 w-[30rem] h-[30rem] bg-cyan-400/4 rounded-full blur-[140px] pointer-events-none"></div>
+    <div class="absolute top-1/2 -left-20 w-[26rem] h-[26rem] bg-blue-500/3 rounded-full blur-[130px] pointer-events-none"></div>
+
+    <!-- ───── 1. BANNER EJECUTIVO DE ESTADO GENERAL (CONSOLA DE MANDO SOC LIGHT BLUE) ───── -->
+    <div class="bg-gradient-to-br from-white via-blue-50/80 to-sky-100/70 border-2 {% if system_health.level == 'critical' %}border-rose-300 shadow-[0_12px_35px_rgba(244,63,94,0.12)]{% elif system_health.level == 'warning' %}border-amber-300 shadow-[0_12px_35px_rgba(245,158,11,0.12)]{% else %}border-emerald-300 shadow-[0_12px_35px_rgba(16,185,129,0.12)]{% endif %} rounded-3xl p-6 sm:p-8 text-slate-800 relative overflow-hidden transition-all duration-300 backdrop-blur-xl">
+        <!-- Laser Accent Stripe Superior -->
+        <div class="absolute top-0 left-0 right-0 h-1.5 {% if system_health.level == 'critical' %}bg-gradient-to-r from-rose-500 via-amber-500 to-rose-600{% elif system_health.level == 'warning' %}bg-gradient-to-r from-amber-500 via-sky-500 to-blue-600{% else %}bg-gradient-to-r from-emerald-500 via-teal-400 to-blue-600{% endif %}"></div>
+
+        <!-- Glow ambiental sutil -->
+        <div class="absolute -right-10 -top-10 w-96 h-96 {% if system_health.level == 'critical' %}bg-rose-400/10{% elif system_health.level == 'warning' %}bg-amber-400/10{% else %}bg-emerald-400/10{% endif %} rounded-full blur-3xl pointer-events-none"></div>
 
         <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <!-- Columna Izquierda: Diagnóstico Ejecutivo -->
             <div class="space-y-2 max-w-3xl">
                 <div class="flex flex-wrap items-center gap-2.5">
-                    <!-- Badge Semáforo -->
-                    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase {{ system_health.badge_bg }}">
-                        <span class="w-2.5 h-2.5 rounded-full {{ system_health.dot }}"></span>
+                    <!-- Badge Semáforo con Pulso LED -->
+                    <span class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-black tracking-wider uppercase {% if system_health.level == 'critical' %}bg-rose-100 text-rose-800 border border-rose-300{% elif system_health.level == 'warning' %}bg-amber-100 text-amber-800 border border-amber-300{% else %}bg-emerald-100 text-emerald-800 border border-emerald-300{% endif %} shadow-xs font-mono">
+                        <span class="w-2.5 h-2.5 rounded-full {{ system_health.dot }} animate-ping"></span>
                         {{ system_health.badge }}
                     </span>
-                    <span class="text-xs text-slate-300 font-medium">
-                        Sede Activa: <strong class="text-white font-bold">{{ current_site.full_name }}</strong>
+                    <span class="text-xs text-slate-600 font-bold">
+                        Sede Activa: <strong class="text-blue-900 font-extrabold underline decoration-blue-500">{{ current_site.full_name }}</strong>
                     </span>
-                    <span class="text-xs text-slate-400">| Diagnóstico en Tiempo Real</span>
+                    <span class="text-xs text-blue-600 font-mono font-semibold">| Diagnóstico en Tiempo Real</span>
                 </div>
 
-                <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-snug">
+                <h1 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-snug">
                     {{ system_health.headline }}
                 </h1>
 
-                <p class="text-sm text-slate-300 leading-relaxed">
+                <p class="text-sm text-slate-600 leading-relaxed font-medium">
                     {{ system_health.description }}
                 </p>
             </div>
 
             <!-- Columna Derecha: Métricas Resumen y Acciones Rápidas -->
             <div class="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-3 shrink-0">
-                <div class="flex items-center gap-2 bg-slate-800/80 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-slate-700/80 shadow-inner">
-                    <span class="text-xs text-slate-400 font-medium">Disponibilidad Global:</span>
-                    <span class="text-lg font-black {% if metrics.availability_pct >= 95 %}text-emerald-400{% elif metrics.availability_pct >= 75 %}text-amber-400{% else %}text-rose-400{% endif %}">
+                <div class="flex items-center gap-3 bg-white/95 backdrop-blur-md px-5 py-3 rounded-2xl border-2 border-blue-200/90 shadow-sm">
+                    <span class="text-xs text-slate-600 font-bold font-mono uppercase tracking-wider">Disponibilidad Global:</span>
+                    <span class="text-2xl font-black font-mono {% if metrics.availability_pct >= 95 %}text-emerald-600{% elif metrics.availability_pct >= 75 %}text-amber-600{% else %}text-rose-600{% endif %}">
                         {{ metrics.availability_pct }}%
                     </span>
                 </div>
 
                 <div class="flex items-center gap-2">
                     <a href="/dashboard" 
-                       class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-600/80 transition shadow-sm"
+                       class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white hover:bg-blue-50 text-slate-700 text-xs font-bold border border-blue-200 shadow-xs transition active:scale-95 cursor-pointer"
                        title="Recargar métricas vivas">
-                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
                         Actualizar
                     </a>
 
                     <a href="/reports" 
-                       class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/30 transition">
+                       class="inline-flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black shadow-[0_4px_16px_rgba(37,99,235,0.3)] transition active:scale-95 cursor-pointer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
@@ -66,77 +73,80 @@
         </div>
 
         <!-- Barra de Salud Visual Segmentada -->
-        <div class="mt-6 pt-5 border-t border-slate-700/60">
-            <div class="flex items-center justify-between text-xs text-slate-300 mb-2">
-                <span class="font-medium">Salud del Circuito Tecnológico ({{ metrics.total_devices }} Equipos)</span>
-                <span class="font-semibold text-slate-400">
-                    <strong class="text-emerald-400">{{ metrics.operativo_devices }} Operativos</strong> | 
-                    <strong class="text-rose-400">{{ metrics.falla_devices }} en Falla</strong> | 
-                    <strong class="text-blue-400">{{ metrics.maint_devices }} en Mantenimiento</strong>
+        <div class="mt-6 pt-5 border-t border-blue-200/60">
+            <div class="flex items-center justify-between text-xs text-slate-700 mb-2">
+                <span class="font-extrabold tracking-wide" title="Salud técnica consolidada de todos los dispositivos del circuito CCTV">Salud del Circuito Tecnológico ({{ metrics.total_devices }} Equipos)</span>
+                <span class="font-bold text-slate-600">
+                    <strong class="text-emerald-700 cursor-help" title="{{ metrics.operativo_devices }} dispositivos transmitiendo y operando correctamente">{{ metrics.operativo_devices }} Operativos</strong> | 
+                    <strong class="text-rose-700 cursor-help" title="{{ metrics.falla_devices }} dispositivos fuera de línea o con novedades técnicas">{{ metrics.falla_devices }} en Falla</strong> | 
+                    <strong class="text-blue-700 cursor-help" title="{{ metrics.maint_devices }} dispositivos en proceso de mantenimiento preventivo">{{ metrics.maint_devices }} en Mantenimiento</strong>
                 </span>
             </div>
-            <div class="w-full bg-slate-800/90 rounded-full h-3 flex overflow-hidden p-0.5 border border-slate-700/80">
+            <div class="w-full bg-slate-200/90 rounded-full h-3.5 flex overflow-hidden p-0.5 border border-slate-300 shadow-inner">
                 {% if metrics.total_devices > 0 %}
                 <div style="width: {{ (metrics.operativo_devices / metrics.total_devices * 100) }}%;" 
-                     class="bg-emerald-500 h-full rounded-l-full transition-all duration-500" title="{{ metrics.operativo_devices }} Operativos"></div>
+                     class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full rounded-l-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.operativo_devices }} Equipos Operativos ({{ (metrics.operativo_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
                 <div style="width: {{ (metrics.falla_devices / metrics.total_devices * 100) }}%;" 
-                     class="bg-rose-500 h-full transition-all duration-500" title="{{ metrics.falla_devices }} en Falla"></div>
+                     class="bg-gradient-to-r from-rose-500 to-rose-400 h-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.falla_devices }} Equipos en Falla ({{ (metrics.falla_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
                 <div style="width: {{ (metrics.maint_devices / metrics.total_devices * 100) }}%;" 
-                     class="bg-blue-500 h-full rounded-r-full transition-all duration-500" title="{{ metrics.maint_devices }} en Mantenimiento"></div>
+                     class="bg-gradient-to-r from-sky-500 to-blue-500 h-full rounded-r-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.maint_devices }} Equipos en Mantenimiento ({{ (metrics.maint_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
                 {% else %}
-                <div style="width: 100%;" class="bg-slate-600 h-full rounded-full"></div>
+                <div style="width: 100%;" class="bg-slate-300 h-full rounded-full"></div>
                 {% endif %}
             </div>
         </div>
     </div>
 
     <!-- ───── BANNER DE VALIDACIÓN POLICIAL PENDIENTE (ACCESO RÁPIDO) ───── -->
-    {% if pending_validation_count is defined and pending_validation_count > 0 and current_user.role in ['Validador', 'Admin', 'Supervisor'] %}
-    <div class="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 rounded-3xl shadow-xl border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    {% if pending_validation_count is defined and pending_validation_count > 0 and current_user.role in ['Validador', 'Admin', 'Supervisor', 'Empresa de Mantenimiento', 'Operario'] %}
+    <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white p-5 rounded-3xl shadow-[0_12px_30px_rgba(37,99,235,0.22)] border border-blue-400/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-md">
         <div class="flex items-center gap-3.5">
-            <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 border border-white/20 shadow-inner">
+            <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 border border-white/30 shadow-md">
                 🛡️
             </div>
             <div>
                 <div class="flex items-center gap-2">
-                    <p class="font-black text-sm tracking-wide uppercase text-purple-200">Validación Policial Requerida</p>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 animate-pulse">Acción Inmediata</span>
+                    <p class="font-black text-sm tracking-wide uppercase text-white font-mono">Validación Policial Requerida</p>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 font-mono shadow-xs">Acción Inmediata</span>
                 </div>
-                <p class="text-xs text-purple-100 mt-0.5">
-                    Hay <strong class="text-white font-black underline">{{ pending_validation_count }}</strong> orden(es) de mantenimiento e incidentes finalizados por el contratista en espera de dictamen y firma de conformidad de la estación de policía.
+                <p class="text-xs text-blue-100 font-medium mt-0.5">
+                    Hay <strong class="text-white font-black underline decoration-amber-300">{{ pending_validation_count }}</strong> orden(es) de mantenimiento e incidentes finalizados por el contratista en espera de dictamen y firma de conformidad de la estación de policía.
                 </p>
             </div>
         </div>
         <a href="/validation"
-           class="px-5 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-black text-xs shadow-lg shadow-purple-900/40 active:scale-95 transition shrink-0 flex items-center justify-center gap-2">
+           class="px-5 py-2.5 rounded-xl bg-white hover:bg-blue-50 text-blue-700 font-black text-xs shadow-md active:scale-95 transition shrink-0 flex items-center justify-center gap-2 cursor-pointer font-mono">
             <span>Ir al Panel de Validación</span>
-            <span class="px-2 py-0.5 rounded-full bg-white text-purple-950 text-[11px] font-black">{{ pending_validation_count }}</span>
+            <span class="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[11px] font-black">{{ pending_validation_count }}</span>
         </a>
     </div>
     {% endif %}
 
-    <!-- ───── 2. FILTRADO RÁPIDO POR PUNTO DE MONITOREO ───── -->
-    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <!-- ───── 2. FILTRADO RÁPIDO POR PUNTO DE MONITOREO (CONSOLA TÉCNICA) ───── -->
+    <div class="bg-white/95 backdrop-blur-xl rounded-2xl p-4 sm:p-5 border border-blue-200/70 shadow-[0_4px_20px_rgba(59,130,246,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-slate-900 relative overflow-hidden">
+        <!-- Acento lateral de tecnología -->
+        <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-blue-600 via-indigo-600 to-cyan-400"></div>
+
+        <div class="flex items-center gap-3.5 pl-2">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200/90 text-blue-600 flex items-center justify-center shrink-0 shadow-sm">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                 </svg>
             </div>
             <div>
-                <p class="text-xs font-bold text-slate-900">Ubicación y Puntos de Vigilancia</p>
-                <p class="text-[11px] text-slate-500">
-                    Mostrando métricas de: <strong class="text-slate-800">{{ 'Toda la Sede (Consolidado)' if selected_sede == 'all' else selected_sede }}</strong>
+                <p class="text-xs font-black text-slate-900 tracking-wide uppercase font-mono">Ubicación y Puntos de Vigilancia</p>
+                <p class="text-[11px] text-slate-500 font-medium">
+                    Mostrando métricas de: <strong class="text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">{{ 'Toda la Sede (Consolidado Completo)' if selected_sede == 'all' else selected_sede }}</strong>
                 </p>
             </div>
         </div>
 
-        <div class="flex items-center gap-2">
-            <label for="sedeFilterSelect" class="text-xs text-slate-600 font-semibold shrink-0">Filtrar Punto:</label>
+        <div class="flex items-center gap-2 pl-2 sm:pl-0">
+            <label for="sedeFilterSelect" class="text-xs text-slate-600 font-bold shrink-0 font-mono">Filtrar Punto:</label>
             <select id="sedeFilterSelect"
                     onchange="window.location.href = '/dashboard?sede=' + encodeURIComponent(this.value)"
-                    class="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+                    class="px-4 py-2.5 bg-slate-50 border border-blue-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none cursor-pointer shadow-xs hover:border-blue-400 transition">
                 <option value="all" {% if selected_sede == 'all' %}selected{% endif %}>🏢 Toda la Sede (Consolidado Completo)</option>
                 {% for p in monitoring_points %}
                 <option value="{{ p.name }}" {% if selected_sede == p.name %}selected{% endif %}>
@@ -146,7 +156,7 @@
             </select>
 
             {% if selected_sede != 'all' %}
-            <a href="/dashboard" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition" title="Ver todo consolidado">
+            <a href="/dashboard" class="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition border border-slate-300" title="Ver todo consolidado">
                 ✖ Ver Todos
             </a>
             {% endif %}
@@ -154,189 +164,223 @@
     </div>
 
 
-    <!-- ───── 3. LAS 4 TARJETAS EJECUTIVAS PRINCIPALES (BIG NUMBERS) ───── -->
+    <!-- ───── 3. LAS 4 TARJETAS EJECUTIVAS PRINCIPALES (BIG NUMBERS CON ACENTO LÁSER) ───── -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         <!-- Tarjeta 1: Equipos & Cámaras Monitoreadas -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+        <div class="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-blue-200/60 shadow-[0_4px_20px_-2px_rgba(59,130,246,0.08)] hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-blue-400 transition-all duration-300 relative overflow-hidden group text-slate-900">
+            <!-- Barra láser tecnológica superior -->
+            <div class="absolute top-0 left-0 right-0 h-[3.5px] bg-gradient-to-r from-teal-400 via-cyan-400 to-blue-500"></div>
+
             <div class="flex items-start justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cámaras & Equipos</p>
-                    <div class="flex items-baseline gap-2 mt-1">
-                        <span class="text-3xl font-extrabold text-slate-900">{{ metrics.operativo_devices }}</span>
-                        <span class="text-xs text-slate-500 font-semibold">/ {{ metrics.total_devices }} Operativos</span>
+                    <p class="text-[11px] font-black uppercase tracking-wider text-slate-500 cursor-help font-mono flex items-center gap-1.5" title="Estado general del parque tecnológico y cámaras de seguridad">
+                        <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span>
+                        Cámaras & Equipos
+                    </p>
+                    <div class="flex items-baseline gap-2 mt-2 cursor-help" title="{{ metrics.operativo_devices }} de {{ metrics.total_devices }} equipos totales están funcionando correctamente">
+                        <span class="text-3xl font-black text-slate-900 font-mono tracking-tight">{{ metrics.operativo_devices }}</span>
+                        <span class="text-xs text-slate-500 font-bold">/ {{ metrics.total_devices }} Operativos</span>
                     </div>
                 </div>
-                <div class="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center shrink-0">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 border border-teal-200 text-teal-600 flex items-center justify-center shrink-0 cursor-help shadow-sm group-hover:scale-105 transition-transform" title="Disponibilidad global del circuito CCTV: {{ metrics.availability_pct }}%">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.882v6.236a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
                     </svg>
                 </div>
             </div>
 
-            <div class="mt-3">
-                <div class="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                    <span>Cámaras CCTV: <strong>{{ metrics.cameras_active }}/{{ metrics.cameras_total }} activas</strong></span>
-                    <span class="font-bold text-teal-700">{{ metrics.availability_pct }}%</span>
+            <div class="mt-4">
+                <div class="flex items-center justify-between text-[11px] text-slate-600 mb-1.5 font-medium">
+                    <span class="cursor-help" title="{{ metrics.cameras_active }} cámaras de video en línea de un total de {{ metrics.cameras_total }} instaladas">Cámaras CCTV: <strong class="text-slate-900">{{ metrics.cameras_active }}/{{ metrics.cameras_total }} activas</strong></span>
+                    <span class="font-black text-teal-700 font-mono cursor-help" title="Porcentaje de cámaras transmitiendo video en vivo">{{ metrics.cameras_pct }}%</span>
                 </div>
-                <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div class="bg-teal-500 h-1.5 rounded-full" style="width: {{ metrics.availability_pct }}%;"></div>
+                <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden cursor-help border border-slate-200/60 p-[1px]" title="Disponibilidad técnica de cámaras: {{ metrics.cameras_pct }}%">
+                    <div class="bg-gradient-to-r from-teal-500 to-cyan-400 h-full rounded-full shadow-xs" style="width: {{ metrics.cameras_pct }}%;"></div>
                 </div>
             </div>
 
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>{{ metrics.falla_devices }} con fallas</span>
-                <a href="/devices" class="text-blue-600 font-semibold hover:underline">Ver inventario →</a>
+                <span class="cursor-help font-medium" title="{{ metrics.falla_devices }} dispositivos actualmente fuera de servicio o con ticket abierto">{{ metrics.falla_devices }} con fallas</span>
+                <a href="/devices" class="text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center gap-1 group-hover:translate-x-0.5 transition-transform" title="Ir al listado completo de equipos e inventario">
+                    <span>Ver inventario</span> <span class="text-blue-400">→</span>
+                </a>
             </div>
         </div>
 
         <!-- Tarjeta 2: Novedades / Incidentes Activos -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+        <div class="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-blue-200/60 shadow-[0_4px_20px_-2px_rgba(59,130,246,0.08)] hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-rose-400 transition-all duration-300 relative overflow-hidden group text-slate-900">
+            <!-- Barra láser tecnológica superior -->
+            <div class="absolute top-0 left-0 right-0 h-[3.5px] bg-gradient-to-r from-rose-500 via-amber-400 to-rose-400"></div>
+
             <div class="flex items-start justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Novedades Activas</p>
-                    <div class="flex items-baseline gap-2 mt-1">
-                        <span class="text-3xl font-extrabold {% if metrics.critical_incidents > 0 %}text-rose-600{% else %}text-slate-900{% endif %}">
+                    <p class="text-[11px] font-black uppercase tracking-wider text-slate-500 cursor-help font-mono flex items-center gap-1.5" title="Tickets correctivos e incidentes que requieren atención técnica">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        Novedades Activas
+                    </p>
+                    <div class="flex items-baseline gap-2 mt-2 cursor-help" title="{{ metrics.open_incidents }} incidentes correctivos pendientes o en atención en la sede">
+                        <span class="text-3xl font-black font-mono tracking-tight {% if metrics.critical_incidents > 0 %}text-rose-600{% else %}text-slate-900{% endif %}">
                             {{ metrics.open_incidents }}
                         </span>
-                        <span class="text-xs text-slate-500 font-semibold">Incidentes</span>
+                        <span class="text-xs text-slate-500 font-bold">Incidentes</span>
                     </div>
                 </div>
-                <div class="w-12 h-12 rounded-2xl {% if metrics.critical_incidents > 0 %}bg-rose-50 border border-rose-200 text-rose-600{% else %}bg-amber-50 border border-amber-200 text-amber-600{% endif %} flex items-center justify-center shrink-0">
+                <div class="w-12 h-12 rounded-2xl {% if metrics.critical_incidents > 0 %}bg-rose-50 border border-rose-200 text-rose-600{% else %}bg-amber-50 border border-amber-200 text-amber-600{% endif %} flex items-center justify-center shrink-0 cursor-help shadow-sm group-hover:scale-105 transition-transform">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                     </svg>
                 </div>
             </div>
 
-            <div class="mt-3 flex items-center gap-2">
+            <div class="mt-4 flex items-center gap-2">
                 {% if metrics.critical_incidents > 0 %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800">
-                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-200 cursor-help" title="{{ metrics.critical_incidents }} fallas críticas o dispositivos inactivos de atención inmediata">
+                    <span class="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
                     {{ metrics.critical_incidents }} Críticos
                 </span>
                 {% else %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-help" title="No hay incidentes de severidad crítica activos en este momento">
                     Sin fallas críticas
                 </span>
                 {% endif %}
 
                 {% if metrics.sla_expired_count > 0 %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-100 text-amber-800 border border-amber-200 cursor-help" title="{{ metrics.sla_expired_count }} incidentes activos que han superado el tiempo límite contractual pactado">
                     {{ metrics.sla_expired_count }} SLA Vencido
                 </span>
                 {% endif %}
             </div>
 
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>{{ metrics.closed_incidents }} cerrados</span>
-                <a href="/incidents" class="text-blue-600 font-semibold hover:underline">Gestionar tickets →</a>
+                <span class="cursor-help font-medium" title="Total histórico de incidentes atendidos y cerrados">{{ metrics.closed_incidents }} cerrados</span>
+                <a href="/incidents" class="text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center gap-1 group-hover:translate-x-0.5 transition-transform" title="Ir a la mesa de gestión de incidentes y tickets">
+                    <span>Gestionar tickets</span> <span class="text-blue-400">→</span>
+                </a>
             </div>
         </div>
 
         <!-- Tarjeta 3: Mantenimientos Preventivos -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+        <div class="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-blue-200/60 shadow-[0_4px_20px_-2px_rgba(59,130,246,0.08)] hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-blue-400 transition-all duration-300 relative overflow-hidden group text-slate-900">
+            <!-- Barra láser tecnológica superior -->
+            <div class="absolute top-0 left-0 right-0 h-[3.5px] bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400"></div>
+
             <div class="flex items-start justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Mantenimiento Preventivo</p>
-                    <div class="flex items-baseline gap-2 mt-1">
-                        <span class="text-3xl font-extrabold text-slate-900">{{ metrics.pending_maintenances }}</span>
-                        <span class="text-xs text-slate-500 font-semibold">Órdenes Activas</span>
+                    <p class="text-[11px] font-black uppercase tracking-wider text-slate-500 cursor-help font-mono flex items-center gap-1.5" title="Seguimiento al cronograma técnico de mantenimientos preventivos periódicos">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                        Mantenimiento Preventivo
+                    </p>
+                    <div class="flex items-baseline gap-2 mt-2 cursor-help" title="{{ metrics.pending_maintenances }} órdenes de mantenimiento pendientes o en ejecución">
+                        <span class="text-3xl font-black text-slate-900 font-mono tracking-tight">{{ metrics.pending_maintenances }}</span>
+                        <span class="text-xs text-slate-500 font-bold">Órdenes Activas</span>
                     </div>
                 </div>
-                <div class="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 cursor-help shadow-sm group-hover:scale-105 transition-transform" title="Mantenimiento preventivo planificado">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                     </svg>
                 </div>
             </div>
 
-            <div class="mt-3 flex items-center gap-2">
+            <div class="mt-4 flex items-center gap-2">
                 {% if metrics.in_exec_maintenances > 0 %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-100 text-blue-800">
-                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black bg-blue-100 text-blue-800 border border-blue-200 cursor-help" title="{{ metrics.in_exec_maintenances }} órdenes con cuadrillas técnicas trabajando activamente en sitio">
+                    <span class="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
                     {{ metrics.in_exec_maintenances }} en Terreno
                 </span>
                 {% endif %}
 
                 {% if metrics.overdue_maintenances > 0 %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-100 text-rose-800">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-200 cursor-help" title="{{ metrics.overdue_maintenances }} órdenes de mantenimiento fuera de la fecha límite programada">
                     {{ metrics.overdue_maintenances }} Atrasado
                 </span>
                 {% else %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-help" title="Todas las rutinas de mantenimiento preventivo van según el cronograma acordado">
                     Al día en cronograma
                 </span>
                 {% endif %}
             </div>
 
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>{{ metrics.completed_maintenances }} completados</span>
-                <a href="/maintenance" class="text-blue-600 font-semibold hover:underline">Ver cronograma →</a>
+                <span class="cursor-help font-medium" title="Total de mantenimientos preventivos ejecutados y registrados">{{ metrics.completed_maintenances }} completados</span>
+                <a href="/maintenance" class="text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center gap-1 group-hover:translate-x-0.5 transition-transform" title="Ir al cronograma y registro de mantenimientos">
+                    <span>Ver cronograma</span> <span class="text-blue-400">→</span>
+                </a>
             </div>
         </div>
 
         <!-- Tarjeta 4: Eficacia SLA & Confiabilidad -->
-        <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition">
+        <div class="bg-white/95 backdrop-blur-md rounded-2xl p-5 border border-blue-200/60 shadow-[0_4px_20px_-2px_rgba(59,130,246,0.08)] hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-emerald-400 transition-all duration-300 relative overflow-hidden group text-slate-900">
+            <!-- Barra láser tecnológica superior -->
+            <div class="absolute top-0 left-0 right-0 h-[3.5px] bg-gradient-to-r from-emerald-400 via-teal-400 to-sky-400"></div>
+
             <div class="flex items-start justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cumplimiento SLA</p>
-                    <div class="flex items-baseline gap-2 mt-1">
-                        <span class="text-3xl font-extrabold text-slate-900">{{ metrics.sla_compliance_pct }}%</span>
-                        <span class="text-xs text-slate-500 font-semibold">a Tiempo</span>
+                    <p class="text-[11px] font-black uppercase tracking-wider text-slate-500 cursor-help font-mono flex items-center gap-1.5" title="Porcentaje de tickets resueltos antes del vencimiento del tiempo pactado en el contrato (SLA)">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Cumplimiento SLA
+                    </p>
+                    <div class="flex items-baseline gap-2 mt-2 cursor-help" title="{{ metrics.sla_compliance_pct }}% de incidentes cerrados cumplieron con los plazos de tiempo acordados">
+                        <span class="text-3xl font-black text-slate-900 font-mono tracking-tight">{{ metrics.sla_compliance_pct }}%</span>
+                        <span class="text-xs text-slate-500 font-bold">a Tiempo</span>
                     </div>
                 </div>
-                <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border cursor-help shadow-sm group-hover:scale-105 transition-transform
                     {% if metrics.sla_compliance_pct >= 90 %}bg-emerald-50 border-emerald-200 text-emerald-600
                     {% elif metrics.sla_compliance_pct >= 75 %}bg-sky-50 border-sky-200 text-sky-600
                     {% elif metrics.sla_compliance_pct >= 50 %}bg-amber-50 border-amber-200 text-amber-600
-                    {% else %}bg-rose-50 border-rose-200 text-rose-600{% endif %}">
+                    {% else %}bg-rose-50 border-rose-200 text-rose-600{% endif %}"
+                    title="Nivel de cumplimiento SLA: {{ metrics.sla_compliance_pct }}%">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                 </div>
             </div>
 
-            <div class="mt-3">
-                <div class="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                    <span>Eficacia de respuesta técnica:</span>
+            <div class="mt-4">
+                <div class="flex items-center justify-between text-[11px] text-slate-600 mb-1.5 font-medium">
+                    <span class="cursor-help" title="Categoría de rendimiento técnico del contratista según porcentaje SLA">Eficacia de respuesta técnica:</span>
                     {% if metrics.sla_compliance_pct >= 90 %}
-                    <strong class="text-emerald-600 font-bold">Alta Calidad (≥90%)</strong>
+                    <strong class="text-emerald-700 font-black cursor-help font-mono">Alta Calidad (≥90%)</strong>
                     {% elif metrics.sla_compliance_pct >= 75 %}
-                    <strong class="text-sky-600 font-bold">Calidad Aceptable (75-89%)</strong>
+                    <strong class="text-sky-700 font-black cursor-help font-mono">Calidad Aceptable (75-89%)</strong>
                     {% elif metrics.sla_compliance_pct >= 50 %}
-                    <strong class="text-amber-600 font-bold">En Riesgo (50-74%)</strong>
+                    <strong class="text-amber-700 font-black cursor-help font-mono">En Riesgo (50-74%)</strong>
                     {% else %}
-                    <strong class="text-rose-600 font-bold">Crítico / Deficiente (&lt;50%)</strong>
+                    <strong class="text-rose-700 font-black cursor-help font-mono">Crítico / Deficiente (&lt;50%)</strong>
                     {% endif %}
                 </div>
-                <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div class="h-1.5 rounded-full {% if metrics.sla_compliance_pct >= 90 %}bg-emerald-500{% elif metrics.sla_compliance_pct >= 75 %}bg-sky-500{% elif metrics.sla_compliance_pct >= 50 %}bg-amber-500{% else %}bg-rose-500{% endif %}"
+                <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden cursor-help border border-slate-200/60 p-[1px]" title="Barra de cumplimiento SLA: {{ metrics.sla_compliance_pct }}%">
+                    <div class="h-full rounded-full shadow-xs {% if metrics.sla_compliance_pct >= 90 %}bg-emerald-500{% elif metrics.sla_compliance_pct >= 75 %}bg-sky-500{% elif metrics.sla_compliance_pct >= 50 %}bg-amber-500{% else %}bg-rose-500{% endif %}"
                          style="width: {{ metrics.sla_compliance_pct }}%;"></div>
                 </div>
             </div>
 
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>Total cerrados: {{ metrics.closed_incidents }}</span>
-                <a href="/reports" class="text-blue-600 font-semibold hover:underline">Ver estadísticas →</a>
+                <span class="cursor-help font-medium" title="Cantidad total de incidentes resueltos tomados como base para medir el SLA">Total cerrados: {{ metrics.closed_incidents }}</span>
+                <a href="/reports" class="text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center gap-1 group-hover:translate-x-0.5 transition-transform" title="Ir a los reportes consolidados y estadísticas de desempeño">
+                    <span>Ver estadísticas</span> <span class="text-blue-400">→</span>
+                </a>
             </div>
         </div>
 
     </div>
 
 
-    <!-- ───── 4. RESUMEN GRÁFICO EJECUTIVO (2 GRÁFICOS ULTRA-SIMPLES Y VISUALES) ───── -->
+    <!-- ───── 4. RESUMEN GRÁFICO EJECUTIVO (2 GRÁFICOS VISUALES Y MODERNOS) ───── -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         <!-- Gráfico 1 (Donut): Operatividad Global de la Red CCTV (5 cols) -->
-        <div class="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="lg:col-span-5 bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-blue-200/60 shadow-[0_4px_25px_rgba(59,130,246,0.06)] flex flex-col justify-between text-slate-900">
             <div>
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <h2 class="text-base font-bold text-slate-900">Estado Operativo de la Red</h2>
+                        <h2 class="text-base font-black text-slate-900 tracking-tight cursor-help" title="Proporción de equipos en línea vs incidencias en toda la red">Estado Operativo de la Red</h2>
                         <p class="text-xs text-slate-500">Distribución porcentual de los {{ metrics.total_devices }} dispositivos</p>
                     </div>
-                    <span class="px-2.5 py-1 rounded-full text-xs font-bold {% if metrics.availability_pct >= 90 %}bg-emerald-100 text-emerald-800{% elif metrics.availability_pct >= 70 %}bg-amber-100 text-amber-800{% else %}bg-rose-100 text-rose-800{% endif %}">
+                    <span class="px-3 py-1 rounded-full text-xs font-black cursor-help font-mono border {% if metrics.availability_pct >= 90 %}bg-emerald-50 text-emerald-800 border-emerald-200{% elif metrics.availability_pct >= 70 %}bg-amber-50 text-amber-800 border-amber-200{% else %}bg-rose-50 text-rose-800 border-rose-200{% endif %}"
+                          title="Disponibilidad operativa general del sistema">
                         {{ metrics.availability_pct }}% Operativo
                     </span>
                 </div>
@@ -345,38 +389,38 @@
                 <div class="relative h-56 flex items-center justify-center my-2">
                     <canvas id="operatividadChart"></canvas>
                     <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span class="text-2xl font-black text-slate-900">{{ metrics.operativo_devices }}</span>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">de {{ metrics.total_devices }} OK</span>
+                        <span class="text-3xl font-black text-slate-900 font-mono tracking-tight" title="{{ metrics.operativo_devices }} equipos operativos de {{ metrics.total_devices }}">{{ metrics.operativo_devices }}</span>
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">de {{ metrics.total_devices }} OK</span>
                     </div>
                 </div>
             </div>
 
             <!-- Leyenda ejecutiva con conteos claros -->
-            <div class="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 text-center">
-                <div class="p-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                    <p class="text-[10px] font-bold uppercase text-emerald-800">Operativos</p>
-                    <p class="text-base font-black text-emerald-700">{{ metrics.operativo_devices }}</p>
+            <div class="grid grid-cols-3 gap-2.5 pt-4 border-t border-slate-100 text-center">
+                <div class="p-2.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 cursor-help shadow-2xs" title="Equipos transmitiendo y funcionando con total normalidad">
+                    <p class="text-[10px] font-black uppercase text-emerald-800 font-mono">Operativos</p>
+                    <p class="text-base font-black text-emerald-700 font-mono mt-0.5">{{ metrics.operativo_devices }}</p>
                 </div>
-                <div class="p-2 rounded-xl bg-rose-50 border border-rose-100">
-                    <p class="text-[10px] font-bold uppercase text-rose-800">En Falla</p>
-                    <p class="text-base font-black text-rose-700">{{ metrics.falla_devices }}</p>
+                <div class="p-2.5 rounded-2xl bg-rose-50/80 border border-rose-200/80 cursor-help shadow-2xs" title="Equipos fuera de servicio o con ticket correctivo abierto">
+                    <p class="text-[10px] font-black uppercase text-rose-800 font-mono">En Falla</p>
+                    <p class="text-base font-black text-rose-700 font-mono mt-0.5">{{ metrics.falla_devices }}</p>
                 </div>
-                <div class="p-2 rounded-xl bg-blue-50 border border-blue-100">
-                    <p class="text-[10px] font-bold uppercase text-blue-800">Mantenim.</p>
-                    <p class="text-base font-black text-blue-700">{{ metrics.maint_devices }}</p>
+                <div class="p-2.5 rounded-2xl bg-blue-50/80 border border-blue-200/80 cursor-help shadow-2xs" title="Equipos en proceso de mantenimiento preventivo técnico">
+                    <p class="text-[10px] font-black uppercase text-blue-800 font-mono">Mantenim.</p>
+                    <p class="text-base font-black text-blue-700 font-mono mt-0.5">{{ metrics.maint_devices }}</p>
                 </div>
             </div>
         </div>
 
         <!-- Gráfico 2 (Barras): Salud por Punto de Monitoreo (7 cols) -->
-        <div class="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="lg:col-span-7 bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-blue-200/60 shadow-[0_4px_25px_rgba(59,130,246,0.06)] flex flex-col justify-between text-slate-900">
             <div>
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <h2 class="text-base font-bold text-slate-900">Salud por Punto de Vigilancia</h2>
+                        <h2 class="text-base font-black text-slate-900 tracking-tight">Salud por Punto de Vigilancia</h2>
                         <p class="text-xs text-slate-500">Comparativa de equipos operativos vs novedades por ubicación</p>
                     </div>
-                    <span class="text-xs font-semibold text-slate-400">
+                    <span class="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 font-mono">
                         {{ monitoring_points|length }} Puntos Monitoreados
                     </span>
                 </div>
@@ -387,13 +431,13 @@
                 </div>
             </div>
 
-            <div class="flex items-center justify-center gap-6 pt-3 border-t border-slate-100 text-xs text-slate-600 font-medium">
+            <div class="flex items-center justify-center gap-6 pt-3 border-t border-slate-100 text-xs text-slate-600 font-bold">
                 <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-emerald-500"></span>
+                    <span class="w-3.5 h-3.5 rounded bg-emerald-500 shadow-xs"></span>
                     <span>Equipos Operativos</span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="w-3 h-3 rounded bg-rose-500"></span>
+                    <span class="w-3.5 h-3.5 rounded bg-rose-500 shadow-xs"></span>
                     <span>Fallas y Mantenimientos</span>
                 </div>
             </div>
@@ -404,32 +448,35 @@
 
     <!-- ───── 5. ALERTAS DE ATENCIÓN INMEDIATA (SI HAY EVENTOS CRÍTICOS O ATRASADOS) ───── -->
     {% if executive_alerts %}
-    <div class="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-6 border border-slate-700 shadow-lg text-white">
+    <div class="bg-white/95 rounded-3xl p-6 border-2 border-rose-200/90 shadow-[0_6px_25px_rgba(244,63,94,0.08)] text-slate-800 backdrop-blur-xl relative overflow-hidden">
+        <!-- Laser Accent Stripe Superior -->
+        <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-amber-500 to-rose-600"></div>
+
         <div class="flex items-center justify-between mb-4">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2.5">
                 <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
-                <h3 class="text-base font-bold text-white">Atención Inmediata Requerida</h3>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                <h3 class="text-base font-black text-slate-900 tracking-wide font-mono">Atención Inmediata Requerida</h3>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 font-mono">
                     {{ executive_alerts|length }} Eventos Prioritarios
                 </span>
             </div>
-            <span class="text-xs text-slate-400 hidden sm:inline">Prioriza estas novedades para restablecer el 100% operativo</span>
+            <span class="text-xs text-slate-500 hidden sm:inline font-medium">Prioriza estas novedades para restablecer el 100% operativo</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             {% for alert in executive_alerts %}
-            <div class="bg-slate-800/90 border {% if alert.type == 'danger' %}border-rose-500/40{% elif alert.type == 'warning' %}border-amber-500/40{% else %}border-blue-500/40{% endif %} rounded-2xl p-4 flex items-center justify-between gap-3 hover:bg-slate-800 transition">
+            <div class="bg-slate-50/90 border {% if alert.type == 'danger' %}border-rose-300 hover:border-rose-400 bg-rose-50/30{% elif alert.type == 'warning' %}border-amber-300 hover:border-amber-400 bg-amber-50/30{% else %}border-blue-300 hover:border-blue-400 bg-blue-50/30{% endif %} rounded-2xl p-4 flex items-center justify-between gap-3 hover:shadow-xs transition">
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider {% if alert.type == 'danger' %}bg-rose-500/20 text-rose-300{% elif alert.type == 'warning' %}bg-amber-500/20 text-amber-300{% else %}bg-blue-500/20 text-blue-300{% endif %}">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider font-mono {% if alert.type == 'danger' %}bg-rose-100 text-rose-800 border border-rose-300{% elif alert.type == 'warning' %}bg-amber-100 text-amber-800 border border-amber-300{% else %}bg-blue-100 text-blue-800 border border-blue-300{% endif %}">
                             {{ alert.badge }}
                         </span>
-                        <h4 class="text-xs font-bold text-white truncate">{{ alert.title }}</h4>
+                        <h4 class="text-xs font-bold text-slate-900 truncate">{{ alert.title }}</h4>
                     </div>
-                    <p class="text-[11px] text-slate-300 truncate">{{ alert.detail }}</p>
+                    <p class="text-[11px] text-slate-600 truncate font-medium">{{ alert.detail }}</p>
                 </div>
                 <a href="{{ alert.url }}" 
-                   class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition {% if alert.type == 'danger' %}bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30{% elif alert.type == 'warning' %}bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/30{% else %}bg-blue-600 hover:bg-blue-500 text-white{% endif %}">
+                   class="shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-black transition {% if alert.type == 'danger' %}bg-rose-600 hover:bg-rose-500 text-white shadow-sm{% elif alert.type == 'warning' %}bg-amber-600 hover:bg-amber-500 text-white shadow-sm{% else %}bg-blue-600 hover:bg-blue-500 text-white shadow-sm{% endif %}">
                     {{ alert.btn_text }} →
                 </a>
             </div>
@@ -440,10 +487,10 @@
 
 
     <!-- ───── 6. PUNTOS DE MONITOREO TERRITORIAL (VISTA EJECUTIVA EN TARJETAS LIMPIAS) ───── -->
-    <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+    <div class="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-blue-200/60 shadow-[0_4px_25px_rgba(59,130,246,0.06)] space-y-5 text-slate-900">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
                     <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
                     </svg>
@@ -453,8 +500,8 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <span class="text-xs text-slate-400 font-medium">Ordenar:</span>
-                <span class="text-xs font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-xl">
+                <span class="text-xs text-slate-500 font-bold font-mono">Ordenar:</span>
+                <span class="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl">
                     Prioridad de Novedades
                 </span>
             </div>
@@ -463,49 +510,49 @@
         <!-- Grid de Tarjetas de Puntos -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {% for p in monitoring_points %}
-            <div class="bg-slate-50/70 hover:bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs hover:shadow-md transition flex flex-col justify-between">
+            <div class="bg-gradient-to-b from-white to-slate-50/80 hover:to-blue-50/30 rounded-2xl p-4.5 border border-slate-200/90 hover:border-blue-400 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between group">
                 <div>
                     <!-- Header Punto -->
                     <div class="flex items-start justify-between gap-2 mb-2">
                         <div class="min-w-0">
-                            <h4 class="text-xs font-bold text-slate-900 truncate" title="{{ p.name }}">{{ p.name }}</h4>
+                            <h4 class="text-xs font-extrabold text-slate-900 truncate group-hover:text-blue-700 transition-colors" title="{{ p.name }} ({{ p.address }})">{{ p.name }}</h4>
                             <p class="text-[10px] text-slate-400 truncate">{{ p.address }}</p>
                         </div>
-                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 {{ p.badge_class }}">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black shrink-0 cursor-help {{ p.badge_class }} font-mono shadow-2xs" title="Estado del punto: {{ p.status }}">
                             <span class="w-1.5 h-1.5 rounded-full {{ p.dot_class }}"></span>
                             {{ p.status }}
                         </span>
                     </div>
 
                     <!-- Datos Numéricos -->
-                    <div class="mt-3 flex items-baseline justify-between text-xs">
-                        <span class="text-slate-500">Equipos Operativos:</span>
-                        <strong class="text-slate-900">{{ p.operativos }}/{{ p.total }}</strong>
+                    <div class="mt-3 flex items-baseline justify-between text-xs cursor-help font-mono" title="{{ p.operativos }} dispositivos operativos de {{ p.total }} asignados a este punto">
+                        <span class="text-slate-500 font-sans font-medium">Equipos Operativos:</span>
+                        <strong class="text-slate-900 font-bold">{{ p.operativos }}/{{ p.total }}</strong>
                     </div>
 
                     <!-- Barra de Salud del Punto -->
-                    <div class="w-full bg-slate-200 rounded-full h-1.5 my-1.5 overflow-hidden">
-                        <div class="h-1.5 rounded-full {% if p.pct == 100 %}bg-emerald-500{% elif p.pct >= 75 %}bg-amber-500{% else %}bg-rose-500{% endif %}" 
+                    <div class="w-full bg-slate-200 rounded-full h-2 my-2 overflow-hidden cursor-help border border-slate-300/60 p-[1px]" title="Nivel de operatividad en {{ p.name }}: {{ p.pct }}%">
+                        <div class="h-full rounded-full shadow-xs {% if p.pct == 100 %}bg-emerald-500{% elif p.pct >= 75 %}bg-amber-500{% else %}bg-rose-500{% endif %}" 
                              style="width: {{ p.pct }}%;"></div>
                     </div>
 
-                    <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                        <span>Cámaras CCTV: <strong>{{ p.cameras_operativas }}/{{ p.cameras }}</strong></span>
-                        <span class="font-bold {% if p.pct == 100 %}text-emerald-700{% elif p.pct >= 75 %}text-amber-700{% else %}text-rose-700{% endif %}">{{ p.pct }}%</span>
+                    <div class="flex items-center justify-between text-[11px] text-slate-600 pt-1 cursor-help" title="{{ p.cameras_operativas }} cámaras de seguridad en línea de {{ p.cameras }} instaladas">
+                        <span>Cámaras CCTV: <strong class="text-slate-800">{{ p.cameras_operativas }}/{{ p.cameras }}</strong></span>
+                        <span class="font-black font-mono {% if p.pct == 100 %}text-emerald-700{% elif p.pct >= 75 %}text-amber-700{% else %}text-rose-700{% endif %}">{{ p.pct }}%</span>
                     </div>
                 </div>
 
                 <!-- Footer del punto -->
-                <div class="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                <div class="mt-3.5 pt-2.5 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
                     {% if p.fallas > 0 %}
-                    <span class="text-rose-600 font-bold">⚠️ {{ p.fallas }} en falla</span>
+                    <span class="text-rose-600 font-black cursor-help" title="{{ p.fallas }} equipos con incidencias técnicas activas">⚠️ {{ p.fallas }} en falla</span>
                     {% elif p.mantenimiento > 0 %}
-                    <span class="text-blue-600 font-semibold">🔧 En mant.</span>
+                    <span class="text-blue-600 font-bold cursor-help" title="Equipos con orden preventiva programada">🔧 En mant.</span>
                     {% else %}
-                    <span class="text-emerald-600 font-medium">✓ 100% Estable</span>
+                    <span class="text-emerald-600 font-black cursor-help" title="Todos los equipos de este punto se encuentran 100% operativos">✓ 100% Estable</span>
                     {% endif %}
 
-                    <a href="/devices" class="text-blue-600 font-semibold hover:underline">
+                    <a href="/devices" class="text-blue-600 hover:text-blue-800 font-bold hover:underline" title="Ver listado de equipos de este punto">
                         Ver equipos →
                     </a>
                 </div>
@@ -519,16 +566,16 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         <!-- Columna 1: Últimos Incidentes Reportados -->
-        <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-blue-200/60 shadow-[0_4px_25px_rgba(59,130,246,0.06)] flex flex-col justify-between text-slate-900">
             <div>
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
                         <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                         </svg>
                         Novedades Técnicas Recientes
                     </h3>
-                    <a href="/incidents" class="text-xs text-blue-600 font-semibold hover:underline">Ver todas ({{ metrics.total_incidents }}) →</a>
+                    <a href="/incidents" class="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline">Ver todas ({{ metrics.total_incidents }}) →</a>
                 </div>
 
                 {% if recent_incidents %}
@@ -537,20 +584,20 @@
                     <div class="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                                <span class="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded shadow-2xs">
                                     {{ inc.ticket_code }}
                                 </span>
                                 <p class="text-xs font-bold text-slate-900 truncate">{{ inc.title }}</p>
                             </div>
-                            <p class="text-[11px] text-slate-500 truncate mt-0.5">
+                            <p class="text-[11px] text-slate-500 truncate mt-0.5 font-medium">
                                 <span class="font-bold text-slate-700">📍 {{ inc.location_detail or inc.sede }}</span> • {{ inc.device.name if inc.device else 'CCTV' }}
                             </p>
                         </div>
                         <div class="shrink-0 flex flex-col items-end gap-1">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if inc.priority == 'Crítica' %}bg-rose-100 text-rose-800{% elif inc.priority == 'Alta' %}bg-orange-100 text-orange-800{% else %}bg-slate-100 text-slate-700{% endif %}">
+                            <span class="px-2.5 py-0.5 rounded text-[10px] font-black font-mono {% if inc.priority == 'Crítica' %}bg-rose-100 text-rose-800 border border-rose-200{% elif inc.priority == 'Alta' %}bg-orange-100 text-orange-800 border border-orange-200{% else %}bg-slate-100 text-slate-700 border border-slate-200{% endif %}">
                                 {{ inc.priority }}
                             </span>
-                            <span class="text-[10px] font-medium text-slate-500">{{ inc.status }}</span>
+                            <span class="text-[10px] font-bold text-slate-500">{{ inc.status }}</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -564,23 +611,23 @@
             </div>
 
             <div class="pt-4 mt-4 border-t border-slate-100">
-                <a href="/incidents" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition">
+                <a href="/incidents" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition shadow-2xs">
                     + Reportar Nueva Novedad de CCTV
                 </a>
             </div>
         </div>
 
         <!-- Columna 2: Últimos Mantenimientos Preventivos -->
-        <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div class="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-blue-200/60 shadow-[0_4px_25px_rgba(59,130,246,0.06)] flex flex-col justify-between text-slate-900">
             <div>
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
                         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                         </svg>
                         Mantenimientos en Cronograma
                     </h3>
-                    <a href="/maintenance" class="text-xs text-blue-600 font-semibold hover:underline">Ver todos ({{ metrics.total_maintenances }}) →</a>
+                    <a href="/maintenance" class="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline">Ver todos ({{ metrics.total_maintenances }}) →</a>
                 </div>
 
                 {% if recent_maintenances %}
@@ -589,20 +636,20 @@
                     <div class="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                <span class="text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded shadow-2xs">
                                     {{ maint.code }}
                                 </span>
                                 <p class="text-xs font-bold text-slate-900 truncate">{{ maint.title }}</p>
                             </div>
-                            <p class="text-[11px] text-slate-500 truncate mt-0.5">
+                            <p class="text-[11px] text-slate-500 truncate mt-0.5 font-medium">
                                 <span class="font-bold text-slate-700">📍 {{ maint.location_detail or maint.sede }}</span> • {{ maint.maintenance_type }}
                             </p>
                         </div>
                         <div class="shrink-0 flex flex-col items-end gap-1">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold {% if maint.status == 'En Ejecución' %}bg-blue-100 text-blue-800 animate-pulse{% elif maint.status == 'Completado' %}bg-emerald-100 text-emerald-800{% else %}bg-slate-100 text-slate-700{% endif %}">
+                            <span class="px-2.5 py-0.5 rounded text-[10px] font-black font-mono {% if maint.status == 'En Ejecución' %}bg-blue-100 text-blue-800 border border-blue-200 animate-pulse{% elif maint.status in ['Completado', 'Validado / Conforme', 'Conforme / Validado'] %}bg-emerald-100 text-emerald-800 border border-emerald-200{% else %}bg-slate-100 text-slate-700 border border-slate-200{% endif %}">
                                 {{ maint.status }}
                             </span>
-                            <span class="text-[10px] text-slate-400">{{ maint.scheduled_date.strftime('%d/%m/%Y') }}</span>
+                            <span class="text-[10px] text-slate-500 font-mono">{{ maint.scheduled_date.strftime('%d/%m/%Y') }}</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -610,13 +657,13 @@
                 {% else %}
                 <div class="py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                     <p class="text-xs font-semibold text-slate-600">Sin órdenes preventivas</p>
-                    <p class="text-[11px] text-slate-400 mt-0.5">Programa la primera orden de mantenimiento proactivo.</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Programa la primera orden de mantenimiento preventivo.</p>
                 </div>
                 {% endif %}
             </div>
 
             <div class="pt-4 mt-4 border-t border-slate-100">
-                <a href="/maintenance" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition">
+                <a href="/maintenance" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition shadow-2xs">
                     + Programar Nuevo Mantenimiento
                 </a>
             </div>
@@ -629,9 +676,15 @@
 <!-- ───── SCRIPT DE INICIALIZACIÓN DE GRÁFICOS (CHART.JS) ───── -->
 <script type="application/json" id="chart-operatividad-data">{{ chart_operatividad_json | safe }}</script>
 <script type="application/json" id="chart-puntos-data">{{ chart_puntos_json | safe }}</script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/chart.umd.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Chart === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>');
+    }
+</script>
+<script>
+window.initDashboardCharts = function() {
+    if (typeof Chart === 'undefined') return;
     const rawOperatividadEl = document.getElementById('chart-operatividad-data');
     const rawPuntosEl = document.getElementById('chart-puntos-data');
     const rawOperatividad = rawOperatividadEl ? JSON.parse(rawOperatividadEl.textContent || '{}') : {};
@@ -640,6 +693,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // 1. Gráfico de Dona: Operatividad de la Red
     const ctxOp = document.getElementById('operatividadChart');
     if (ctxOp) {
+        const prevOp = Chart.getChart(ctxOp);
+        if (prevOp) prevOp.destroy();
         new Chart(ctxOp, {
             type: 'doughnut',
             data: {
@@ -678,6 +733,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // 2. Gráfico de Barras: Salud por Punto
     const ctxPts = document.getElementById('puntosChart');
     if (ctxPts) {
+        const prevPts = Chart.getChart(ctxPts);
+        if (prevPts) prevPts.destroy();
         new Chart(ctxPts, {
             type: 'bar',
             data: {
@@ -732,6 +789,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-});
+};
+document.addEventListener('DOMContentLoaded', window.initDashboardCharts);
 </script>
 {% endblock %}
