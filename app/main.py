@@ -1,4 +1,5 @@
 import os
+import calendar
 import json
 import uuid
 import datetime
@@ -4099,6 +4100,219 @@ def export_cctv_executive_pdf_report(
         headers={
             "Content-Disposition": f"attachment; filename=\"{filename}\"",
             "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+
+@app.get("/schedule", response_class=HTMLResponse)
+@app.get("/cronograma", response_class=HTMLResponse)
+def schedule_view(
+    request: Request,
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Cronograma de Operaciones y Mantenimiento CCTV:
+    Muestra en vista de calendario mensual unificado todos los tickets de incidentes y mantenimientos
+    programados o registrados en la sede activa, con desglose interactivo y ventana modal compacta.
+    """
+    if not current_user:
+        return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
+
+    if current_user.must_change_password:
+        return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
+
+    current_site = get_current_site(request, db=db)
+    lic_redirect = check_site_access_or_redirect(request, current_user, current_site, db)
+    if lic_redirect:
+        return lic_redirect
+
+    now = get_local_now()
+    target_year = year if (year and 2000 <= year <= 2100) else now.year
+    target_month = month if (month and 1 <= month <= 12) else now.month
+
+    # Cálculo de meses anterior y siguiente
+    if target_month == 1:
+        prev_month, prev_year = 12, target_year - 1
+    else:
+        prev_month, prev_year = target_month - 1, target_year
+
+    if target_month == 12:
+        next_month, next_year = 1, target_year + 1
+    else:
+        next_month, next_year = target_month + 1, target_year
+
+    cal = calendar.Calendar(firstweekday=0)  # Lunes = 0
+    month_weeks = cal.monthdatescalendar(target_year, target_month)
+    grid_start_date = month_weeks[0][0]
+    grid_end_date = month_weeks[-1][-1]
+
+    start_dt = datetime.datetime.combine(grid_start_date, datetime.time.min)
+    end_dt = datetime.datetime.combine(grid_end_date, datetime.time.max)
+
+    site_filter_inc = get_site_filter_conditions(Incident, current_site)
+    site_filter_maint = get_site_filter_conditions(Maintenance, current_site)
+
+    # 1. Incidentes registrados en el periodo del calendario
+    incidents = db.query(Incident).filter(
+        site_filter_inc,
+        Incident.created_at >= start_dt,
+        Incident.created_at <= end_dt
+    ).order_by(Incident.created_at.asc()).all()
+
+    # 2. Mantenimientos programados en el periodo del calendario
+    maintenances = db.query(Maintenance).filter(
+        site_filter_maint,
+        Maintenance.scheduled_date >= start_dt,
+        Maintenance.scheduled_date <= end_dt
+    ).order_by(Maintenance.scheduled_date.asc()).all()
+
+    # Mapear tickets agrupados por fecha ISO (YYYY-MM-DD)
+    tickets_by_date: Dict[str, Dict[str, Any]] = {}
+
+    for inc in incidents:
+        if not inc.created_at:
+            continue
+        d_str = inc.created_at.strftime("%Y-%m-%d")
+        if d_str not in tickets_by_date:
+            tickets_by_date[d_str] = {"incidents": [], "maintenances": []}
+
+        dev_name = inc.device.name if inc.device else "CCTV General"
+        dev_loc = inc.device.location_detail if (inc.device and inc.device.location_detail) else (inc.device.sede if inc.device else inc.sede or "")
+        tickets_by_date[d_str]["incidents"].append({
+            "type": "incident",
+            "type_label": "Incidente",
+            "id": inc.id,
+            "ticket_code": inc.ticket_code,
+            "title": inc.title or f"Incidente en {dev_name}",
+            "status": inc.status or "Abierto",
+            "fault_type": inc.fault_type or "Falla Técnica",
+            "priority": inc.priority or "Media",
+            "device_name": dev_name,
+            "location": dev_loc,
+            "time": inc.created_at.strftime("%H:%M"),
+            "date_display": inc.created_at.strftime("%d/%m/%Y"),
+            "link": f"/incidents?search={urllib.parse.quote(inc.ticket_code)}"
+        })
+
+    for m in maintenances:
+        if not m.scheduled_date:
+            continue
+        d_str = m.scheduled_date.strftime("%Y-%m-%d")
+        if d_str not in tickets_by_date:
+            tickets_by_date[d_str] = {"incidents": [], "maintenances": []}
+
+        dev_name = m.device.name if m.device else "CCTV General"
+        dev_loc = m.device.location_detail if (m.device and m.device.location_detail) else (m.device.sede if m.device else m.sede or "")
+        tickets_by_date[d_str]["maintenances"].append({
+            "type": "maintenance",
+            "type_label": "Mantenimiento",
+            "id": m.id,
+            "ticket_code": m.code,
+            "title": m.title or f"Mantenimiento en {dev_name}",
+            "status": m.status or "Programado",
+            "frequency": m.frequency or "Preventivo",
+            "device_name": dev_name,
+            "location": dev_loc,
+            "time": m.scheduled_date.strftime("%H:%M"),
+            "date_display": m.scheduled_date.strftime("%d/%m/%Y"),
+            "link": f"/maintenance?search={urllib.parse.quote(m.code)}"
+        })
+
+    SPANISH_MONTHS = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    month_name = SPANISH_MONTHS[target_month]
+
+    calendar_weeks = []
+    total_month_incidents = 0
+    total_month_maintenances = 0
+    active_days_count = 0
+    today_str = now.strftime("%Y-%m-%d")
+
+    for week in month_weeks:
+        week_days = []
+        for day in week:
+            d_str = day.strftime("%Y-%m-%d")
+            day_data = tickets_by_date.get(d_str, {"incidents": [], "maintenances": []})
+            day_incidents = day_data["incidents"]
+            day_maintenances = day_data["maintenances"]
+            inc_count = len(day_incidents)
+            maint_count = len(day_maintenances)
+            total_day_tickets = inc_count + maint_count
+
+            is_current_month = (day.month == target_month)
+            if is_current_month:
+                total_month_incidents += inc_count
+                total_month_maintenances += maint_count
+                if total_day_tickets > 0:
+                    active_days_count += 1
+
+            if inc_count > 0 and maint_count > 0:
+                hover_type = "both"
+                hover_text = f"Incidentes ({inc_count}) y Mantenimientos ({maint_count})"
+                hover_badge = f"⚡ {inc_count} Inc. | {maint_count} Mant."
+            elif inc_count > 0:
+                hover_type = "incident"
+                hover_text = f"Incidentes ({inc_count})"
+                hover_badge = f"🔴 {inc_count} Incidente{'s' if inc_count > 1 else ''}"
+            elif maint_count > 0:
+                hover_type = "maintenance"
+                hover_text = f"Mantenimientos ({maint_count})"
+                hover_badge = f"🔵 {maint_count} Mantenimiento{'s' if maint_count > 1 else ''}"
+            else:
+                hover_type = "none"
+                hover_text = "Sin tickets registrados"
+                hover_badge = ""
+
+            week_days.append({
+                "date": day,
+                "date_str": d_str,
+                "day_num": day.day,
+                "is_current_month": is_current_month,
+                "is_today": (d_str == today_str),
+                "incidents": day_incidents,
+                "maintenances": day_maintenances,
+                "inc_count": inc_count,
+                "maint_count": maint_count,
+                "total_tickets": total_day_tickets,
+                "has_tickets": total_day_tickets > 0,
+                "hover_type": hover_type,
+                "hover_text": hover_text,
+                "hover_badge": hover_badge,
+                "formatted_date_es": f"{day.day} de {SPANISH_MONTHS[day.month]} de {day.year}"
+            })
+        calendar_weeks.append(week_days)
+
+    available_years = list(range(now.year - 2, now.year + 4))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="schedule.html",
+        context={
+            "current_user": current_user,
+            "current_site": current_site,
+            "available_sites": AVAILABLE_SITES,
+            "active_page": "schedule",
+            "calendar_weeks": calendar_weeks,
+            "tickets_by_date_json": json.dumps(tickets_by_date, ensure_ascii=False),
+            "target_year": target_year,
+            "target_month": target_month,
+            "month_name": month_name,
+            "prev_year": prev_year,
+            "prev_month": prev_month,
+            "next_year": next_year,
+            "next_month": next_month,
+            "today_year": now.year,
+            "today_month": now.month,
+            "today_str": today_str,
+            "total_month_incidents": total_month_incidents,
+            "total_month_maintenances": total_month_maintenances,
+            "total_month_tickets": total_month_incidents + total_month_maintenances,
+            "active_days_count": active_days_count,
+            "available_years": available_years,
+            "spanish_months": [(i, SPANISH_MONTHS[i]) for i in range(1, 13)]
         }
     )
 

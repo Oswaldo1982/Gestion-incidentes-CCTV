@@ -1861,7 +1861,7 @@ function maintenancesComponent() {
         validationAction: 'approve',
         validationNotes: '',
         imagePreviewModal: null,
-        searchQuery: '',
+        searchQuery: new URLSearchParams(window.location.search).get('search') || '',
         selectedDate: '',
         selectedStatus: '{{ initial_status or "all" }}',
         selectedFrequency: 'all',

@@ -28,7 +28,7 @@
                     window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
                 }
             },
-            searchQuery: '',
+            searchQuery: new URLSearchParams(window.location.search).get('search') || '',
             selectedDate: '',
             selectedStatus: 'all',
             selectedFault: 'all',
