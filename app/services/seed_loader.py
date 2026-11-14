@@ -34,10 +34,10 @@ def ensure_golden_data_seeded(db: Session) -> bool:
 
     REGLAS ESTRICTAS DE INTEGRIDAD:
     1. NUNCA ejecuta DELETE sobre ninguna tabla. Los datos creados por el usuario permanecen seguros.
-    2. Cada entidad se procesa en bloques aislados con su propio commit/rollback para evitar
-       que un conflicto en una tabla (ej. id duplicado de usuario) aborte la siembra de incidentes o mantenimientos.
+    2. Cada entidad se procesa de forma individual (por registro) con su propio commit/rollback para evitar
+       que un conflicto en una fila aborte la siembra de los demás registros.
     3. Carga sin excepción los 20 tickets de incidente y 20 de mantenimiento del Demo.
-    4. En PostgreSQL actualiza automáticamente las secuencias autoincrementales.
+    4. En PostgreSQL actualiza automáticamente el tamaño de columnas (VARCHAR 100) y las secuencias seriales.
     """
     seed_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "seeds", "golden_seed.json")
     if not os.path.exists(seed_file):
@@ -50,6 +50,44 @@ def ensure_golden_data_seeded(db: Session) -> bool:
     except Exception as e:
         logger.error(f"[!] Error leyendo {seed_file}: {e}")
         return False
+
+    # 0. En PostgreSQL: Asegurar tipos de columnas VARCHAR(100) y sincronizar secuencias al inicio
+    try:
+        bind = db.get_bind()
+        if bind and bind.dialect.name == "postgresql":
+            alter_queries = [
+                "ALTER TABLE incidents ALTER COLUMN status TYPE VARCHAR(100);",
+                "ALTER TABLE incidents ALTER COLUMN priority TYPE VARCHAR(50);",
+                "ALTER TABLE maintenances ALTER COLUMN status TYPE VARCHAR(100);",
+                "ALTER TABLE maintenances ALTER COLUMN priority TYPE VARCHAR(50);",
+                "ALTER TABLE maintenances ALTER COLUMN type TYPE VARCHAR(50);",
+                "ALTER TABLE devices ALTER COLUMN status TYPE VARCHAR(50);"
+            ]
+            for q in alter_queries:
+                try:
+                    db.execute(text(q))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
+            tables_with_id = [
+                "users", "licenses", "site_licenses", "site_activation_states",
+                "devices", "incidents", "maintenances", "events"
+            ]
+            for tbl in tables_with_id:
+                try:
+                    db.execute(text(f"""
+                        SELECT setval(
+                            pg_get_serial_sequence('{tbl}', 'id'),
+                            COALESCE((SELECT MAX(id) FROM {tbl}), 1) + 1,
+                            false
+                        );
+                    """))
+                    db.commit()
+                except Exception:
+                    db.rollback()
+    except Exception as e:
+        logger.warning(f"Aviso en configuración inicial postgres: {e}")
 
     # 1. Sembrar Licencia Maestra si no existe
     try:
@@ -67,11 +105,11 @@ def ensure_golden_data_seeded(db: Session) -> bool:
         db.rollback()
         logger.warning(f"Aviso sembrando licencia: {e}")
 
-    # 2. Sembrar Sedes Oficiales
-    try:
-        existing_site_ids = {s.id for s in db.query(Site.id).all()}
-        for s in golden_data.get("sites", []):
-            if s["id"] not in existing_site_ids:
+    # 2. Sembrar Sedes Oficiales (por registro)
+    for s in golden_data.get("sites", []):
+        try:
+            existing_site = db.query(Site).filter(Site.id == s["id"]).first()
+            if not existing_site:
                 db.add(Site(
                     id=s["id"],
                     name=s["name"],
@@ -86,73 +124,85 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                     default_supervisor=s.get("default_supervisor", ""),
                     is_active=bool(s.get("is_active", 1))
                 ))
-                existing_site_ids.add(s["id"])
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando sedes: {e}")
+                db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.debug(f"Aviso sembrando sede {s.get('id')}: {e}")
 
-    # 3. Sembrar Usuarios (San Agustín y Demo)
-    try:
-        existing_usernames = {u.username for u in db.query(User.username).all()}
-        existing_user_ids = {u.id for u in db.query(User.id).all()}
-        for u in golden_data.get("users", []):
-            uname = u["username"]
-            if uname not in existing_usernames:
-                uid = u.get("id")
-                kwargs = {
-                    "username": uname,
-                    "email": u.get("email", uname),
-                    "full_name": u.get("full_name", uname),
-                    "document_id": u.get("document_id", "0000000000"),
-                    "assigned_site": u.get("assigned_site", "Todas las Sedes"),
-                    "hashed_password": u.get("hashed_password") or get_password_hash("admin123"),
-                    "role": u.get("role", "Admin"),
-                    "is_active": bool(u.get("is_active", 1)),
-                    "must_change_password": bool(u.get("must_change_password", 0)),
-                    "temp_expires_at": parse_dt(u.get("temp_expires_at")),
-                    "badge_number": u.get("badge_number"),
-                    "signature_path": u.get("signature_path"),
-                    "is_executive_signatory": bool(u.get("is_executive_signatory", 0)),
-                    "is_deleted": bool(u.get("is_deleted", 0)),
-                    "deleted_at": parse_dt(u.get("deleted_at")),
-                    "created_at": parse_dt(u.get("created_at")) or datetime.datetime.utcnow()
-                }
-                # Solo asignar id explícito si no está ocupado
-                if uid and uid not in existing_user_ids:
-                    kwargs["id"] = uid
-                    existing_user_ids.add(uid)
+    # 3. Sembrar Usuarios (San Agustín y Demo) - inserción segura por registro
+    for u in golden_data.get("users", []):
+        uname = u.get("username")
+        if not uname:
+            continue
+        try:
+            existing_u = db.query(User).filter(User.username == uname).first()
+            if existing_u:
+                continue
+
+            uid = u.get("id")
+            kwargs = {
+                "username": uname,
+                "email": u.get("email", uname),
+                "full_name": u.get("full_name", uname),
+                "document_id": u.get("document_id", "0000000000"),
+                "assigned_site": u.get("assigned_site", "Todas las Sedes"),
+                "hashed_password": u.get("hashed_password") or get_password_hash("admin123"),
+                "role": u.get("role", "Admin"),
+                "is_active": bool(u.get("is_active", 1)),
+                "must_change_password": bool(u.get("must_change_password", 0)),
+                "temp_expires_at": parse_dt(u.get("temp_expires_at")),
+                "badge_number": u.get("badge_number"),
+                "signature_path": u.get("signature_path"),
+                "is_executive_signatory": bool(u.get("is_executive_signatory", 0)),
+                "is_deleted": bool(u.get("is_deleted", 0)),
+                "deleted_at": parse_dt(u.get("deleted_at")),
+                "created_at": parse_dt(u.get("created_at")) or datetime.datetime.utcnow()
+            }
+
+            # Intentar con ID explícito si está libre
+            if uid and not db.query(User).filter(User.id == uid).first():
+                kwargs["id"] = uid
+
+            db.add(User(**kwargs))
+            db.commit()
+        except Exception:
+            db.rollback()
+            try:
+                # Reintentar sin id explícito si hubo colisión de clave primaria
+                kwargs.pop("id", None)
                 db.add(User(**kwargs))
-                existing_usernames.add(uname)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando usuarios: {e}")
+                db.commit()
+            except Exception as e_user2:
+                db.rollback()
+                logger.warning(f"Aviso sembrando usuario {uname}: {e_user2}")
 
-    # 4. Sembrar Licenciamiento Multi-Sede
-    try:
-        if db.query(SiteLicenseKey).count() == 0 and golden_data.get("site_licenses"):
-            for sl in golden_data["site_licenses"]:
+    # 4. Sembrar Licenciamiento Multi-Sede (por registro)
+    for sl in golden_data.get("site_licenses", []):
+        try:
+            cert = sl.get("certificate_code")
+            if cert and not db.query(SiteLicenseKey).filter(SiteLicenseKey.certificate_code == cert).first():
                 db.add(SiteLicenseKey(
-                    id=sl.get("id"),
                     site_id=sl.get("site_id"),
                     site_name=sl.get("site_name"),
                     year=sl.get("year", 1),
                     password_hash=sl.get("password_hash"),
                     password_mask=sl.get("password_mask"),
-                    certificate_code=sl.get("certificate_code"),
+                    certificate_code=cert,
                     is_activated=bool(sl.get("is_activated", 0)),
                     activated_at=parse_dt(sl.get("activated_at")),
                     expires_at=parse_dt(sl.get("expires_at")),
                     created_at=parse_dt(sl.get("created_at")) or datetime.datetime.utcnow()
                 ))
-            db.commit()
+                db.commit()
+        except Exception:
+            db.rollback()
 
-        if db.query(SiteActivationState).count() == 0 and golden_data.get("site_activation_states"):
-            for sa in golden_data["site_activation_states"]:
+    for sa in golden_data.get("site_activation_states", []):
+        try:
+            sid = sa.get("site_id")
+            if sid and not db.query(SiteActivationState).filter(SiteActivationState.site_id == sid).first():
                 db.add(SiteActivationState(
-                    id=sa.get("id"),
-                    site_id=sa.get("site_id"),
+                    site_id=sid,
                     first_access_at=parse_dt(sa.get("first_access_at")),
                     current_year=sa.get("current_year", 1),
                     status=sa.get("status", "ACTIVE"),
@@ -161,58 +211,84 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                     last_activated_at=parse_dt(sa.get("last_activated_at")),
                     updated_at=parse_dt(sa.get("updated_at")) or datetime.datetime.utcnow()
                 ))
-            db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando licencias multi-sede: {e}")
+                db.commit()
+        except Exception:
+            db.rollback()
 
-    # 5. Sembrar Equipos (Devices) faltantes
-    try:
-        existing_dev_ids = {row[0] for row in db.query(Device.id).all()}
-        for d in golden_data.get("devices", []):
-            did = d.get("id")
+    # 5. Sembrar Equipos (Devices) faltantes (por registro)
+    for d in golden_data.get("devices", []):
+        did = d.get("id")
+        dname = d.get("name")
+        dsede = d.get("sede")
+        try:
+            existing_dev = None
+            if did:
+                existing_dev = db.query(Device).filter(Device.id == did).first()
+            if not existing_dev and dname and dsede:
+                existing_dev = db.query(Device).filter(Device.name == dname, Device.sede == dsede).first()
+
+            if existing_dev:
+                continue
+
             kwargs = {
-                "name": d.get("name"),
+                "name": dname,
                 "device_type": d.get("device_type"),
                 "brand": d.get("brand"),
                 "model": d.get("model"),
                 "serial_number": d.get("serial_number"),
                 "ip_address": d.get("ip_address"),
                 "mac_address": d.get("mac_address"),
-                "sede": d.get("sede"),
+                "sede": dsede,
                 "location_detail": d.get("location_detail"),
                 "status": d.get("status", "Operativo"),
                 "created_at": parse_dt(d.get("created_at")) or datetime.datetime.utcnow()
             }
-            if did and did not in existing_dev_ids:
+            if did and not db.query(Device).filter(Device.id == did).first():
                 kwargs["id"] = did
-                existing_dev_ids.add(did)
-                db.add(Device(**kwargs))
-            elif not did:
-                db.add(Device(**kwargs))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando equipos: {e}")
 
-    # 6. Sembrar Incidentes faltantes (San Agustín y Demo)
-    try:
-        existing_inc_ids = {row[0] for row in db.query(Incident.id).all()}
-        for inc in golden_data.get("incidents", []):
-            iid = inc.get("id")
+            db.add(Device(**kwargs))
+            db.commit()
+        except Exception:
+            db.rollback()
+            try:
+                kwargs.pop("id", None)
+                db.add(Device(**kwargs))
+                db.commit()
+            except Exception as e_dev2:
+                db.rollback()
+                logger.warning(f"Aviso sembrando equipo {dname}: {e_dev2}")
+
+    # 6. Sembrar Incidentes faltantes (San Agustín y Demo) - por registro individual
+    for inc in golden_data.get("incidents", []):
+        iid = inc.get("id")
+        ticket_num = inc.get("ticket_number")
+        isede = inc.get("sede")
+        try:
+            existing_inc = None
+            if iid:
+                existing_inc = db.query(Incident).filter(Incident.id == iid).first()
+            if not existing_inc and ticket_num and isede:
+                existing_inc = db.query(Incident).filter(
+                    Incident.ticket_number == ticket_num,
+                    Incident.sede == isede
+                ).first()
+
+            if existing_inc:
+                continue
+
             kwargs = {
-                "title": inc.get("title"),
-                "description": inc.get("description"),
+                "title": inc.get("title") or f"Incidente {ticket_num}",
+                "description": inc.get("description") or "Descripción del incidente",
                 "status": inc.get("status", "Abierto"),
                 "priority": inc.get("priority", "Media"),
-                "created_by_id": inc.get("created_by_id"),
+                "created_by_id": inc.get("created_by_id", 1),
                 "assigned_to_id": inc.get("assigned_to_id"),
                 "created_at": parse_dt(inc.get("created_at")) or datetime.datetime.utcnow(),
                 "updated_at": parse_dt(inc.get("updated_at")) or datetime.datetime.utcnow(),
-                "sede": inc.get("sede"),
+                "sede": isede,
                 "image_path": inc.get("image_path"),
                 "device_id": inc.get("device_id"),
-                "ticket_number": inc.get("ticket_number"),
+                "ticket_number": ticket_num,
                 "fault_type": inc.get("fault_type", "Falla Menor"),
                 "location_detail": inc.get("location_detail"),
                 "root_cause": inc.get("root_cause"),
@@ -228,36 +304,70 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 "rejection_photo": inc.get("rejection_photo"),
                 "timer_reset_at": parse_dt(inc.get("timer_reset_at"))
             }
-            if iid and iid not in existing_inc_ids:
-                kwargs["id"] = iid
-                existing_inc_ids.add(iid)
-                db.add(Incident(**kwargs))
-            elif not iid:
-                db.add(Incident(**kwargs))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando incidentes: {e}")
 
-    # 7. Sembrar Mantenimientos faltantes (San Agustín y Demo)
-    try:
-        existing_maint_ids = {row[0] for row in db.query(Maintenance.id).all()}
-        for m in golden_data.get("maintenances", []):
-            mid = m.get("id")
+            # Validar que foreign keys indispensables existan para evitar violación FK
+            if kwargs.get("device_id") and not db.query(Device).filter(Device.id == kwargs["device_id"]).first():
+                kwargs["device_id"] = None
+
+            if kwargs.get("created_by_id") and not db.query(User).filter(User.id == kwargs["created_by_id"]).first():
+                kwargs["created_by_id"] = 1
+
+            if kwargs.get("assigned_to_id") and not db.query(User).filter(User.id == kwargs["assigned_to_id"]).first():
+                kwargs["assigned_to_id"] = None
+
+            if kwargs.get("validator_id") and not db.query(User).filter(User.id == kwargs["validator_id"]).first():
+                kwargs["validator_id"] = None
+
+            if kwargs.get("closed_by_id") and not db.query(User).filter(User.id == kwargs["closed_by_id"]).first():
+                kwargs["closed_by_id"] = None
+
+            if iid and not db.query(Incident).filter(Incident.id == iid).first():
+                kwargs["id"] = iid
+
+            db.add(Incident(**kwargs))
+            db.commit()
+        except Exception:
+            db.rollback()
+            try:
+                kwargs.pop("id", None)
+                db.add(Incident(**kwargs))
+                db.commit()
+            except Exception as e_inc2:
+                db.rollback()
+                logger.warning(f"Aviso sembrando incidente {ticket_num}: {e_inc2}")
+
+    # 7. Sembrar Mantenimientos faltantes (San Agustín y Demo) - por registro individual
+    for m in golden_data.get("maintenances", []):
+        mid = m.get("id")
+        protocol_code = m.get("protocol_code")
+        msede = m.get("sede")
+        try:
+            existing_m = None
+            if mid:
+                existing_m = db.query(Maintenance).filter(Maintenance.id == mid).first()
+            if not existing_m and protocol_code and msede:
+                existing_m = db.query(Maintenance).filter(
+                    Maintenance.protocol_code == protocol_code,
+                    Maintenance.sede == msede
+                ).first()
+
+            if existing_m:
+                continue
+
             kwargs = {
                 "type": m.get("type", "Preventivo"),
-                "title": m.get("title"),
+                "title": m.get("title") or f"Mantenimiento {protocol_code}",
                 "description": m.get("description", "Mantenimiento preventivo programado"),
                 "scheduled_date": parse_dt(m.get("scheduled_date")) or datetime.datetime.utcnow(),
                 "completed_date": parse_dt(m.get("completed_date")),
                 "status": m.get("status", "Programado"),
-                "sede": m.get("sede"),
+                "sede": msede,
                 "image_path": m.get("image_path"),
                 "device_id": m.get("device_id"),
                 "incident_id": m.get("incident_id"),
                 "created_by_id": m.get("created_by_id", 1),
                 "created_at": parse_dt(m.get("created_at")) or datetime.datetime.utcnow(),
-                "protocol_code": m.get("protocol_code"),
+                "protocol_code": protocol_code,
                 "maintenance_type": m.get("maintenance_type", "Preventivo Mensual"),
                 "location_detail": m.get("location_detail"),
                 "priority": m.get("priority", "Media"),
@@ -279,42 +389,75 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 "operating_condition": m.get("operating_condition"),
                 "asset_component": m.get("asset_component")
             }
-            if mid and mid not in existing_maint_ids:
-                kwargs["id"] = mid
-                existing_maint_ids.add(mid)
-                db.add(Maintenance(**kwargs))
-            elif not mid:
-                db.add(Maintenance(**kwargs))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando mantenimientos: {e}")
 
-    # 8. Sembrar Eventos de Trazabilidad faltantes
-    try:
-        existing_ev_ids = {row[0] for row in db.query(Event.id).all()}
-        for ev in golden_data.get("events", []):
-            eid = ev.get("id")
+            # Validar foreign keys
+            if kwargs.get("device_id") and not db.query(Device).filter(Device.id == kwargs["device_id"]).first():
+                kwargs["device_id"] = None
+
+            if kwargs.get("incident_id") and not db.query(Incident).filter(Incident.id == kwargs["incident_id"]).first():
+                kwargs["incident_id"] = None
+
+            if kwargs.get("created_by_id") and not db.query(User).filter(User.id == kwargs["created_by_id"]).first():
+                kwargs["created_by_id"] = 1
+
+            if kwargs.get("completed_by_id") and not db.query(User).filter(User.id == kwargs["completed_by_id"]).first():
+                kwargs["completed_by_id"] = None
+
+            if kwargs.get("validator_id") and not db.query(User).filter(User.id == kwargs["validator_id"]).first():
+                kwargs["validator_id"] = None
+
+            if mid and not db.query(Maintenance).filter(Maintenance.id == mid).first():
+                kwargs["id"] = mid
+
+            db.add(Maintenance(**kwargs))
+            db.commit()
+        except Exception:
+            db.rollback()
+            try:
+                kwargs.pop("id", None)
+                db.add(Maintenance(**kwargs))
+                db.commit()
+            except Exception as e_m2:
+                db.rollback()
+                logger.warning(f"Aviso sembrando mantenimiento {protocol_code}: {e_m2}")
+
+    # 8. Sembrar Eventos de Trazabilidad faltantes (por registro)
+    for ev in golden_data.get("events", []):
+        eid = ev.get("id")
+        try:
+            if eid and db.query(Event).filter(Event.id == eid).first():
+                continue
+
+            inc_id = ev.get("incident_id")
+            maint_id = ev.get("maintenance_id")
+
+            # Solo insertar si el incidente o mantenimiento referenciado existe
+            if inc_id and not db.query(Incident).filter(Incident.id == inc_id).first():
+                continue
+            if maint_id and not db.query(Maintenance).filter(Maintenance.id == maint_id).first():
+                continue
+
+            u_id = ev.get("user_id")
+            if u_id and not db.query(User).filter(User.id == u_id).first():
+                u_id = 1
+
             kwargs = {
-                "incident_id": ev.get("incident_id"),
-                "maintenance_id": ev.get("maintenance_id"),
-                "user_id": ev.get("user_id"),
+                "incident_id": inc_id,
+                "maintenance_id": maint_id,
+                "user_id": u_id,
                 "event_type": ev.get("event_type", "LOG"),
                 "description": ev.get("description", ""),
                 "created_at": parse_dt(ev.get("created_at")) or datetime.datetime.utcnow()
             }
-            if eid and eid not in existing_ev_ids:
+            if eid and not db.query(Event).filter(Event.id == eid).first():
                 kwargs["id"] = eid
-                existing_ev_ids.add(eid)
-                db.add(Event(**kwargs))
-            elif not eid:
-                db.add(Event(**kwargs))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning(f"Aviso sembrando eventos: {e}")
 
-    # 9. En PostgreSQL: Sincronizar secuencias serial para evitar errores de clave duplicada
+            db.add(Event(**kwargs))
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    # 9. En PostgreSQL: Sincronizar secuencias serial al final
     try:
         bind = db.get_bind()
         if bind and bind.dialect.name == "postgresql":
@@ -332,11 +475,10 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                         );
                     """))
                     db.commit()
-                except Exception as seq_err:
+                except Exception:
                     db.rollback()
-                    logger.debug(f"Aviso actualizando secuencia para {tbl}: {seq_err}")
     except Exception as e:
-        logger.warning(f"Aviso general en ajuste de secuencias postgres: {e}")
+        logger.warning(f"Aviso final en secuencias postgres: {e}")
 
     logger.info("[*] Verificación y siembra de catálogo completada exitosamente.")
     return True

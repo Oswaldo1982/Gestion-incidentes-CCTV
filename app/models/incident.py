@@ -21,8 +21,8 @@ class Incident(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), default="Abierto", nullable=False)  # Abierto, En Proceso, Resuelto, Cerrado
-    priority: Mapped[str] = mapped_column(String(20), default="Media", nullable=False)   # Baja, Media, Alta, Crítica
+    status: Mapped[str] = mapped_column(String(100), default="Abierto", nullable=False)  # Abierto, En Proceso, Resuelto, Cerrado, Validado / Conforme, etc.
+    priority: Mapped[str] = mapped_column(String(50), default="Media", nullable=False)   # Baja, Media, Alta, Crítica
     sede: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     device_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("devices.id"), nullable=True)

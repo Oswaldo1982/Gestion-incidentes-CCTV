@@ -19,7 +19,7 @@ class Device(Base):
     mac_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     sede: Mapped[str] = mapped_column(String(100), nullable=False)        # San Agustín, Huila (Sede Principal), Sede 2, etc.
     location_detail: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="Operativo", nullable=False) # Operativo, Alerta Menor, En Falla, Mantenimiento, Inactivo
+    status: Mapped[str] = mapped_column(String(50), default="Operativo", nullable=False) # Operativo, Alerta Menor, En Falla, Mantenimiento, Inactivo
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=get_local_now, nullable=False)
 
     # Relaciones

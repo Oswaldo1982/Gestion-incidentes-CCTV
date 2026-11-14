@@ -19,12 +19,12 @@ class Maintenance(Base):
     __tablename__ = "maintenances"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)                         # Preventivo
+    type: Mapped[str] = mapped_column(String(50), nullable=False)                         # Preventivo
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     scheduled_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
     completed_date: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="Programado", nullable=False) # Programado, En Ejecución, Completado, Cancelado
+    status: Mapped[str] = mapped_column(String(100), default="Programado", nullable=False) # Programado, En Ejecución, Completado, Cancelado, Validado / Conforme, etc.
     sede: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     device_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("devices.id"), nullable=True)
@@ -36,7 +36,7 @@ class Maintenance(Base):
     protocol_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     maintenance_type: Mapped[Optional[str]] = mapped_column(String(50), default="Preventivo Mensual", nullable=True)  # Inspección Rutinaria, Preventivo Mensual, Preventivo Trimestral, Preventivo Semestral, Preventivo Anual Integral
     location_detail: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)                               # Estación de Policía, Carabineros, Cam 1 "Terminal", etc.
-    priority: Mapped[str] = mapped_column(String(20), default="Media", nullable=False)
+    priority: Mapped[str] = mapped_column(String(50), default="Media", nullable=False)
     checklist_results: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                   # Checklist de tareas preventivas
     technical_findings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                  # Diagnóstico / Hallazgos previos
     actions_taken: Mapped[Optional[str]] = mapped_column(Text, nullable=True)                                       # Actividades ejecutadas

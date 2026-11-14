@@ -55,7 +55,28 @@ class Base(DeclarativeBase):
     pass
 
 def ensure_database_schema(target_engine):
-    """Verifica y agrega columnas faltantes en tablas existentes sin alterar datos (específico SQLite local)."""
+    """Verifica y agrega columnas faltantes en tablas existentes sin alterar datos (PostgreSQL y SQLite)."""
+    if target_engine.dialect.name == "postgresql":
+        try:
+            with target_engine.connect() as conn:
+                alter_queries = [
+                    "ALTER TABLE incidents ALTER COLUMN status TYPE VARCHAR(100);",
+                    "ALTER TABLE incidents ALTER COLUMN priority TYPE VARCHAR(50);",
+                    "ALTER TABLE maintenances ALTER COLUMN status TYPE VARCHAR(100);",
+                    "ALTER TABLE maintenances ALTER COLUMN priority TYPE VARCHAR(50);",
+                    "ALTER TABLE maintenances ALTER COLUMN type TYPE VARCHAR(50);",
+                    "ALTER TABLE devices ALTER COLUMN status TYPE VARCHAR(50);"
+                ]
+                for q in alter_queries:
+                    try:
+                        conn.execute(text(q))
+                        conn.commit()
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[!] Aviso al sincronizar columnas postgres: {e}")
+        return
+
     if target_engine.dialect.name != "sqlite":
         return
     try:
