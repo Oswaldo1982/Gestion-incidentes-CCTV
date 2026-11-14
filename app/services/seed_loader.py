@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import datetime
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -13,13 +14,14 @@ from app.models.event import Event
 from app.models.site import Site
 from app.models.license import License, SiteLicenseKey, SiteActivationState
 from app.auth import get_password_hash
+from app.utils.timezone import get_local_now
 
 logger = logging.getLogger("seed_loader")
 
 
-def parse_dt(val):
+def parse_dt(val: Any) -> Optional[datetime.datetime]:
     if not val or not isinstance(val, str):
-        return val
+        return val if isinstance(val, datetime.datetime) else None
     try:
         return datetime.datetime.fromisoformat(val)
     except Exception:
@@ -98,7 +100,7 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 id=lic_data.get("id", 1),
                 license_key=lic_data.get("license_key"),
                 is_active=bool(lic_data.get("is_active", 1)),
-                activated_at=parse_dt(lic_data.get("activated_at")) or datetime.datetime.utcnow()
+                activated_at=parse_dt(lic_data.get("activated_at")) or get_local_now()
             ))
             db.commit()
     except Exception as e:
@@ -138,39 +140,43 @@ def ensure_golden_data_seeded(db: Session) -> bool:
             existing_u = db.query(User).filter(User.username == uname).first()
             if existing_u:
                 continue
+        except Exception:
+            db.rollback()
+            continue
 
-            uid = u.get("id")
-            kwargs = {
-                "username": uname,
-                "email": u.get("email", uname),
-                "full_name": u.get("full_name", uname),
-                "document_id": u.get("document_id", "0000000000"),
-                "assigned_site": u.get("assigned_site", "Todas las Sedes"),
-                "hashed_password": u.get("hashed_password") or get_password_hash("admin123"),
-                "role": u.get("role", "Admin"),
-                "is_active": bool(u.get("is_active", 1)),
-                "must_change_password": bool(u.get("must_change_password", 0)),
-                "temp_expires_at": parse_dt(u.get("temp_expires_at")),
-                "badge_number": u.get("badge_number"),
-                "signature_path": u.get("signature_path"),
-                "is_executive_signatory": bool(u.get("is_executive_signatory", 0)),
-                "is_deleted": bool(u.get("is_deleted", 0)),
-                "deleted_at": parse_dt(u.get("deleted_at")),
-                "created_at": parse_dt(u.get("created_at")) or datetime.datetime.utcnow()
-            }
+        uid = u.get("id")
+        user_kwargs: Dict[str, Any] = {
+            "username": uname,
+            "email": u.get("email", uname),
+            "full_name": u.get("full_name", uname),
+            "document_id": u.get("document_id", "0000000000"),
+            "assigned_site": u.get("assigned_site", "Todas las Sedes"),
+            "hashed_password": u.get("hashed_password") or get_password_hash("admin123"),
+            "role": u.get("role", "Admin"),
+            "is_active": bool(u.get("is_active", 1)),
+            "must_change_password": bool(u.get("must_change_password", 0)),
+            "temp_expires_at": parse_dt(u.get("temp_expires_at")),
+            "badge_number": u.get("badge_number"),
+            "signature_path": u.get("signature_path"),
+            "is_executive_signatory": bool(u.get("is_executive_signatory", 0)),
+            "is_deleted": bool(u.get("is_deleted", 0)),
+            "deleted_at": parse_dt(u.get("deleted_at")),
+            "created_at": parse_dt(u.get("created_at")) or get_local_now()
+        }
 
+        try:
             # Intentar con ID explícito si está libre
             if uid and not db.query(User).filter(User.id == uid).first():
-                kwargs["id"] = uid
+                user_kwargs["id"] = uid
 
-            db.add(User(**kwargs))
+            db.add(User(**user_kwargs))
             db.commit()
         except Exception:
             db.rollback()
             try:
                 # Reintentar sin id explícito si hubo colisión de clave primaria
-                kwargs.pop("id", None)
-                db.add(User(**kwargs))
+                user_kwargs.pop("id", None)
+                db.add(User(**user_kwargs))
                 db.commit()
             except Exception as e_user2:
                 db.rollback()
@@ -191,7 +197,7 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                     is_activated=bool(sl.get("is_activated", 0)),
                     activated_at=parse_dt(sl.get("activated_at")),
                     expires_at=parse_dt(sl.get("expires_at")),
-                    created_at=parse_dt(sl.get("created_at")) or datetime.datetime.utcnow()
+                    created_at=parse_dt(sl.get("created_at")) or get_local_now()
                 ))
                 db.commit()
         except Exception:
@@ -209,7 +215,7 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                     failed_attempts=sa.get("failed_attempts", 0),
                     lockout_until=parse_dt(sa.get("lockout_until")),
                     last_activated_at=parse_dt(sa.get("last_activated_at")),
-                    updated_at=parse_dt(sa.get("updated_at")) or datetime.datetime.utcnow()
+                    updated_at=parse_dt(sa.get("updated_at")) or get_local_now()
                 ))
                 db.commit()
         except Exception:
@@ -229,30 +235,35 @@ def ensure_golden_data_seeded(db: Session) -> bool:
 
             if existing_dev:
                 continue
+        except Exception:
+            db.rollback()
+            continue
 
-            kwargs = {
-                "name": dname,
-                "device_type": d.get("device_type"),
-                "brand": d.get("brand"),
-                "model": d.get("model"),
-                "serial_number": d.get("serial_number"),
-                "ip_address": d.get("ip_address"),
-                "mac_address": d.get("mac_address"),
-                "sede": dsede,
-                "location_detail": d.get("location_detail"),
-                "status": d.get("status", "Operativo"),
-                "created_at": parse_dt(d.get("created_at")) or datetime.datetime.utcnow()
-            }
+        device_kwargs: Dict[str, Any] = {
+            "name": dname,
+            "device_type": d.get("device_type"),
+            "brand": d.get("brand"),
+            "model": d.get("model"),
+            "serial_number": d.get("serial_number"),
+            "ip_address": d.get("ip_address"),
+            "mac_address": d.get("mac_address"),
+            "sede": dsede,
+            "location_detail": d.get("location_detail"),
+            "status": d.get("status", "Operativo"),
+            "created_at": parse_dt(d.get("created_at")) or get_local_now()
+        }
+
+        try:
             if did and not db.query(Device).filter(Device.id == did).first():
-                kwargs["id"] = did
+                device_kwargs["id"] = did
 
-            db.add(Device(**kwargs))
+            db.add(Device(**device_kwargs))
             db.commit()
         except Exception:
             db.rollback()
             try:
-                kwargs.pop("id", None)
-                db.add(Device(**kwargs))
+                device_kwargs.pop("id", None)
+                db.add(Device(**device_kwargs))
                 db.commit()
             except Exception as e_dev2:
                 db.rollback()
@@ -275,62 +286,66 @@ def ensure_golden_data_seeded(db: Session) -> bool:
 
             if existing_inc:
                 continue
+        except Exception:
+            db.rollback()
+            continue
 
-            kwargs = {
-                "title": inc.get("title") or f"Incidente {ticket_num}",
-                "description": inc.get("description") or "Descripción del incidente",
-                "status": inc.get("status", "Abierto"),
-                "priority": inc.get("priority", "Media"),
-                "created_by_id": inc.get("created_by_id", 1),
-                "assigned_to_id": inc.get("assigned_to_id"),
-                "created_at": parse_dt(inc.get("created_at")) or datetime.datetime.utcnow(),
-                "updated_at": parse_dt(inc.get("updated_at")) or datetime.datetime.utcnow(),
-                "sede": isede,
-                "image_path": inc.get("image_path"),
-                "device_id": inc.get("device_id"),
-                "ticket_number": ticket_num,
-                "fault_type": inc.get("fault_type", "Falla Menor"),
-                "location_detail": inc.get("location_detail"),
-                "root_cause": inc.get("root_cause"),
-                "solution": inc.get("solution"),
-                "closed_by_id": inc.get("closed_by_id"),
-                "attended_at": parse_dt(inc.get("attended_at")),
-                "closed_at": parse_dt(inc.get("closed_at")),
-                "closing_image_path": inc.get("closing_image_path"),
-                "validator_id": inc.get("validator_id"),
-                "validated_at": parse_dt(inc.get("validated_at")),
-                "validation_status": inc.get("validation_status"),
-                "validation_notes": inc.get("validation_notes"),
-                "rejection_photo": inc.get("rejection_photo"),
-                "timer_reset_at": parse_dt(inc.get("timer_reset_at"))
-            }
+        inc_kwargs: Dict[str, Any] = {
+            "title": inc.get("title") or f"Incidente {ticket_num}",
+            "description": inc.get("description") or "Descripción del incidente",
+            "status": inc.get("status", "Abierto"),
+            "priority": inc.get("priority", "Media"),
+            "created_by_id": inc.get("created_by_id", 1),
+            "assigned_to_id": inc.get("assigned_to_id"),
+            "created_at": parse_dt(inc.get("created_at")) or get_local_now(),
+            "updated_at": parse_dt(inc.get("updated_at")) or get_local_now(),
+            "sede": isede,
+            "image_path": inc.get("image_path"),
+            "device_id": inc.get("device_id"),
+            "ticket_number": ticket_num,
+            "fault_type": inc.get("fault_type", "Falla Menor"),
+            "location_detail": inc.get("location_detail"),
+            "root_cause": inc.get("root_cause"),
+            "solution": inc.get("solution"),
+            "closed_by_id": inc.get("closed_by_id"),
+            "attended_at": parse_dt(inc.get("attended_at")),
+            "closed_at": parse_dt(inc.get("closed_at")),
+            "closing_image_path": inc.get("closing_image_path"),
+            "validator_id": inc.get("validator_id"),
+            "validated_at": parse_dt(inc.get("validated_at")),
+            "validation_status": inc.get("validation_status"),
+            "validation_notes": inc.get("validation_notes"),
+            "rejection_photo": inc.get("rejection_photo"),
+            "timer_reset_at": parse_dt(inc.get("timer_reset_at"))
+        }
 
+        try:
             # Validar que foreign keys indispensables existan para evitar violación FK
-            if kwargs.get("device_id") and not db.query(Device).filter(Device.id == kwargs["device_id"]).first():
-                kwargs["device_id"] = None
+            if inc_kwargs.get("device_id") and not db.query(Device).filter(Device.id == inc_kwargs["device_id"]).first():
+                inc_kwargs["device_id"] = None
 
-            if kwargs.get("created_by_id") and not db.query(User).filter(User.id == kwargs["created_by_id"]).first():
-                kwargs["created_by_id"] = 1
+            if inc_kwargs.get("created_by_id") and not db.query(User).filter(User.id == inc_kwargs["created_by_id"]).first():
+                inc_kwargs["created_by_id"] = 1
 
-            if kwargs.get("assigned_to_id") and not db.query(User).filter(User.id == kwargs["assigned_to_id"]).first():
-                kwargs["assigned_to_id"] = None
+            if inc_kwargs.get("assigned_to_id") and not db.query(User).filter(User.id == inc_kwargs["assigned_to_id"]).first():
+                inc_kwargs["assigned_to_id"] = None
 
-            if kwargs.get("validator_id") and not db.query(User).filter(User.id == kwargs["validator_id"]).first():
-                kwargs["validator_id"] = None
+            if inc_kwargs.get("validator_id") and not db.query(User).filter(User.id == inc_kwargs["validator_id"]).first():
+                inc_kwargs["validator_id"] = None
 
-            if kwargs.get("closed_by_id") and not db.query(User).filter(User.id == kwargs["closed_by_id"]).first():
-                kwargs["closed_by_id"] = None
+            if inc_kwargs.get("closed_by_id") and not db.query(User).filter(User.id == inc_kwargs["closed_by_id"]).first():
+                inc_kwargs["closed_by_id"] = None
 
             if iid and not db.query(Incident).filter(Incident.id == iid).first():
-                kwargs["id"] = iid
+                inc_kwargs["id"] = iid
 
-            db.add(Incident(**kwargs))
+            db.add(Incident(**inc_kwargs))
             db.commit()
         except Exception:
             db.rollback()
             try:
-                kwargs.pop("id", None)
-                db.add(Incident(**kwargs))
+                inc_kwargs.pop("id", None)
+                db.add(Incident(**inc_kwargs))
                 db.commit()
             except Exception as e_inc2:
                 db.rollback()
@@ -353,69 +368,73 @@ def ensure_golden_data_seeded(db: Session) -> bool:
 
             if existing_m:
                 continue
+        except Exception:
+            db.rollback()
+            continue
 
-            kwargs = {
-                "type": m.get("type", "Preventivo"),
-                "title": m.get("title") or f"Mantenimiento {protocol_code}",
-                "description": m.get("description", "Mantenimiento preventivo programado"),
-                "scheduled_date": parse_dt(m.get("scheduled_date")) or datetime.datetime.utcnow(),
-                "completed_date": parse_dt(m.get("completed_date")),
-                "status": m.get("status", "Programado"),
-                "sede": msede,
-                "image_path": m.get("image_path"),
-                "device_id": m.get("device_id"),
-                "incident_id": m.get("incident_id"),
-                "created_by_id": m.get("created_by_id", 1),
-                "created_at": parse_dt(m.get("created_at")) or datetime.datetime.utcnow(),
-                "protocol_code": protocol_code,
-                "maintenance_type": m.get("maintenance_type", "Preventivo Mensual"),
-                "location_detail": m.get("location_detail"),
-                "priority": m.get("priority", "Media"),
-                "checklist_results": m.get("checklist_results"),
-                "technical_findings": m.get("technical_findings"),
-                "actions_taken": m.get("actions_taken"),
-                "recommendations": m.get("recommendations"),
-                "execution_date": parse_dt(m.get("execution_date")),
-                "completed_by_id": m.get("completed_by_id"),
-                "completion_photo": m.get("completion_photo"),
-                "validator_id": m.get("validator_id"),
-                "validated_at": parse_dt(m.get("validated_at")),
-                "validation_status": m.get("validation_status"),
-                "validation_notes": m.get("validation_notes"),
-                "rejection_photo": m.get("rejection_photo"),
-                "timer_reset_at": parse_dt(m.get("timer_reset_at")),
-                "rca_cause_factor": m.get("rca_cause_factor"),
-                "rca_failure_mechanism": m.get("rca_failure_mechanism"),
-                "operating_condition": m.get("operating_condition"),
-                "asset_component": m.get("asset_component")
-            }
+        maint_kwargs: Dict[str, Any] = {
+            "type": m.get("type", "Preventivo"),
+            "title": m.get("title") or f"Mantenimiento {protocol_code}",
+            "description": m.get("description", "Mantenimiento preventivo programado"),
+            "scheduled_date": parse_dt(m.get("scheduled_date")) or get_local_now(),
+            "completed_date": parse_dt(m.get("completed_date")),
+            "status": m.get("status", "Programado"),
+            "sede": msede,
+            "image_path": m.get("image_path"),
+            "device_id": m.get("device_id"),
+            "incident_id": m.get("incident_id"),
+            "created_by_id": m.get("created_by_id", 1),
+            "created_at": parse_dt(m.get("created_at")) or get_local_now(),
+            "protocol_code": protocol_code,
+            "maintenance_type": m.get("maintenance_type", "Preventivo Mensual"),
+            "location_detail": m.get("location_detail"),
+            "priority": m.get("priority", "Media"),
+            "checklist_results": m.get("checklist_results"),
+            "technical_findings": m.get("technical_findings"),
+            "actions_taken": m.get("actions_taken"),
+            "recommendations": m.get("recommendations"),
+            "execution_date": parse_dt(m.get("execution_date")),
+            "completed_by_id": m.get("completed_by_id"),
+            "completion_photo": m.get("completion_photo"),
+            "validator_id": m.get("validator_id"),
+            "validated_at": parse_dt(m.get("validated_at")),
+            "validation_status": m.get("validation_status"),
+            "validation_notes": m.get("validation_notes"),
+            "rejection_photo": m.get("rejection_photo"),
+            "timer_reset_at": parse_dt(m.get("timer_reset_at")),
+            "rca_cause_factor": m.get("rca_cause_factor"),
+            "rca_failure_mechanism": m.get("rca_failure_mechanism"),
+            "operating_condition": m.get("operating_condition"),
+            "asset_component": m.get("asset_component")
+        }
 
+        try:
             # Validar foreign keys
-            if kwargs.get("device_id") and not db.query(Device).filter(Device.id == kwargs["device_id"]).first():
-                kwargs["device_id"] = None
+            if maint_kwargs.get("device_id") and not db.query(Device).filter(Device.id == maint_kwargs["device_id"]).first():
+                maint_kwargs["device_id"] = None
 
-            if kwargs.get("incident_id") and not db.query(Incident).filter(Incident.id == kwargs["incident_id"]).first():
-                kwargs["incident_id"] = None
+            if maint_kwargs.get("incident_id") and not db.query(Incident).filter(Incident.id == maint_kwargs["incident_id"]).first():
+                maint_kwargs["incident_id"] = None
 
-            if kwargs.get("created_by_id") and not db.query(User).filter(User.id == kwargs["created_by_id"]).first():
-                kwargs["created_by_id"] = 1
+            if maint_kwargs.get("created_by_id") and not db.query(User).filter(User.id == maint_kwargs["created_by_id"]).first():
+                maint_kwargs["created_by_id"] = 1
 
-            if kwargs.get("completed_by_id") and not db.query(User).filter(User.id == kwargs["completed_by_id"]).first():
-                kwargs["completed_by_id"] = None
+            if maint_kwargs.get("completed_by_id") and not db.query(User).filter(User.id == maint_kwargs["completed_by_id"]).first():
+                maint_kwargs["completed_by_id"] = None
 
-            if kwargs.get("validator_id") and not db.query(User).filter(User.id == kwargs["validator_id"]).first():
-                kwargs["validator_id"] = None
+            if maint_kwargs.get("validator_id") and not db.query(User).filter(User.id == maint_kwargs["validator_id"]).first():
+                maint_kwargs["validator_id"] = None
 
             if mid and not db.query(Maintenance).filter(Maintenance.id == mid).first():
-                kwargs["id"] = mid
+                maint_kwargs["id"] = mid
 
-            db.add(Maintenance(**kwargs))
+            db.add(Maintenance(**maint_kwargs))
             db.commit()
         except Exception:
             db.rollback()
             try:
-                kwargs.pop("id", None)
-                db.add(Maintenance(**kwargs))
+                maint_kwargs.pop("id", None)
+                db.add(Maintenance(**maint_kwargs))
                 db.commit()
             except Exception as e_m2:
                 db.rollback()
@@ -441,18 +460,18 @@ def ensure_golden_data_seeded(db: Session) -> bool:
             if u_id and not db.query(User).filter(User.id == u_id).first():
                 u_id = 1
 
-            kwargs = {
+            event_kwargs: Dict[str, Any] = {
                 "incident_id": inc_id,
                 "maintenance_id": maint_id,
                 "user_id": u_id,
                 "event_type": ev.get("event_type", "LOG"),
                 "description": ev.get("description", ""),
-                "created_at": parse_dt(ev.get("created_at")) or datetime.datetime.utcnow()
+                "created_at": parse_dt(ev.get("created_at")) or get_local_now()
             }
             if eid and not db.query(Event).filter(Event.id == eid).first():
-                kwargs["id"] = eid
+                event_kwargs["id"] = eid
 
-            db.add(Event(**kwargs))
+            db.add(Event(**event_kwargs))
             db.commit()
         except Exception:
             db.rollback()
