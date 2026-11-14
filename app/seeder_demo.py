@@ -16,24 +16,11 @@ from app.config import settings
 
 def seed_demo_data(db: Session):
     """
-    Puebla la base de datos volátil en memoria con datos realistas para los 4 municipios
-    y los 3 perfiles institucionales (Administrador, Supervisor de Contrato, Empresa de Mantenimiento).
+    Puebla la base de datos persistente con el catálogo inicial de demostración
+    sin eliminar registros existentes.
     """
-    if not settings.DEMO_MODE:
-        print("[!] Protección de Seguridad: seed_demo_data ignorado para proteger la base de datos persistente.")
-        return
-
-    print("[*] [Modo Demo] Inicializando entorno Sandbox volátil en memoria...")
-
-    # 1. Limpieza de tablas
-    db.query(Event).delete()
-    db.query(Maintenance).delete()
-    db.query(Incident).delete()
-    db.query(Device).delete()
-    db.query(AuditLog).delete()
-    db.query(User).delete()
-    db.query(License).delete()
-    db.commit()
+    from app.services.seed_loader import ensure_golden_data_seeded
+    ensure_golden_data_seeded(db)
 
     now = datetime.datetime.utcnow()
 

@@ -434,43 +434,43 @@ async def lifespan(app: FastAPI):
         except Exception as e_site:
             print(f"[!] Aviso al sincronizar sedes iniciales: {e_site}")
 
-        if settings.DEMO_MODE:
-            from app.seeder_demo import seed_demo_data
-            print("=" * 65)
-            print("[*] [MODO DEMO / SANDBOX (VOLÁTIL EN MEMORIA) ACTIVADO]")
-            print(f"[*] Base de datos: {settings.effective_database_url}")
-            print("=" * 65)
-            seed_demo_data(db)
-        else:
-            # 2. Sembrar el usuario administrador inicial por defecto si no existe (Modo Normal)
-            admin_exists = db.query(User).filter(
-                (User.role == "Admin") | (User.username == settings.ADMIN_USERNAME)
-            ).first()
-            if not admin_exists:
-                hashed_pw = get_password_hash(settings.ADMIN_PASSWORD)
-                default_admin = User(
-                    username=settings.ADMIN_USERNAME,
-                    email=settings.ADMIN_EMAIL,
-                    full_name="Administrador Principal",
-                    document_id="0000000000",
-                    assigned_site="Todas las Sedes",
-                    hashed_password=hashed_pw,
-                    role="Admin",
-                    is_active=True,
-                    must_change_password=False
-                )
-                db.add(default_admin)
-                db.commit()
-                print(f"[*] Usuario Administrador inicial creado con éxito: {settings.ADMIN_USERNAME}")
-            else:
-                print(f"[*] Usuario Administrador ya configurado: {admin_exists.username}")
+        # 2. Carga automática de catálogo inicial y verificación de persistencia (San Agustín y Demo)
+        try:
+            from app.services.seed_loader import ensure_golden_data_seeded
+            ensure_golden_data_seeded(db)
+            print("[*] Verificación de persistencia y catálogo base completada (San Agustín y Demo).")
+        except Exception as e_seed:
+            print(f"[!] Aviso en carga de semillas persistentes: {e_seed}")
 
-            # 3. Sembrar licencia activa si no existe
-            license_active = db.query(License).filter(License.is_active == True).first()
-            if not license_active:
-                from app.services.license_service import generate_dev_license
-                dev_license_key = generate_dev_license(expires_days=3650, max_users=100)
-                print("[*] Licencia de sistema sembrada y activada con éxito.")
+        # 3. Sembrar el usuario administrador inicial por defecto si no existe
+        admin_exists = db.query(User).filter(
+            (User.role == "Admin") | (User.username == settings.ADMIN_USERNAME)
+        ).first()
+        if not admin_exists:
+            hashed_pw = get_password_hash(settings.ADMIN_PASSWORD)
+            default_admin = User(
+                username=settings.ADMIN_USERNAME,
+                email=settings.ADMIN_EMAIL,
+                full_name="Administrador Principal",
+                document_id="0000000000",
+                assigned_site="Todas las Sedes",
+                hashed_password=hashed_pw,
+                role="Admin",
+                is_active=True,
+                must_change_password=False
+            )
+            db.add(default_admin)
+            db.commit()
+            print(f"[*] Usuario Administrador inicial creado con éxito: {settings.ADMIN_USERNAME}")
+        else:
+            print(f"[*] Usuario Administrador ya configurado: {admin_exists.username}")
+
+        # 4. Sembrar licencia activa si no existe
+        license_active = db.query(License).filter(License.is_active == True).first()
+        if not license_active:
+            from app.services.license_service import generate_dev_license
+            dev_license_key = generate_dev_license(expires_days=3650, max_users=100)
+            print("[*] Licencia de sistema sembrada y activada con éxito.")
 
         # 4. Sincronización permanente multi-sede (garantiza homogeneidad en las 4 sedes)
         try:
@@ -4180,7 +4180,7 @@ def schedule_view(
             tickets_by_date[d_str] = {"incidents": [], "maintenances": []}
 
         dev_name = inc.device.name if inc.device else "CCTV General"
-        dev_loc = inc.device.location_detail if (inc.device and inc.device.location_detail) else (inc.device.sede if inc.device else inc.sede or "")
+        dev_loc = getattr(inc, "location_detail", None) or (inc.device.location_detail if (inc.device and inc.device.location_detail) else (inc.device.sede if inc.device else inc.sede or ""))
         tickets_by_date[d_str]["incidents"].append({
             "type": "incident",
             "type_label": "Incidente",
@@ -4188,8 +4188,8 @@ def schedule_view(
             "ticket_code": inc.ticket_code,
             "title": inc.title or f"Incidente en {dev_name}",
             "status": inc.status or "Abierto",
-            "fault_type": inc.fault_type or "Falla Técnica",
-            "priority": inc.priority or "Media",
+            "fault_type": getattr(inc, "fault_type", "Falla Técnica") or "Falla Técnica",
+            "priority": getattr(inc, "priority", "Media") or "Media",
             "device_name": dev_name,
             "location": dev_loc,
             "time": inc.created_at.strftime("%H:%M"),
@@ -4205,7 +4205,7 @@ def schedule_view(
             tickets_by_date[d_str] = {"incidents": [], "maintenances": []}
 
         dev_name = m.device.name if m.device else "CCTV General"
-        dev_loc = m.device.location_detail if (m.device and m.device.location_detail) else (m.device.sede if m.device else m.sede or "")
+        dev_loc = getattr(m, "location_detail", None) or (m.device.location_detail if (m.device and m.device.location_detail) else (m.device.sede if m.device else m.sede or ""))
         tickets_by_date[d_str]["maintenances"].append({
             "type": "maintenance",
             "type_label": "Mantenimiento",
@@ -4213,7 +4213,7 @@ def schedule_view(
             "ticket_code": m.code,
             "title": m.title or f"Mantenimiento en {dev_name}",
             "status": m.status or "Programado",
-            "frequency": m.frequency or "Preventivo",
+            "frequency": getattr(m, "maintenance_type", None) or getattr(m, "type", "Preventivo"),
             "device_name": dev_name,
             "location": dev_loc,
             "time": m.scheduled_date.strftime("%H:%M"),

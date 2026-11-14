@@ -42,13 +42,10 @@ class Settings(BaseSettings):
     @property
     def effective_database_url(self) -> str:
         """
-        Retorna la URL de base de datos correspondiente:
-        - Si DEMO_MODE es True, utiliza SQLite volátil en memoria (sqlite:///:memory:).
-        - Si DEMO_MODE es False, utiliza la base de datos persistente (sqlite.db o PostgreSQL).
-        - Asegura compatibilidad con SQLAlchemy 2.0 convirtiendo 'postgres://' a 'postgresql://'.
+        Retorna la URL de base de datos persistente (PostgreSQL en Railway o sqlite.db en local).
+        Garantiza que tanto San Agustín como el Sitio de Prueba (Demo) persistan
+        en el mismo motor de almacenamiento duradero sin pérdida de datos tras reinicios.
         """
-        if self.DEMO_MODE:
-            return self.DEMO_DATABASE_URL
         url = self.DATABASE_URL
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+psycopg2://", 1)
