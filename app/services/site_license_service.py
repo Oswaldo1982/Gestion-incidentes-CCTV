@@ -50,6 +50,30 @@ OFFICIAL_SITES: List[Dict[str, str]] = [
     }
 ]
 
+# Registro canónico oficial de llaves (4 Sedes x 3 Años = 12 Llaves Maestras)
+OFFICIAL_KEYS_REGISTRY: Dict[str, Dict[int, Dict[str, str]]] = {
+    "san-agustin": {
+        1: {"password": "GNHCI2ZTL3EI8QZY", "formatted": "GNHC-I2ZT-L3EI-8QZY", "mask": "****-****-****-8QZY", "code": "LIC-SAN_AGUSTIN-Y1-GNHC"},
+        2: {"password": "UXSQ3FMPV3NNMK2Z", "formatted": "UXSQ-3FMP-V3NN-MK2Z", "mask": "****-****-****-MK2Z", "code": "LIC-SAN_AGUSTIN-Y2-UXSQ"},
+        3: {"password": "N6RFCRZDIRIF5BG2", "formatted": "N6RF-CRZD-IRIF-5BG2", "mask": "****-****-****-5BG2", "code": "LIC-SAN_AGUSTIN-Y3-N6RF"}
+    },
+    "san-jose-guaviare": {
+        1: {"password": "W0NCCNTU7XFS3KSE", "formatted": "W0NC-CNTU-7XFS-3KSE", "mask": "****-****-****-3KSE", "code": "LIC-SAN_JOSE_GUAVIARE-Y1-W0NC"},
+        2: {"password": "10EWH6QY2B4U9GE9", "formatted": "10EW-H6QY-2B4U-9GE9", "mask": "****-****-****-9GE9", "code": "LIC-SAN_JOSE_GUAVIARE-Y2-10EW"},
+        3: {"password": "TRZPZ4JSKSIJV8AH", "formatted": "TRZP-Z4JS-KSIJ-V8AH", "mask": "****-****-****-V8AH", "code": "LIC-SAN_JOSE_GUAVIARE-Y3-TRZP"}
+    },
+    "el-retorno": {
+        1: {"password": "PQO2VVJCNFB6G9Z5", "formatted": "PQO2-VVJC-NFB6-G9Z5", "mask": "****-****-****-G9Z5", "code": "LIC-EL_RETORNO-Y1-PQO2"},
+        2: {"password": "W1A4008KPBZ6BLB1", "formatted": "W1A4-008K-PBZ6-BLB1", "mask": "****-****-****-BLB1", "code": "LIC-EL_RETORNO-Y2-W1A4"},
+        3: {"password": "L1VJJSIY381FZ7NT", "formatted": "L1VJ-JSIY-381F-Z7NT", "mask": "****-****-****-Z7NT", "code": "LIC-EL_RETORNO-Y3-L1VJ"}
+    },
+    "calamar": {
+        1: {"password": "FOOIOQZVLUVVPJI0", "formatted": "FOOI-OQZV-LUVV-PJI0", "mask": "****-****-****-PJI0", "code": "LIC-CALAMAR-Y1-FOOI"},
+        2: {"password": "FIHKB64QWG9Y7EWN", "formatted": "FIHK-B64Q-WG9Y-7EWN", "mask": "****-****-****-7EWN", "code": "LIC-CALAMAR-Y2-FIHK"},
+        3: {"password": "064OA5CVCVFQZTBX", "formatted": "064O-A5CV-CVFQ-ZTBX", "mask": "****-****-****-ZTBX", "code": "LIC-CALAMAR-Y3-064O"}
+    }
+}
+
 # Rutas de almacenamiento seguro para las llaves y certificados PDF del desarrollador
 SECURE_VAULT_DIR = os.path.join(os.getcwd(), "secure_vault")
 VAULT_PDF_DIR = os.path.join(SECURE_VAULT_DIR, "licencias_pdf")
@@ -354,16 +378,17 @@ def load_or_create_developer_vault() -> Dict[str, Any]:
             "years": {}
         }
         for year in [1, 2, 3]:
-            raw_pwd = generate_secure_16_digit_key()
+            reg_entry = OFFICIAL_KEYS_REGISTRY.get(site_id, {}).get(year, {})
+            raw_pwd = reg_entry.get("password") or generate_secure_16_digit_key()
             slug_site = site_id.upper().replace("-", "_")
-            cert_code = f"LIC-{slug_site}-Y{year}-{raw_pwd[:4]}"
+            cert_code = reg_entry.get("code", f"LIC-{slug_site}-Y{year}-{raw_pwd[:4]}")
             pdf_name = f"LICENCIA_{slug_site}_ANO_{year}.pdf"
 
             vault_data["sites"][site_id]["years"][str(year)] = {
                 "year": year,
                 "password": raw_pwd,
-                "formatted": format_password_display(raw_pwd),
-                "mask": mask_password(raw_pwd),
+                "formatted": reg_entry.get("formatted", format_password_display(raw_pwd)),
+                "mask": reg_entry.get("mask", mask_password(raw_pwd)),
                 "certificate_code": cert_code,
                 "pdf_filename": pdf_name
             }
@@ -477,6 +502,14 @@ def ensure_all_site_licenses_initialized(db: Session) -> Dict[str, Any]:
                 )
                 db.add(new_key)
                 seeded_licenses += 1
+            else:
+                # Sincronizar hash si la clave almacenada no valida con la clave oficial de la bóveda
+                year_data = site_vault.get("years", {}).get(str(year), {})
+                raw_pwd = year_data.get("password")
+                if raw_pwd and not verify_password(raw_pwd, existing_key.password_hash):
+                    existing_key.password_hash = get_password_hash(raw_pwd)
+                    existing_key.password_mask = mask_password(raw_pwd)
+                    existing_key.certificate_code = year_data.get("certificate_code", existing_key.certificate_code)
 
     db.commit()
     return {
@@ -802,6 +835,14 @@ def activate_site_year_license(
 
     # 4. Comprobar hash criptográfico
     is_valid = verify_password(cleaned, target_key.password_hash)
+    if not is_valid:
+        reg_pwd = OFFICIAL_KEYS_REGISTRY.get(clean_id, {}).get(target_year, {}).get("password")
+        if reg_pwd and cleaned == normalize_password(reg_pwd):
+            target_key.password_hash = get_password_hash(cleaned)
+            target_key.password_mask = mask_password(cleaned)
+            db.commit()
+            is_valid = True
+
     username_audit = getattr(user, "username", "admin")
     user_id_audit = getattr(user, "id", None)
 

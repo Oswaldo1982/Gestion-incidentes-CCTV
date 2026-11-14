@@ -182,38 +182,64 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 db.rollback()
                 logger.warning(f"Aviso sembrando usuario {uname}: {e_user2}")
 
-    # 4. Sembrar Licenciamiento Multi-Sede (por registro)
+    # 4. Sembrar y Sincronizar Licenciamiento Multi-Sede (4 sedes x 3 años = 12 llaves)
     for sl in golden_data.get("site_licenses", []):
         try:
-            cert = sl.get("certificate_code")
-            if cert and not db.query(SiteLicenseKey).filter(SiteLicenseKey.certificate_code == cert).first():
+            sid = sl.get("site_id")
+            syr = sl.get("year", 1)
+            existing_key = db.query(SiteLicenseKey).filter(
+                SiteLicenseKey.site_id == sid,
+                SiteLicenseKey.year == syr
+            ).first()
+
+            if existing_key:
+                existing_key.site_name = sl.get("site_name", existing_key.site_name)
+                existing_key.password_hash = sl.get("password_hash")
+                existing_key.password_mask = sl.get("password_mask")
+                existing_key.certificate_code = sl.get("certificate_code")
+                # Eliminar duplicados si existieran
+                duplicates = db.query(SiteLicenseKey).filter(
+                    SiteLicenseKey.site_id == sid,
+                    SiteLicenseKey.year == syr,
+                    SiteLicenseKey.id != existing_key.id
+                ).all()
+                for dup in duplicates:
+                    db.delete(dup)
+                db.commit()
+            else:
                 db.add(SiteLicenseKey(
-                    site_id=sl.get("site_id"),
+                    site_id=sid,
                     site_name=sl.get("site_name"),
-                    year=sl.get("year", 1),
+                    year=syr,
                     password_hash=sl.get("password_hash"),
                     password_mask=sl.get("password_mask"),
-                    certificate_code=cert,
+                    certificate_code=sl.get("certificate_code"),
                     is_activated=bool(sl.get("is_activated", 0)),
                     activated_at=parse_dt(sl.get("activated_at")),
                     expires_at=parse_dt(sl.get("expires_at")),
                     created_at=parse_dt(sl.get("created_at")) or get_local_now()
                 ))
                 db.commit()
-        except Exception:
+        except Exception as e_lic:
             db.rollback()
+            logger.warning(f"Aviso sincronizando licencia {sl.get('certificate_code')}: {e_lic}")
 
     for sa in golden_data.get("site_activation_states", []):
         try:
             sid = sa.get("site_id")
-            if sid and not db.query(SiteActivationState).filter(SiteActivationState.site_id == sid).first():
+            state = db.query(SiteActivationState).filter(SiteActivationState.site_id == sid).first()
+            if state:
+                state.failed_attempts = 0
+                state.lockout_until = None
+                db.commit()
+            else:
                 db.add(SiteActivationState(
                     site_id=sid,
                     first_access_at=parse_dt(sa.get("first_access_at")),
                     current_year=sa.get("current_year", 1),
                     status=sa.get("status", "ACTIVE"),
-                    failed_attempts=sa.get("failed_attempts", 0),
-                    lockout_until=parse_dt(sa.get("lockout_until")),
+                    failed_attempts=0,
+                    lockout_until=None,
                     last_activated_at=parse_dt(sa.get("last_activated_at")),
                     updated_at=parse_dt(sa.get("updated_at")) or get_local_now()
                 ))
