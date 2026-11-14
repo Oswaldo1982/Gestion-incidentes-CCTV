@@ -189,9 +189,6 @@ class Incident(Base):
             elapsed_h = max(0.0, delta.total_seconds() / 3600.0)
             is_late = elapsed_h > target_h
 
-            val_name = self.validator.full_name or self.validator.username if self.validator else "Oficial Validador"
-            val_badge = f" (Placa #{self.validator.badge_number})" if self.validator and self.validator.badge_number else ""
-
             if not is_late:
                 return {
                     "status": "closed_on_time",
