@@ -163,124 +163,117 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 ))
             db.commit()
 
-        # 5. Sembrar Equipos (Devices) si la tabla está vacía o incompleta
-        existing_devices_count = db.query(Device).count()
-        if existing_devices_count < 10 and golden_data.get("devices"):
-            for d in golden_data["devices"]:
-                dev_exists = db.query(Device).filter(Device.id == d["id"]).first()
-                if not dev_exists:
-                    db.add(Device(
-                        id=d.get("id"),
-                        name=d.get("name"),
-                        device_type=d.get("device_type"),
-                        brand=d.get("brand"),
-                        model=d.get("model"),
-                        serial_number=d.get("serial_number"),
-                        ip_address=d.get("ip_address"),
-                        mac_address=d.get("mac_address"),
-                        sede=d.get("sede"),
-                        location_detail=d.get("location_detail"),
-                        status=d.get("status", "Operativo"),
-                        created_at=parse_dt(d.get("created_at")) or datetime.datetime.utcnow()
-                    ))
-            db.commit()
+        # 5. Sembrar Equipos (Devices) faltantes de forma no destructiva
+        existing_dev_ids = {row[0] for row in db.query(Device.id).all()}
+        for d in golden_data.get("devices", []):
+            if d.get("id") not in existing_dev_ids:
+                db.add(Device(
+                    id=d.get("id"),
+                    name=d.get("name"),
+                    device_type=d.get("device_type"),
+                    brand=d.get("brand"),
+                    model=d.get("model"),
+                    serial_number=d.get("serial_number"),
+                    ip_address=d.get("ip_address"),
+                    mac_address=d.get("mac_address"),
+                    sede=d.get("sede"),
+                    location_detail=d.get("location_detail"),
+                    status=d.get("status", "Operativo"),
+                    created_at=parse_dt(d.get("created_at")) or datetime.datetime.utcnow()
+                ))
+        db.commit()
 
-        # 6. Sembrar Incidentes (San Agustín y Demo) si la tabla está vacía
-        existing_incidents_count = db.query(Incident).count()
-        if existing_incidents_count < 10 and golden_data.get("incidents"):
-            for inc in golden_data["incidents"]:
-                inc_exists = db.query(Incident).filter(Incident.id == inc["id"]).first()
-                if not inc_exists:
-                    db.add(Incident(
-                        id=inc.get("id"),
-                        title=inc.get("title"),
-                        description=inc.get("description"),
-                        status=inc.get("status", "Abierto"),
-                        priority=inc.get("priority", "Media"),
-                        created_by_id=inc.get("created_by_id"),
-                        assigned_to_id=inc.get("assigned_to_id"),
-                        created_at=parse_dt(inc.get("created_at")) or datetime.datetime.utcnow(),
-                        updated_at=parse_dt(inc.get("updated_at")) or datetime.datetime.utcnow(),
-                        sede=inc.get("sede"),
-                        image_path=inc.get("image_path"),
-                        device_id=inc.get("device_id"),
-                        ticket_number=inc.get("ticket_number"),
-                        fault_type=inc.get("fault_type", "Falla Menor"),
-                        location_detail=inc.get("location_detail"),
-                        root_cause=inc.get("root_cause"),
-                        solution=inc.get("solution"),
-                        closed_by_id=inc.get("closed_by_id"),
-                        attended_at=parse_dt(inc.get("attended_at")),
-                        closed_at=parse_dt(inc.get("closed_at")),
-                        closing_image_path=inc.get("closing_image_path"),
-                        validator_id=inc.get("validator_id"),
-                        validated_at=parse_dt(inc.get("validated_at")),
-                        validation_status=inc.get("validation_status"),
-                        validation_notes=inc.get("validation_notes"),
-                        rejection_photo=inc.get("rejection_photo"),
-                        timer_reset_at=parse_dt(inc.get("timer_reset_at"))
-                    ))
-            db.commit()
+        # 6. Sembrar Incidentes faltantes (San Agustín y Demo) de forma no destructiva
+        existing_inc_ids = {row[0] for row in db.query(Incident.id).all()}
+        for inc in golden_data.get("incidents", []):
+            if inc.get("id") not in existing_inc_ids:
+                db.add(Incident(
+                    id=inc.get("id"),
+                    title=inc.get("title"),
+                    description=inc.get("description"),
+                    status=inc.get("status", "Abierto"),
+                    priority=inc.get("priority", "Media"),
+                    created_by_id=inc.get("created_by_id"),
+                    assigned_to_id=inc.get("assigned_to_id"),
+                    created_at=parse_dt(inc.get("created_at")) or datetime.datetime.utcnow(),
+                    updated_at=parse_dt(inc.get("updated_at")) or datetime.datetime.utcnow(),
+                    sede=inc.get("sede"),
+                    image_path=inc.get("image_path"),
+                    device_id=inc.get("device_id"),
+                    ticket_number=inc.get("ticket_number"),
+                    fault_type=inc.get("fault_type", "Falla Menor"),
+                    location_detail=inc.get("location_detail"),
+                    root_cause=inc.get("root_cause"),
+                    solution=inc.get("solution"),
+                    closed_by_id=inc.get("closed_by_id"),
+                    attended_at=parse_dt(inc.get("attended_at")),
+                    closed_at=parse_dt(inc.get("closed_at")),
+                    closing_image_path=inc.get("closing_image_path"),
+                    validator_id=inc.get("validator_id"),
+                    validated_at=parse_dt(inc.get("validated_at")),
+                    validation_status=inc.get("validation_status"),
+                    validation_notes=inc.get("validation_notes"),
+                    rejection_photo=inc.get("rejection_photo"),
+                    timer_reset_at=parse_dt(inc.get("timer_reset_at"))
+                ))
+        db.commit()
 
-        # 7. Sembrar Mantenimientos (San Agustín y Demo) si la tabla está vacía
-        existing_maintenances_count = db.query(Maintenance).count()
-        if existing_maintenances_count < 10 and golden_data.get("maintenances"):
-            for m in golden_data["maintenances"]:
-                m_exists = db.query(Maintenance).filter(Maintenance.id == m["id"]).first()
-                if not m_exists:
-                    db.add(Maintenance(
-                        id=m.get("id"),
-                        type=m.get("type", "Preventivo"),
-                        title=m.get("title"),
-                        description=m.get("description", "Mantenimiento preventivo programado"),
-                        scheduled_date=parse_dt(m.get("scheduled_date")) or datetime.datetime.utcnow(),
-                        completed_date=parse_dt(m.get("completed_date")),
-                        status=m.get("status", "Programado"),
-                        sede=m.get("sede"),
-                        image_path=m.get("image_path"),
-                        device_id=m.get("device_id"),
-                        incident_id=m.get("incident_id"),
-                        created_by_id=m.get("created_by_id", 1),
-                        created_at=parse_dt(m.get("created_at")) or datetime.datetime.utcnow(),
-                        protocol_code=m.get("protocol_code"),
-                        maintenance_type=m.get("maintenance_type", "Preventivo Mensual"),
-                        location_detail=m.get("location_detail"),
-                        priority=m.get("priority", "Media"),
-                        checklist_results=m.get("checklist_results"),
-                        technical_findings=m.get("technical_findings"),
-                        actions_taken=m.get("actions_taken"),
-                        recommendations=m.get("recommendations"),
-                        execution_date=parse_dt(m.get("execution_date")),
-                        completed_by_id=m.get("completed_by_id"),
-                        completion_photo=m.get("completion_photo"),
-                        validator_id=m.get("validator_id"),
-                        validated_at=parse_dt(m.get("validated_at")),
-                        validation_status=m.get("validation_status"),
-                        validation_notes=m.get("validation_notes"),
-                        rejection_photo=m.get("rejection_photo"),
-                        timer_reset_at=parse_dt(m.get("timer_reset_at")),
-                        rca_cause_factor=m.get("rca_cause_factor"),
-                        rca_failure_mechanism=m.get("rca_failure_mechanism"),
-                        operating_condition=m.get("operating_condition"),
-                        asset_component=m.get("asset_component")
-                    ))
-            db.commit()
+        # 7. Sembrar Mantenimientos faltantes (San Agustín y Demo) de forma no destructiva
+        existing_maint_ids = {row[0] for row in db.query(Maintenance.id).all()}
+        for m in golden_data.get("maintenances", []):
+            if m.get("id") not in existing_maint_ids:
+                db.add(Maintenance(
+                    id=m.get("id"),
+                    type=m.get("type", "Preventivo"),
+                    title=m.get("title"),
+                    description=m.get("description", "Mantenimiento preventivo programado"),
+                    scheduled_date=parse_dt(m.get("scheduled_date")) or datetime.datetime.utcnow(),
+                    completed_date=parse_dt(m.get("completed_date")),
+                    status=m.get("status", "Programado"),
+                    sede=m.get("sede"),
+                    image_path=m.get("image_path"),
+                    device_id=m.get("device_id"),
+                    incident_id=m.get("incident_id"),
+                    created_by_id=m.get("created_by_id", 1),
+                    created_at=parse_dt(m.get("created_at")) or datetime.datetime.utcnow(),
+                    protocol_code=m.get("protocol_code"),
+                    maintenance_type=m.get("maintenance_type", "Preventivo Mensual"),
+                    location_detail=m.get("location_detail"),
+                    priority=m.get("priority", "Media"),
+                    checklist_results=m.get("checklist_results"),
+                    technical_findings=m.get("technical_findings"),
+                    actions_taken=m.get("actions_taken"),
+                    recommendations=m.get("recommendations"),
+                    execution_date=parse_dt(m.get("execution_date")),
+                    completed_by_id=m.get("completed_by_id"),
+                    completion_photo=m.get("completion_photo"),
+                    validator_id=m.get("validator_id"),
+                    validated_at=parse_dt(m.get("validated_at")),
+                    validation_status=m.get("validation_status"),
+                    validation_notes=m.get("validation_notes"),
+                    rejection_photo=m.get("rejection_photo"),
+                    timer_reset_at=parse_dt(m.get("timer_reset_at")),
+                    rca_cause_factor=m.get("rca_cause_factor"),
+                    rca_failure_mechanism=m.get("rca_failure_mechanism"),
+                    operating_condition=m.get("operating_condition"),
+                    asset_component=m.get("asset_component")
+                ))
+        db.commit()
 
-        # 8. Sembrar Eventos de Trazabilidad si la tabla está vacía
-        if db.query(Event).count() < 10 and golden_data.get("events"):
-            for ev in golden_data["events"]:
-                ev_exists = db.query(Event).filter(Event.id == ev["id"]).first()
-                if not ev_exists:
-                    db.add(Event(
-                        id=ev.get("id"),
-                        incident_id=ev.get("incident_id"),
-                        maintenance_id=ev.get("maintenance_id"),
-                        user_id=ev.get("user_id"),
-                        event_type=ev.get("event_type", "LOG"),
-                        description=ev.get("description", ""),
-                        created_at=parse_dt(ev.get("created_at")) or datetime.datetime.utcnow()
-                    ))
-            db.commit()
+        # 8. Sembrar Eventos de Trazabilidad faltantes de forma no destructiva
+        existing_ev_ids = {row[0] for row in db.query(Event.id).all()}
+        for ev in golden_data.get("events", []):
+            if ev.get("id") not in existing_ev_ids:
+                db.add(Event(
+                    id=ev.get("id"),
+                    incident_id=ev.get("incident_id"),
+                    maintenance_id=ev.get("maintenance_id"),
+                    user_id=ev.get("user_id"),
+                    event_type=ev.get("event_type", "LOG"),
+                    description=ev.get("description", ""),
+                    created_at=parse_dt(ev.get("created_at")) or datetime.datetime.utcnow()
+                ))
+        db.commit()
 
         # 9. En PostgreSQL: Sincronizar secuencias serial para evitar errores de clave duplicada
         bind = db.get_bind()
