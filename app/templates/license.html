@@ -91,10 +91,10 @@
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
         
         <!-- Hero del Estado -->
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 rounded-2xl {{ 'bg-emerald-50 border border-emerald-200' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-amber-50 border border-amber-200' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-50 border border-rose-200') }}">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 p-5 rounded-2xl {{ 'bg-emerald-50 border border-emerald-200' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-blue-50 border border-blue-200' if site_status.status == 'SUSPENDED_BY_ADMIN' else ('bg-amber-50 border border-amber-200' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-50 border border-rose-200')) }}">
             <div class="flex items-start gap-4">
-                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm {{ 'bg-emerald-500 text-white' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-amber-500 text-white' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-500 text-white') }}">
-                    {% if dev_mode or 'ACTIVE' in site_status.status %}
+                <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm {{ 'bg-emerald-500 text-white' if ('ACTIVE' in site_status.status or dev_mode) else ('bg-blue-500 text-white' if site_status.status == 'SUSPENDED_BY_ADMIN' else ('bg-amber-500 text-white' if site_status.status == 'GRACE_PERIOD' else 'bg-rose-500 text-white')) }}">
+                    {% if dev_mode or 'ACTIVE' in site_status.status or site_status.status == 'SUSPENDED_BY_ADMIN' %}
                     ✓
                     {% elif site_status.status == 'GRACE_PERIOD' %}
                     ⏳
@@ -111,6 +111,8 @@
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900">Modo Desarrollo</span>
                         {% elif 'ACTIVE' in site_status.status %}
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900">100% Operativo</span>
+                        {% elif site_status.status == 'SUSPENDED_BY_ADMIN' %}
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-900 border border-blue-200">Acceso Libre Total</span>
                         {% elif site_status.status == 'GRACE_PERIOD' %}
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900">Período de Gracia (24h)</span>
                         {% else %}
@@ -136,6 +138,12 @@
                     <p class="text-[11px] font-bold uppercase text-slate-400">Vigencia Restante</p>
                     <p class="text-2xl font-black text-emerald-600 mt-0.5">{{ site_status.days_remaining_active }} Días</p>
                     <p class="text-[10px] text-slate-500">Servicio activo en {{ current_site.name }}</p>
+                </div>
+                {% elif site_status.status == 'SUSPENDED_BY_ADMIN' %}
+                <div>
+                    <p class="text-[11px] font-bold uppercase text-slate-400">Estado del Sistema</p>
+                    <p class="text-2xl font-black text-blue-600 mt-0.5">Acceso Libre</p>
+                    <p class="text-[10px] text-slate-500">Licenciamiento suspendido</p>
                 </div>
                 {% elif dev_mode %}
                 <div>
@@ -167,7 +175,7 @@
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             Activado ✓
                         </span>
-                        {% elif site_status.required_year == y_info.year %}
+                        {% elif site_status.required_year == y_info.year and site_status.status != 'SUSPENDED_BY_ADMIN' %}
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                             Requerido Ahora
                         </span>
@@ -182,6 +190,8 @@
                         {% if y_info.is_activated and y_info.expires_at %}
                         <p><strong>Vence:</strong> {{ y_info.expires_at.strftime('%d/%m/%Y') }}</p>
                         <p class="font-mono text-[10px] text-slate-400">Verificación: {{ y_info.mask }}</p>
+                        {% elif y_info.is_activated %}
+                        <p class="text-emerald-700 font-semibold">Licencia activa</p>
                         {% else %}
                         <p class="text-slate-400">Pendiente de activación</p>
                         {% endif %}
@@ -210,10 +220,29 @@
                 </div>
             </div>
 
+            {% if 'ACTIVE_YEAR_1' in site_status.status %}
+            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
+                <span class="text-emerald-600 font-bold text-sm">✓</span>
+                <span><strong>Año 1 se encuentra activo y 100% operativo.</strong> Si dispone de la contraseña para el <strong>Año 2</strong>, puede ingresarla a continuación para extender y acumular la cobertura por 365 días más.</span>
+            </div>
+            {% elif 'ACTIVE_YEAR_2' in site_status.status %}
+            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
+                <span class="text-emerald-600 font-bold text-sm">✓</span>
+                <span><strong>Año 2 se encuentra activo y 100% operativo.</strong> Puede ingresar la contraseña del <strong>Año 3</strong> para completar la cobertura integral de 3 años.</span>
+            </div>
+            {% elif site_status.status == 'ACTIVE_YEAR_3' and site_status.days_remaining_active > 0 %}
+            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
+                <span class="text-emerald-600 font-bold text-sm">🎉</span>
+                <span><strong>¡Ciclo Integral de 3 Años Activo!</strong> La sede cuenta con cobertura completa garantizada. No se requieren claves adicionales en este momento.</span>
+            </div>
+            {% endif %}
+
+            {% if site_status.status != 'ACTIVE_YEAR_3' or site_status.days_remaining_active <= 0 %}
             <form action="/license/activate" method="POST" class="space-y-4 mt-5">
+                <input type="hidden" name="site_id" value="{{ current_site.id }}">
                 <div>
                     <label for="password_key" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                        Contraseña de Activación de 16 Dígitos (Año {{ site_status.required_year or site_status.current_year }}) *
+                        Contraseña de {{ 'Renovación' if 'ACTIVE' in site_status.status else 'Activación' }} de 16 Dígitos (Año {{ site_status.required_year or site_status.current_year }}) *
                     </label>
                     <input type="text"
                            id="password_key"
@@ -235,13 +264,14 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        Validar y Activar {{ current_site.name }}
+                        {{ 'Validar y Renovar' if 'ACTIVE' in site_status.status else 'Validar y Activar' }} {{ current_site.name }}
                     </button>
                     <span class="text-xs text-slate-500">
                         Aplica para el <strong>Año {{ site_status.required_year or site_status.current_year }}</strong>
                     </span>
                 </div>
             </form>
+            {% endif %}
 
             <!-- Nota de Seguridad y Anti-Fuerza Bruta -->
             <div class="mt-5 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-500 space-y-1">

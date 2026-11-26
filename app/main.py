@@ -323,8 +323,11 @@ def get_available_sites(db: Optional[Session] = None, active_only: bool = True) 
 def get_current_site(request: Request, db: Optional[Session] = None) -> Dict[str, Any]:
     """Obtiene la sede/tenant activa desde la cookie 'active_site' o query param consultando la BD dinámicamente."""
     site_id = request.query_params.get("site") or request.cookies.get("active_site", "san-agustin")
+    if site_id == "demo":
+        site_id = "sitio-prueba"
     sites = get_available_sites(db=db, active_only=False)
-    site = next((s for s in sites if s["id"] == site_id), sites[0] if sites else AVAILABLE_SITES[0])
+    default_site = next((s for s in sites if s["id"] == "san-agustin"), AVAILABLE_SITES[0])
+    site = next((s for s in sites if s["id"] == site_id), default_site)
     return site
 
 
@@ -350,7 +353,7 @@ def check_site_access_or_redirect(
       - Si no es Administrador: redirige a /select-site?error={mensaje}.
     - Si el sitio está en período de gracia (24h) o activo: retorna None (acceso permitido).
     """
-    if getattr(settings, "SUSPEND_SITE_LICENSING", True) or settings.DEV_MODE:
+    if getattr(settings, "SUSPEND_SITE_LICENSING", False) or settings.DEV_MODE:
         return None
 
     site_id = current_site.get("id", "san-agustin")
@@ -828,7 +831,7 @@ def login_post(
     record_site_first_access(db, clean_site_id)
 
     # Validar licencia activa para usuarios sin rol Admin (si no está suspendida)
-    if not getattr(settings, "SUSPEND_SITE_LICENSING", True) and not settings.DEV_MODE and user.role != "Admin":
+    if not getattr(settings, "SUSPEND_SITE_LICENSING", False) and not settings.DEV_MODE and user.role != "Admin":
         is_valid, reason = check_license_validity(db, site_id=clean_site_id)
         if not is_valid:
             create_audit_log(
@@ -1709,7 +1712,7 @@ def devices_view(
     if current_user.must_change_password:
         return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
 
     lic_redirect = check_site_access_or_redirect(request, current_user, current_site, db)
     if lic_redirect:
@@ -1742,7 +1745,7 @@ def devices_view(
         context={
             "current_user": current_user,
             "current_site": current_site,
-            "available_sites": AVAILABLE_SITES,
+            "available_sites": get_available_sites(db, active_only=True),
             "active_page": "devices",
             "devices": devices_list,
             "sedes": site_sedes,
@@ -1779,7 +1782,7 @@ def create_device_web(
             err = urllib.parse.quote("Acceso denegado: El rol Supervisor tiene perfil de solo lectura y no puede registrar nuevos equipos.")
         return RedirectResponse(url=f"/devices?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     assigned_sede = sede if sede and sede.strip() else current_site["full_name"]
 
     clean_ip = ip_address.strip() if ip_address and ip_address.strip() and ip_address.strip().upper() not in ["NO APLICA", "N/A"] else None
@@ -1842,7 +1845,7 @@ def relocate_device_web(
         return RedirectResponse(url=f"/devices?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     # 3. Buscar el equipo y verificar que pertenezca a la sede actual
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         err = urllib.parse.quote("El equipo especificado no existe.")
@@ -1904,7 +1907,7 @@ def delete_device_web(
         return RedirectResponse(url=f"/devices?error={err}", status_code=status.HTTP_303_SEE_OTHER)
 
     # 3. Buscar el equipo y verificar que pertenezca a la sede actual
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         err = urllib.parse.quote("El equipo especificado no existe.")
@@ -2008,7 +2011,7 @@ def users_view(
     if current_user.role != "Admin":
         return RedirectResponse(url="/dashboard?error=Acceso+restringido:+La+opción+de+gestión+de+usuarios+es+exclusiva+del+Administrador.", status_code=status.HTTP_303_SEE_OTHER)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
         return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
     site_name = current_site["name"]
@@ -2038,7 +2041,7 @@ def users_view(
             "current_user": current_user,
             "is_main_admin": is_main_admin(current_user),
             "current_site": current_site,
-            "available_sites": AVAILABLE_SITES,
+            "available_sites": get_available_sites(db, active_only=True),
             "active_page": "users",
             "users": users_list,
             "msg": msg,
@@ -2070,7 +2073,7 @@ def create_user_web(
     if current_user.role != "Admin":
         return RedirectResponse(url="/users?error=Solo+el+Administrador+Principal+puede+crear+cuentas+de+usuario", status_code=status.HTTP_303_SEE_OTHER)
 
-    if get_current_site(request).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+    if get_current_site(request, db=db).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
         return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
 
     # 1. Regla estricta: Solo un (1) Administrador Principal en todo el sistema
@@ -2139,15 +2142,19 @@ def create_user_web(
         if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
             return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
     elif existing_by_doc:
+        if existing_by_doc.is_active and existing_by_doc.email != clean_email:
+            return RedirectResponse(url="/users?error=El+número+de+documento+de+identidad+(cédula)+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
         target_user_to_reuse = existing_by_doc
         # Si la placa ingresada ya existe en OTRA cuenta activa distinta:
         if existing_by_badge and existing_by_badge.id != target_user_to_reuse.id and existing_by_badge.is_active:
             return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
     elif existing_by_badge:
+        if existing_by_badge.is_active and existing_by_badge.email != clean_email:
+            return RedirectResponse(url="/users?error=El+número+de+placa+policial+ya+se+encuentra+registrado+para+otro+usuario+activo.", status_code=status.HTTP_303_SEE_OTHER)
         target_user_to_reuse = existing_by_badge
 
     # 6. Sede territorial: la misma con la que ingresó el Administrador
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     assigned_sede = current_site["full_name"]
 
     # 7. Generar contraseña temporal segura garantizando que sea única en el sistema (vigencia 24h)
@@ -2251,7 +2258,7 @@ def update_admin_profile(
     if current_user.role != "Admin":
         return RedirectResponse(url="/users?error=Solo+un+administrador+puede+modificar+estos+datos", status_code=status.HTTP_303_SEE_OTHER)
 
-    if get_current_site(request).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+    if get_current_site(request, db=db).get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
         return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
 
     clean_fullname = full_name.strip()
@@ -3046,10 +3053,12 @@ async def validate_incident_web(
             status_code=status.HTTP_303_SEE_OTHER
         )
 
-    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    current_site = get_current_site(request, db=db)
+    site_filter = get_site_filter_conditions(Incident, current_site)
+    incident = db.query(Incident).filter(Incident.id == incident_id, site_filter).first()
     if not incident:
         return RedirectResponse(
-            url=f"{target_redirect}?error=Incidente+no+encontrado",
+            url=f"{target_redirect}?error=Incidente+no+encontrado+o+no+pertenece+a+la+sede+activa",
             status_code=status.HTTP_303_SEE_OTHER
         )
 
@@ -3642,9 +3651,11 @@ async def validate_maintenance_web(
             status_code=status.HTTP_303_SEE_OTHER
         )
 
-    maint = db.query(Maintenance).filter(Maintenance.id == maintenance_id).first()
+    current_site = get_current_site(request, db=db)
+    site_filter = get_site_filter_conditions(Maintenance, current_site)
+    maint = db.query(Maintenance).filter(Maintenance.id == maintenance_id, site_filter).first()
     if not maint:
-        return RedirectResponse(url=f"{target_redirect}?error=Mantenimiento+no+encontrado", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=f"{target_redirect}?error=Mantenimiento+no+encontrado+o+no+pertenece+a+la+sede+activa", status_code=status.HTTP_303_SEE_OTHER)
 
     now = get_local_now()
 
@@ -3826,8 +3837,7 @@ def validation_view(
             detail="Acceso denegado: El panel de validación policial es exclusivo para Validador, Administrador, Supervisor y Empresa de Mantenimiento."
         )
 
-    active_site_id = request.cookies.get("active_site", "san-agustin")
-    current_site = next((s for s in AVAILABLE_SITES if s["id"] == active_site_id), AVAILABLE_SITES[0])
+    current_site = get_current_site(request, db=db)
 
     lic_redirect = check_site_access_or_redirect(request, current_user, current_site, db)
     if lic_redirect:
@@ -3839,7 +3849,7 @@ def validation_view(
     # 1. Incidentes relevantes para validación
     all_incidents = db.query(Incident).filter(
         site_filter_inc,
-        Incident.status.in_(["Pendiente de Validación", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Cerrado", "En Proceso", "Abierto"])
+        Incident.status.in_(["Pendiente de Validación", "Pendiente de Validación Policial", "Validado / Conforme", "Conforme / Validado", "Rechazado", "Cerrado", "Resuelto", "En Proceso", "Abierto"])
     ).order_by(Incident.updated_at.desc()).all()
 
     # 2. Mantenimientos preventivos relevantes
@@ -3849,26 +3859,27 @@ def validation_view(
     ).order_by(Maintenance.completed_date.desc(), Maintenance.created_at.desc()).all()
 
     # Conteos de indicadores
-    pending_incidents = [i for i in all_incidents if i.status == "Pendiente de Validación"]
+    pending_incidents = [i for i in all_incidents if i.status in ["Pendiente de Validación", "Pendiente de Validación Policial"]]
     pending_maintenances = [m for m in all_maintenances if m.status == "Pendiente de Validación"]
     pending_count = len(pending_incidents) + len(pending_maintenances)
 
-    validated_incidents = [i for i in all_incidents if i.status in ["Validado / Conforme", "Conforme / Validado"] or i.validation_status == "Conforme"]
-    validated_maintenances = [m for m in all_maintenances if m.status in ["Validado / Conforme", "Conforme / Validado"] or m.validation_status == "Conforme"]
+    validated_incidents = [i for i in all_incidents if i.status in ["Validado / Conforme", "Conforme / Validado", "Cerrado", "Resuelto"] or i.validation_status == "Conforme"]
+    validated_maintenances = [m for m in all_maintenances if m.status in ["Validado / Conforme", "Conforme / Validado", "Completado"] or m.validation_status == "Conforme"]
     validated_count = len(validated_incidents) + len(validated_maintenances)
 
     rejected_incidents = [i for i in all_incidents if i.validation_status == "Rechazado" or i.status == "Rechazado"]
     rejected_maintenances = [m for m in all_maintenances if m.validation_status == "Rechazado" or m.status == "Rechazado"]
     rejected_count = len(rejected_incidents) + len(rejected_maintenances)
 
+    avail_sites = get_available_sites(db, active_only=True)
     return templates.TemplateResponse(
         request=request,
         name="validation.html",
         context={
             "current_user": current_user,
             "current_site": current_site,
-            "available_sites": AVAILABLE_SITES,
-            "all_sites": AVAILABLE_SITES,
+            "available_sites": avail_sites,
+            "all_sites": avail_sites,
             "active_page": "validation",
             "pending_validation_count": pending_count,
             "pending_count": pending_count,
@@ -3940,7 +3951,7 @@ def reports_view(
     if current_user.must_change_password:
         return RedirectResponse(url="/change-credentials", status_code=status.HTTP_302_FOUND)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
 
     lic_redirect = check_site_access_or_redirect(request, current_user, current_site, db)
     if lic_redirect:
@@ -3963,7 +3974,7 @@ def reports_view(
         context={
             "current_user": current_user,
             "current_site": current_site,
-            "available_sites": AVAILABLE_SITES,
+            "available_sites": get_available_sites(db, active_only=True),
             "active_page": "reports",
             "stats": stats,
             "chart_json": chart_json,
@@ -3988,7 +3999,7 @@ def get_reports_stats_api(
     if not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     start_dt, end_dt, period_label = resolve_date_range(period, start_date, end_date)
     stats = get_reports_statistics(db, current_site, start_dt, end_dt)
 
@@ -4013,7 +4024,7 @@ def export_cctv_pdf_report(
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     start_dt, end_dt, period_label = resolve_date_range(period, start_date, end_date)
 
     pdf_bytes = generate_cctv_pdf_report(
@@ -4065,7 +4076,7 @@ def export_cctv_executive_pdf_report(
     if not current_user:
         return RedirectResponse(url="/select-site", status_code=status.HTTP_302_FOUND)
 
-    current_site = get_current_site(request)
+    current_site = get_current_site(request, db=db)
     start_dt, end_dt, period_label = resolve_date_range(period, start_date, end_date)
 
     pdf_bytes = generate_cctv_executive_pdf_report(
@@ -4286,6 +4297,7 @@ def schedule_view(
         calendar_weeks.append(week_days)
 
     available_years = list(range(now.year - 2, now.year + 4))
+    avail_sites = get_available_sites(db, active_only=True)
 
     return templates.TemplateResponse(
         request=request,
@@ -4293,7 +4305,7 @@ def schedule_view(
         context={
             "current_user": current_user,
             "current_site": current_site,
-            "available_sites": AVAILABLE_SITES,
+            "available_sites": avail_sites,
             "active_page": "schedule",
             "calendar_weeks": calendar_weeks,
             "tickets_by_date_json": json.dumps(tickets_by_date, ensure_ascii=False),

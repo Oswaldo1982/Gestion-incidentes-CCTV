@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DEV_MODE: bool = False
 
     # Suspensión de Licenciamiento Multi-Sede (Por solicitud administrativa)
-    SUSPEND_SITE_LICENSING: bool = True
+    SUSPEND_SITE_LICENSING: bool = False
 
     # Base de Datos de Producción / Desarrollo Estándar
     DATABASE_URL: str = "sqlite:///./sqlite.db"

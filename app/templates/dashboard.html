@@ -80,6 +80,9 @@
                     <strong class="text-emerald-700 cursor-help" title="{{ metrics.operativo_devices }} dispositivos transmitiendo y operando correctamente">{{ metrics.operativo_devices }} Operativos</strong> | 
                     <strong class="text-rose-700 cursor-help" title="{{ metrics.falla_devices }} dispositivos fuera de línea o con novedades técnicas">{{ metrics.falla_devices }} en Falla</strong> | 
                     <strong class="text-blue-700 cursor-help" title="{{ metrics.maint_devices }} dispositivos en proceso de mantenimiento preventivo">{{ metrics.maint_devices }} en Mantenimiento</strong>
+                    {% if metrics.inactivo_devices > 0 %} | 
+                    <strong class="text-slate-600 cursor-help" title="{{ metrics.inactivo_devices }} dispositivos inactivos o dados de baja temporalmente">{{ metrics.inactivo_devices }} Inactivos</strong>
+                    {% endif %}
                 </span>
             </div>
             <div class="w-full bg-slate-200/90 rounded-full h-3.5 flex overflow-hidden p-0.5 border border-slate-300 shadow-inner">
@@ -89,7 +92,11 @@
                 <div style="width: {{ (metrics.falla_devices / metrics.total_devices * 100) }}%;" 
                      class="bg-gradient-to-r from-rose-500 to-rose-400 h-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.falla_devices }} Equipos en Falla ({{ (metrics.falla_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
                 <div style="width: {{ (metrics.maint_devices / metrics.total_devices * 100) }}%;" 
-                     class="bg-gradient-to-r from-sky-500 to-blue-500 h-full rounded-r-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.maint_devices }} Equipos en Mantenimiento ({{ (metrics.maint_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
+                     class="bg-gradient-to-r from-sky-500 to-blue-500 h-full {% if metrics.inactivo_devices == 0 %}rounded-r-full{% endif %} transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.maint_devices }} Equipos en Mantenimiento ({{ (metrics.maint_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
+                {% if metrics.inactivo_devices > 0 %}
+                <div style="width: {{ (metrics.inactivo_devices / metrics.total_devices * 100) }}%;" 
+                     class="bg-gradient-to-r from-slate-400 to-slate-500 h-full rounded-r-full transition-all duration-500 cursor-help shadow-xs" title="{{ metrics.inactivo_devices }} Equipos Inactivos ({{ (metrics.inactivo_devices / metrics.total_devices * 100)|round(1) }}%)"></div>
+                {% endif %}
                 {% else %}
                 <div style="width: 100%;" class="bg-slate-300 h-full rounded-full"></div>
                 {% endif %}

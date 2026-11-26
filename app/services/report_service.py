@@ -361,7 +361,7 @@ def get_reports_statistics(
     # 9. MTTR (Tiempo Medio de Reparación en horas)
     closed_with_time = [i for i in incidents if i.closed_at and i.created_at and i.closed_at >= i.created_at]
     if closed_with_time:
-        durations = [(i.closed_at - i.created_at).total_seconds() / 3600.0 for i in closed_with_time]
+        durations = [(i.closed_at - i.created_at).total_seconds() / 3600.0 for i in closed_with_time if i.closed_at and i.created_at]
         mttr_hours = round(sum(durations) / len(durations), 1)
     else:
         site_closed = db.query(Incident).filter(
@@ -1397,7 +1397,7 @@ def generate_cctv_pdf_report(
             val_totals[vid] = val_totals.get(vid, 0) + count
 
         if val_totals:
-            lead_vid = max(val_totals, key=val_totals.get)
+            lead_vid = max(val_totals, key=lambda k: val_totals.get(k, 0))
             max_validations = val_totals[lead_vid]
             lead_validator = db.query(User).filter(User.id == lead_vid).first()
 
@@ -2132,7 +2132,7 @@ def generate_cctv_executive_pdf_report(
             val_totals[vid] = val_totals.get(vid, 0) + count
 
         if val_totals:
-            lead_vid = max(val_totals, key=val_totals.get)
+            lead_vid = max(val_totals, key=lambda k: val_totals.get(k, 0))
             max_validations = val_totals[lead_vid]
             lead_validator = db.query(User).filter(User.id == lead_vid).first()
 

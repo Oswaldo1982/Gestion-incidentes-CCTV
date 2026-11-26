@@ -26,6 +26,7 @@ sqlite.db*
 static/uploads/*.png
 !static/uploads/signatures/
 static/uploads/signatures/sig_user_*
+static/uploads/signatures/auto_sig_*
 
 # Environment variables & secrets
 .env

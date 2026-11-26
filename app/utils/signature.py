@@ -4,7 +4,7 @@ import base64
 import uuid
 import logging
 from io import BytesIO
-from typing import Optional
+from typing import Optional, Any
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
@@ -21,11 +21,12 @@ def clean_and_make_transparent(img: Image.Image) -> Image.Image:
     datas = img.getdata()
     new_data = []
     for item in datas:
+        px: Any = item
         # Si el pixel es casi blanco (R, G, B > 230), hacerlo transparente
-        if item[0] > 230 and item[1] > 230 and item[2] > 230:
+        if px[0] > 230 and px[1] > 230 and px[2] > 230:
             new_data.append((255, 255, 255, 0))
         else:
-            new_data.append(item)
+            new_data.append(px)
     img.putdata(new_data)
     
     # Recortar espacios transparentes sobrantes en los bordes

@@ -553,27 +553,6 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
     - Bloqueo y solicitud de contraseña de Año 1 tras las 24h.
     - Vigencia de 365 días por año y renovación para Año 2 y Año 3.
     """
-    # 1. Modo Desarrollador o Licenciamiento Suspendido (Bypass Total y Permanente)
-    if getattr(settings, "SUSPEND_SITE_LICENSING", True) or settings.DEV_MODE:
-        return {
-            "site_id": site_id,
-            "is_allowed": True,
-            "status": "SUSPENDED_BY_ADMIN",
-            "message": "🟢 Licenciamiento multi-sede suspendido: acceso libre total en todos los municipios.",
-            "current_year": 1,
-            "required_year": None,
-            "hours_remaining_grace": 9999.0,
-            "days_remaining_active": 9999,
-            "first_access_at": None,
-            "active_until": None,
-            "is_dev_mode": False,
-            "years_status": [
-                {"year": 1, "is_activated": True, "badge": "Activo"},
-                {"year": 2, "is_activated": True, "badge": "Activo"},
-                {"year": 3, "is_activated": True, "badge": "Activo"}
-            ]
-        }
-
     # Normalizar site_id o asignar por defecto 'san-agustin'
     valid_ids = [s["id"] for s in OFFICIAL_SITES]
     clean_id = site_id if site_id in valid_ids else "san-agustin"
@@ -633,15 +612,128 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
         }
     ]
 
-    # A. Caso 1: Año 1 NO está activado
-    if not k1 or not k1.is_activated:
+    res: Dict[str, Any]
+
+    # A. Caso 4: Año 3 ESTÁ activado
+    if k3 and k3.is_activated:
+        if k3.expires_at and now <= k3.expires_at:
+            days_left = max(0, (k3.expires_at - now).days)
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": True,
+                "status": "ACTIVE_YEAR_3",
+                "message": f"✅ Licencia de Año 3 Activa ({days_left} días restantes de vigencia).",
+                "current_year": 3,
+                "required_year": None,
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": days_left,
+                "first_access_at": state.first_access_at,
+                "active_until": k3.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+        else:
+            # Ciclo de 3 años culminado
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": False,
+                "status": "EXPIRED_FINAL",
+                "message": f"🔒 El ciclo de licenciamiento de 3 años para {site_name} ha culminado. Comuníquese con el desarrollador del sistema.",
+                "current_year": 3,
+                "required_year": None,
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": 0,
+                "first_access_at": state.first_access_at,
+                "active_until": k3.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+
+    # B. Caso 3: Año 2 ESTÁ activado
+    elif k2 and k2.is_activated:
+        if k2.expires_at and now <= k2.expires_at:
+            days_left = max(0, (k2.expires_at - now).days)
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": True,
+                "status": "ACTIVE_YEAR_2",
+                "message": f"✅ Licencia de Año 2 Activa ({days_left} días restantes de vigencia).",
+                "current_year": 2,
+                "required_year": 3,  # Puede renovar para Año 3
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": days_left,
+                "first_access_at": state.first_access_at,
+                "active_until": k2.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+        else:
+            # Año 2 expiró y Año 3 no activado
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": False,
+                "status": "LOCKED_AWAITING_YEAR_3",
+                "message": f"🔒 La vigencia del Año 2 ha culminado para {site_name}. Ingrese la contraseña del Año 3 para renovar por 365 días.",
+                "current_year": 3,
+                "required_year": 3,
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": 0,
+                "first_access_at": state.first_access_at,
+                "active_until": k2.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+
+    # C. Caso 2: Año 1 ESTÁ activado
+    elif k1 and k1.is_activated:
+        if k1.expires_at and now <= k1.expires_at:
+            days_left = max(0, (k1.expires_at - now).days)
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": True,
+                "status": "ACTIVE_YEAR_1",
+                "message": f"✅ Licencia de Año 1 Activa ({days_left} días restantes de vigencia).",
+                "current_year": 1,
+                "required_year": 2,  # Puede renovar para Año 2
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": days_left,
+                "first_access_at": state.first_access_at,
+                "active_until": k1.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+        else:
+            # Año 1 expiró y Año 2 no activado
+            res = {
+                "site_id": clean_id,
+                "site_name": site_name,
+                "is_allowed": False,
+                "status": "LOCKED_AWAITING_YEAR_2",
+                "message": f"🔒 La vigencia del Año 1 ha culminado para {site_name}. Ingrese la contraseña del Año 2 para renovar por 365 días.",
+                "current_year": 2,
+                "required_year": 2,
+                "hours_remaining_grace": 0.0,
+                "days_remaining_active": 0,
+                "first_access_at": state.first_access_at,
+                "active_until": k1.expires_at,
+                "is_dev_mode": False,
+                "years_status": years_status
+            }
+
+    # D. Caso 1: Ningún año activado -> Evaluar período de gracia (24h)
+    else:
         elapsed = now - state.first_access_at
         grace_limit = datetime.timedelta(hours=24)
 
         if elapsed < grace_limit:
             hours_left = max(0.0, round((grace_limit - elapsed).total_seconds() / 3600.0, 1))
             mins_left = max(0, int(((grace_limit - elapsed).total_seconds() % 3600) // 60))
-            return {
+            res = {
                 "site_id": clean_id,
                 "site_name": site_name,
                 "is_allowed": True,
@@ -659,7 +751,7 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
             }
         else:
             # Período de gracia expirado -> Bloqueo
-            return {
+            res = {
                 "site_id": clean_id,
                 "site_name": site_name,
                 "is_allowed": False,
@@ -675,116 +767,16 @@ def get_site_license_status(db: Session, site_id: str) -> Dict[str, Any]:
                 "years_status": years_status
             }
 
-    # B. Caso 2: Año 1 ESTÁ activado
-    # Verificar vigencia de Año 1
-    if k1.expires_at and now <= k1.expires_at:
-        days_left = max(0, (k1.expires_at - now).days)
-        return {
-            "site_id": clean_id,
-            "site_name": site_name,
-            "is_allowed": True,
-            "status": "ACTIVE_YEAR_1",
-            "message": f"✅ Licencia de Año 1 Activa ({days_left} días restantes de vigencia).",
-            "current_year": 1,
-            "required_year": 2,  # Puede renovar para Año 2
-            "hours_remaining_grace": 0.0,
-            "days_remaining_active": days_left,
-            "first_access_at": state.first_access_at,
-            "active_until": k1.expires_at,
-            "is_dev_mode": False,
-            "years_status": years_status
-        }
+    # Si las operaciones estarían bloqueadas, pero se encuentra activo SUSPEND_SITE_LICENSING o DEV_MODE, habilitar bypass
+    if (getattr(settings, "SUSPEND_SITE_LICENSING", False) or settings.DEV_MODE) and not res.get("is_allowed", True):
+        res["is_allowed"] = True
+        res["status"] = "SUSPENDED_BY_ADMIN"
+        res["message"] = f"🟢 Licenciamiento multi-sede suspendido: acceso libre total en {site_name} y demás municipios."
+        res["days_remaining_active"] = 9999
+        res["hours_remaining_grace"] = 9999.0
+        res["is_dev_mode"] = settings.DEV_MODE
 
-    # Año 1 expiró -> Verificar Año 2
-    if not k2 or not k2.is_activated:
-        return {
-            "site_id": clean_id,
-            "site_name": site_name,
-            "is_allowed": False,
-            "status": "LOCKED_AWAITING_YEAR_2",
-            "message": f"🔒 La vigencia del Año 1 ha culminado para {site_name}. Ingrese la contraseña del Año 2 para renovar por 365 días.",
-            "current_year": 2,
-            "required_year": 2,
-            "hours_remaining_grace": 0.0,
-            "days_remaining_active": 0,
-            "first_access_at": state.first_access_at,
-            "active_until": k1.expires_at,
-            "is_dev_mode": False,
-            "years_status": years_status
-        }
-
-    # C. Caso 3: Año 2 ESTÁ activado
-    if k2.expires_at and now <= k2.expires_at:
-        days_left = max(0, (k2.expires_at - now).days)
-        return {
-            "site_id": clean_id,
-            "site_name": site_name,
-            "is_allowed": True,
-            "status": "ACTIVE_YEAR_2",
-            "message": f"✅ Licencia de Año 2 Activa ({days_left} días restantes de vigencia).",
-            "current_year": 2,
-            "required_year": 3,  # Puede renovar para Año 3
-            "hours_remaining_grace": 0.0,
-            "days_remaining_active": days_left,
-            "first_access_at": state.first_access_at,
-            "active_until": k2.expires_at,
-            "is_dev_mode": False,
-            "years_status": years_status
-        }
-
-    # Año 2 expiró -> Verificar Año 3
-    if not k3 or not k3.is_activated:
-        return {
-            "site_id": clean_id,
-            "site_name": site_name,
-            "is_allowed": False,
-            "status": "LOCKED_AWAITING_YEAR_3",
-            "message": f"🔒 La vigencia del Año 2 ha culminado para {site_name}. Ingrese la contraseña del Año 3 para renovar por 365 días.",
-            "current_year": 3,
-            "required_year": 3,
-            "hours_remaining_grace": 0.0,
-            "days_remaining_active": 0,
-            "first_access_at": state.first_access_at,
-            "active_until": k2.expires_at,
-            "is_dev_mode": False,
-            "years_status": years_status
-        }
-
-    # D. Caso 4: Año 3 ESTÁ activado
-    if k3.expires_at and now <= k3.expires_at:
-        days_left = max(0, (k3.expires_at - now).days)
-        return {
-            "site_id": clean_id,
-            "site_name": site_name,
-            "is_allowed": True,
-            "status": "ACTIVE_YEAR_3",
-            "message": f"✅ Licencia de Año 3 Activa ({days_left} días restantes de vigencia).",
-            "current_year": 3,
-            "required_year": None,
-            "hours_remaining_grace": 0.0,
-            "days_remaining_active": days_left,
-            "first_access_at": state.first_access_at,
-            "active_until": k3.expires_at,
-            "is_dev_mode": False,
-            "years_status": years_status
-        }
-
-    # Ciclo de 3 años culminado
-    return {
-        "site_id": clean_id,
-        "site_name": site_name,
-        "is_allowed": False,
-        "status": "EXPIRED_FINAL",
-        "message": f"🔒 El ciclo de licenciamiento de 3 años para {site_name} ha culminado. Comuníquese con el desarrollador del sistema.",
-        "current_year": 3,
-        "required_year": None,
-        "hours_remaining_grace": 0.0,
-        "days_remaining_active": 0,
-        "first_access_at": state.first_access_at,
-        "active_until": k3.expires_at,
-        "is_dev_mode": False,
-        "years_status": years_status
-    }
+    return res
 
 
 def activate_site_year_license(
@@ -847,6 +839,33 @@ def activate_site_year_license(
     user_id_audit = getattr(user, "id", None)
 
     if not is_valid:
+        # A. Comprobar si el usuario ingresó la contraseña de un año anterior que YA está activado
+        for past_y in range(1, target_year):
+            pk = db.query(SiteLicenseKey).filter(
+                SiteLicenseKey.site_id == clean_id,
+                SiteLicenseKey.year == past_y
+            ).first()
+            if pk and pk.is_activated:
+                reg_past = OFFICIAL_KEYS_REGISTRY.get(clean_id, {}).get(past_y, {}).get("password")
+                if (reg_past and cleaned == normalize_password(reg_past)) or verify_password(cleaned, pk.password_hash):
+                    exp_str = pk.expires_at.strftime('%d/%m/%Y') if pk.expires_at else "vigencia registrada"
+                    return True, f"ℹ️ La licencia del Año {past_y} para {site_name} ya se encuentra activada y vigente hasta el {exp_str}. Ingrese la contraseña del Año {target_year} para renovar la vigencia.", {
+                        "site_id": clean_id,
+                        "year": past_y,
+                        "already_active": True
+                    }
+
+        # B. Comprobar si el usuario ingresó la clave de un año futuro (ej: Año 3 antes de Año 2)
+        for future_y in range(target_year + 1, 4):
+            fk = db.query(SiteLicenseKey).filter(
+                SiteLicenseKey.site_id == clean_id,
+                SiteLicenseKey.year == future_y
+            ).first()
+            if fk:
+                reg_future = OFFICIAL_KEYS_REGISTRY.get(clean_id, {}).get(future_y, {}).get("password")
+                if (reg_future and cleaned == normalize_password(reg_future)) or verify_password(cleaned, fk.password_hash):
+                    return False, f"⚠️ La contraseña ingresada corresponde al Año {future_y}. Para mantener la secuencia cronológica, debe activar primero el Año {target_year}.", {}
+
         state.failed_attempts += 1
         if state.failed_attempts >= 5:
             state.lockout_until = now + datetime.timedelta(minutes=15)
