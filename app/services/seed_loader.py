@@ -131,6 +131,69 @@ def ensure_golden_data_seeded(db: Session) -> bool:
             db.rollback()
             logger.debug(f"Aviso sembrando sede {s.get('id')}: {e}")
 
+    # 2.1. Sembrar y sincronizar Licencias por Sitio (SiteLicenseKey)
+    for sl in golden_data.get("site_licenses", []):
+        try:
+            site_id = sl.get("site_id")
+            year = sl.get("year")
+            if not site_id or not year:
+                continue
+            existing_sl = db.query(SiteLicenseKey).filter(
+                SiteLicenseKey.site_id == site_id,
+                SiteLicenseKey.year == year
+            ).first()
+            if not existing_sl:
+                db.add(SiteLicenseKey(
+                    site_id=site_id,
+                    site_name=sl.get("site_name", site_id),
+                    year=year,
+                    password_hash=sl.get("password_hash"),
+                    password_mask=sl.get("password_mask", "****"),
+                    certificate_code=sl.get("certificate_code", ""),
+                    is_activated=bool(sl.get("is_activated", 0)),
+                    activated_at=parse_dt(sl.get("activated_at")),
+                    expires_at=parse_dt(sl.get("expires_at"))
+                ))
+                db.commit()
+            else:
+                if bool(sl.get("is_activated", 0)) and not existing_sl.is_activated:
+                    existing_sl.is_activated = True
+                    existing_sl.activated_at = parse_dt(sl.get("activated_at")) or get_local_now()
+                    existing_sl.expires_at = parse_dt(sl.get("expires_at"))
+                    if sl.get("password_mask"):
+                        existing_sl.password_mask = sl.get("password_mask")
+                    db.commit()
+        except Exception as e_sl:
+            db.rollback()
+            logger.debug(f"Aviso sembrando site_license {sl.get('site_id')} Y{sl.get('year')}: {e_sl}")
+
+    # 2.2. Sembrar y sincronizar Estados de Activación de Sitio (SiteActivationState)
+    for sa in golden_data.get("site_activation_states", []):
+        try:
+            site_id = sa.get("site_id")
+            if not site_id:
+                continue
+            existing_sa = db.query(SiteActivationState).filter(SiteActivationState.site_id == site_id).first()
+            if not existing_sa:
+                db.add(SiteActivationState(
+                    site_id=site_id,
+                    first_access_at=parse_dt(sa.get("first_access_at")),
+                    current_year=sa.get("current_year", 1),
+                    status=sa.get("status", "GRACE_PERIOD"),
+                    failed_attempts=sa.get("failed_attempts", 0),
+                    last_activated_at=parse_dt(sa.get("last_activated_at"))
+                ))
+                db.commit()
+            else:
+                if "ACTIVE" in sa.get("status", "") and "ACTIVE" not in existing_sa.status:
+                    existing_sa.status = sa.get("status")
+                    existing_sa.current_year = sa.get("current_year", 1)
+                    existing_sa.last_activated_at = parse_dt(sa.get("last_activated_at")) or get_local_now()
+                    db.commit()
+        except Exception as e_sa:
+            db.rollback()
+            logger.debug(f"Aviso sembrando site_activation_state {sa.get('site_id')}: {e_sa}")
+
     # 3. Sembrar Usuarios (San Agustín y Demo) - inserción segura por registro
     for u in golden_data.get("users", []):
         uname = u.get("username")

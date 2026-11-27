@@ -75,7 +75,15 @@
                     </span>
                 </div>
                 <p class="text-xs text-slate-500 mt-0.5">
-                    Control de período de gracia (24 horas), vigencia anual y activación de servicio para {{ current_site.full_name }}.
+                    {% if 'ACTIVE' in site_status.status %}
+                    Vigencia anual activa ({{ site_status.days_remaining_active }} días de cobertura) y habilitación institucional para {{ current_site.full_name }}.
+                    {% elif site_status.status == 'GRACE_PERIOD' %}
+                    Control de período de gracia inicial ({{ site_status.hours_remaining_grace }}h restantes) y activación de servicio para {{ current_site.full_name }}.
+                    {% elif site_status.status == 'SUSPENDED_BY_ADMIN' %}
+                    Acceso libre multi-sede y monitoreo institucional para {{ current_site.full_name }}.
+                    {% else %}
+                    Activación de licencia territorial y cobertura de servicio para {{ current_site.full_name }}.
+                    {% endif %}
                 </p>
             </div>
         </div>
@@ -175,7 +183,11 @@
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             Activado ✓
                         </span>
-                        {% elif site_status.required_year == y_info.year and site_status.status != 'SUSPENDED_BY_ADMIN' %}
+                        {% elif site_status.is_allowed and 'ACTIVE' in site_status.status and site_status.required_year == y_info.year %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            Renovación Futura
+                        </span>
+                        {% elif not site_status.is_allowed and site_status.required_year == y_info.year %}
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                             Requerido Ahora
                         </span>
@@ -203,46 +215,67 @@
 
     </div>
 
-    <!-- Formulario de Activación de Contraseña de 16 Dígitos -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <div class="max-w-2xl">
-            <div class="flex items-center gap-2.5 mb-1">
-                <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                    🔑
+    <!-- Formulario de Activación / Confirmación de Licencia -->
+    {% if 'ACTIVE' in site_status.status %}
+    <!-- Panel de Estado Operativo de la Sede Activa -->
+    <div class="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-white rounded-2xl border-2 border-emerald-500/30 p-6 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+            <div class="flex items-start gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-2xl shrink-0 shadow-md">
+                    ✓
                 </div>
                 <div>
-                    <h3 class="text-sm font-bold text-slate-900">
-                        Ingresar Contraseña de Licencia para {{ current_site.name }}
-                    </h3>
-                    <p class="text-xs text-slate-500">
-                        Digite la contraseña alfanumérica de 16 dígitos suministrada por el desarrollador para habilitar o renovar este sitio.
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="text-base font-black text-slate-900">
+                            Licencia de Sede Activa y Operaciones 100% Habilitadas
+                        </h3>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-200 text-emerald-900 border border-emerald-300">
+                            Año {{ site_status.current_year }} Vigente
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                        La sede <strong>{{ current_site.name }}</strong> cuenta con cobertura oficial activa por <strong>{{ site_status.days_remaining_active }} días</strong> (hasta el {{ site_status.active_until.strftime('%d/%m/%Y') if site_status.active_until else '26/11/2027' }}). Todos los módulos (Dashboard, Incidentes, Mantenimiento, Usuarios, Estadísticas) se encuentran plenamente operativos sin restricciones.
                     </p>
                 </div>
             </div>
+            <div class="shrink-0 self-start sm:self-auto">
+                <a href="/dashboard" class="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition">
+                    Ir al Dashboard →
+                </a>
+            </div>
+        </div>
+    </div>
 
-            {% if 'ACTIVE_YEAR_1' in site_status.status %}
-            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
-                <span class="text-emerald-600 font-bold text-sm">✓</span>
-                <span><strong>Año 1 se encuentra activo y 100% operativo.</strong> Si dispone de la contraseña para el <strong>Año 2</strong>, puede ingresarla a continuación para extender y acumular la cobertura por 365 días más.</span>
+    <!-- Sección Opcional de Renovación Anticipada (Plegable) -->
+    {% if site_status.status != 'ACTIVE_YEAR_3' or site_status.days_remaining_active <= 0 %}
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6" x-data="{ openRenewal: false }">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-lg">
+                    🔑
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800">
+                        Renovación Anticipada de Licencia (Opcional)
+                    </h3>
+                    <p class="text-xs text-slate-500">
+                        Si dispone de la contraseña para el <strong>Año {{ site_status.required_year or 2 }}</strong>, puede ingresarla para acumular 365 días adicionales a su vigencia actual.
+                    </p>
+                </div>
             </div>
-            {% elif 'ACTIVE_YEAR_2' in site_status.status %}
-            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
-                <span class="text-emerald-600 font-bold text-sm">✓</span>
-                <span><strong>Año 2 se encuentra activo y 100% operativo.</strong> Puede ingresar la contraseña del <strong>Año 3</strong> para completar la cobertura integral de 3 años.</span>
-            </div>
-            {% elif site_status.status == 'ACTIVE_YEAR_3' and site_status.days_remaining_active > 0 %}
-            <div class="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2.5">
-                <span class="text-emerald-600 font-bold text-sm">🎉</span>
-                <span><strong>¡Ciclo Integral de 3 Años Activo!</strong> La sede cuenta con cobertura completa garantizada. No se requieren claves adicionales en este momento.</span>
-            </div>
-            {% endif %}
+            <button type="button"
+                    @click="openRenewal = !openRenewal"
+                    class="px-4 py-2 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition self-start sm:self-auto flex items-center gap-1.5">
+                <span x-text="openRenewal ? 'Ocultar Formulario ▲' : 'Desplegar Formulario de Renovación ▼'"></span>
+            </button>
+        </div>
 
-            {% if site_status.status != 'ACTIVE_YEAR_3' or site_status.days_remaining_active <= 0 %}
-            <form action="/license/activate" method="POST" class="space-y-4 mt-5">
+        <div x-show="openRenewal" x-cloak class="mt-5 pt-5 border-t border-slate-100 max-w-2xl">
+            <form action="/license/activate" method="POST" class="space-y-4">
                 <input type="hidden" name="site_id" value="{{ current_site.id }}">
                 <div>
                     <label for="password_key" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                        Contraseña de {{ 'Renovación' if 'ACTIVE' in site_status.status else 'Activación' }} de 16 Dígitos (Año {{ site_status.required_year or site_status.current_year }}) *
+                        Contraseña de Renovación de 16 Dígitos (Año {{ site_status.required_year or 2 }})
                     </label>
                     <input type="text"
                            id="password_key"
@@ -264,14 +297,65 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        {{ 'Validar y Renovar' if 'ACTIVE' in site_status.status else 'Validar y Activar' }} {{ current_site.name }}
+                        Validar y Renovar {{ current_site.name }} (Año {{ site_status.required_year or 2 }})
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Formulario de Activación Obligatorio (Sede No Activada / Bloqueada / Gracia) -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div class="max-w-2xl">
+            <div class="flex items-center gap-2.5 mb-1">
+                <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                    🔑
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900">
+                        Ingresar Contraseña de Licencia para {{ current_site.name }}
+                    </h3>
+                    <p class="text-xs text-slate-500">
+                        Digite la contraseña alfanumérica de 16 dígitos suministrada por el desarrollador para habilitar o renovar este sitio.
+                    </p>
+                </div>
+            </div>
+
+            <form action="/license/activate" method="POST" class="space-y-4 mt-5">
+                <input type="hidden" name="site_id" value="{{ current_site.id }}">
+                <div>
+                    <label for="password_key" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Contraseña de Activación de 16 Dígitos (Año {{ site_status.required_year or site_status.current_year }}) *
+                    </label>
+                    <input type="text"
+                           id="password_key"
+                           name="password_key"
+                           required
+                           autocomplete="off"
+                           maxlength="19"
+                           @input="formatKey($el)"
+                           placeholder="EJEMPLO: K9X2-M7PQ-4W8T-H2N6"
+                           class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold uppercase tracking-widest text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                    <p class="text-[11px] text-slate-400 mt-1">
+                        Puede ingresar la clave continua de 16 caracteres o separada por guiones. El sistema la normaliza automáticamente.
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-3 pt-1">
+                    <button type="submit"
+                            class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-600/20 transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Validar y Activar {{ current_site.name }}
                     </button>
                     <span class="text-xs text-slate-500">
                         Aplica para el <strong>Año {{ site_status.required_year or site_status.current_year }}</strong>
                     </span>
                 </div>
             </form>
-            {% endif %}
 
             <!-- Nota de Seguridad y Anti-Fuerza Bruta -->
             <div class="mt-5 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-500 space-y-1">
@@ -286,6 +370,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}
