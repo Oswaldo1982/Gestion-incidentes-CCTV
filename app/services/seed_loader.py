@@ -156,10 +156,14 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 ))
                 db.commit()
             else:
-                if bool(sl.get("is_activated", 0)) and not existing_sl.is_activated:
+                if bool(sl.get("is_activated", 0)):
                     existing_sl.is_activated = True
-                    existing_sl.activated_at = parse_dt(sl.get("activated_at")) or get_local_now()
-                    existing_sl.expires_at = parse_dt(sl.get("expires_at"))
+                    now_loc = get_local_now()
+                    exp = parse_dt(sl.get("expires_at"))
+                    if not exp or exp < now_loc:
+                        exp = now_loc + datetime.timedelta(days=365)
+                    existing_sl.expires_at = exp
+                    existing_sl.activated_at = parse_dt(sl.get("activated_at")) or now_loc
                     if sl.get("password_mask"):
                         existing_sl.password_mask = sl.get("password_mask")
                     db.commit()
@@ -185,9 +189,11 @@ def ensure_golden_data_seeded(db: Session) -> bool:
                 ))
                 db.commit()
             else:
-                if "ACTIVE" in sa.get("status", "") and "ACTIVE" not in existing_sa.status:
+                if "ACTIVE" in sa.get("status", ""):
                     existing_sa.status = sa.get("status")
                     existing_sa.current_year = sa.get("current_year", 1)
+                    existing_sa.failed_attempts = 0
+                    existing_sa.lockout_until = None
                     existing_sa.last_activated_at = parse_dt(sa.get("last_activated_at")) or get_local_now()
                     db.commit()
         except Exception as e_sa:

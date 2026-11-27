@@ -511,6 +511,27 @@ def ensure_all_site_licenses_initialized(db: Session) -> Dict[str, Any]:
                     existing_key.password_mask = mask_password(raw_pwd)
                     existing_key.certificate_code = year_data.get("certificate_code", existing_key.certificate_code)
 
+        # 3. Garantizar que la sede oficial San Agustín cuente con Año 1 activo y vigente por 365 días
+        if site_id == "san-agustin":
+            state.status = "ACTIVE_YEAR_1"
+            state.current_year = 1
+            state.failed_attempts = 0
+            state.lockout_until = None
+            if not state.last_activated_at:
+                state.last_activated_at = get_local_now()
+
+            k1 = db.query(SiteLicenseKey).filter(
+                SiteLicenseKey.site_id == "san-agustin",
+                SiteLicenseKey.year == 1
+            ).first()
+            if k1:
+                now_loc = get_local_now()
+                if not k1.is_activated or not k1.expires_at or k1.expires_at < now_loc:
+                    k1.is_activated = True
+                    k1.activated_at = now_loc
+                    k1.expires_at = now_loc + datetime.timedelta(days=365)
+                    k1.password_mask = "****-****-****-8QZY"
+
     db.commit()
     return {
         "seeded_licenses": seeded_licenses,

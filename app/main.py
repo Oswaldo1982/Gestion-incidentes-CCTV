@@ -353,10 +353,9 @@ def check_site_access_or_redirect(
       - Si no es Administrador: redirige a /select-site?error={mensaje}.
     - Si el sitio está en período de gracia (24h) o activo: retorna None (acceso permitido).
     """
-    if getattr(settings, "SUSPEND_SITE_LICENSING", False) or settings.DEV_MODE:
-        return None
-
     site_id = current_site.get("id", "san-agustin")
+    if site_id in ["sitio-prueba", "demo"] or settings.DEMO_MODE or getattr(settings, "SUSPEND_SITE_LICENSING", False) or settings.DEV_MODE:
+        return None
     from app.services.site_license_service import record_site_first_access, get_site_license_status
     record_site_first_access(db, site_id)
     lic_status = get_site_license_status(db, site_id)
@@ -2474,6 +2473,7 @@ def license_view(
     request: Request,
     msg: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
+    site: Optional[str] = Query(None),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
@@ -2497,9 +2497,12 @@ def license_view(
 
     # La sede es única y exclusivamente la sede territorial actualmente activa en la sesión
     current_site = get_current_site(request, db=db)
-    if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+    target_site_id = (site and site.strip()) or current_site.get("id") or "san-agustin"
+    if target_site_id in ["sitio-prueba", "demo"]:
+        target_site_id = "san-agustin"
+
+    if current_user and current_user.username == "admin_demo" and current_site.get("id") in ["sitio-prueba", "demo"]:
         return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
-    target_site_id = current_site["id"]
 
     # Registrar primer acceso del sitio si aplica
     record_site_first_access(db, target_site_id)
@@ -2534,11 +2537,14 @@ def license_activate_web(
     if not current_user or current_user.role != "Admin":
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Bloquear activación a la sede territorial activa en sesión
+    # Priorizar la sede enviada en el formulario
     current_site = get_current_site(request, db=db)
-    if current_site.get("id") == "sitio-prueba" or current_user.username == "admin_demo" or request.cookies.get("is_demo_session") == "true":
+    clean_site_id = (site_id and site_id.strip()) or current_site.get("id") or "san-agustin"
+    if clean_site_id in ["sitio-prueba", "demo"]:
+        clean_site_id = "san-agustin"
+
+    if current_user and current_user.username == "admin_demo" and clean_site_id in ["sitio-prueba", "demo"]:
         return RedirectResponse(url="/dashboard?error=Opción+deshabilitada+por+seguridad+en+el+entorno+Demo.", status_code=status.HTTP_303_SEE_OTHER)
-    clean_site_id = current_site["id"]
 
     from app.services.site_license_service import activate_site_year_license
 
